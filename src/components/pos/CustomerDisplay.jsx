@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn, formatOrderNumber } from '@/lib/utils';
 
@@ -79,10 +79,39 @@ const getOrderDisplayNumber = (order) => {
   return '----';
 };
 
+const getOrderKey = (order) =>
+  order?.id ||
+  order?.orderNumber ||
+  order?.order_number ||
+  order?.displayNumber ||
+  order?.display_number ||
+  getOrderDisplayNumber(order);
+
+const getItemLabel = (item) =>
+  item?.name ||
+  item?.title ||
+  item?.itemName ||
+  item?.productName ||
+  item?.sku ||
+  'Item';
+
+const getItemQuantity = (item) => {
+  const q = Number(item?.quantity);
+  return Number.isFinite(q) && q > 0 ? q : 1;
+};
+
 const preparingStatuses = new Set(['in_prep', 'preparing', 'in_progress']);
 const servingStatuses = new Set(['now_serving', 'staged', 'ready', 'handoff']);
 
-const Section = ({ title, accent, orders, emptyText, className }) => (
+const Section = ({
+  title,
+  accent,
+  orders,
+  emptyText,
+  className,
+  expandedIds,
+  onToggle,
+}) => (
   <div
     className={cn(
       'flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm',
@@ -104,21 +133,71 @@ const Section = ({ title, accent, orders, emptyText, className }) => (
     </div>
     <div className="flex flex-col gap-3">
       {orders.length ? (
-        orders.slice(0, 6).map((order) => (
-          <div
-            key={
-              order.id ||
-              order.orderNumber ||
-              order.order_number ||
-              getOrderDisplayNumber(order)
+        orders.slice(0, 6).map((order) => {
+          const orderKey = getOrderKey(order);
+          const isExpanded = expandedIds.has(orderKey);
+          const items = Array.isArray(order.items) ? order.items : [];
+          const displayItems = items.slice(0, 4);
+          const remaining = Math.max(0, items.length - displayItems.length);
+
+          const toggle = () => onToggle(orderKey);
+          const handleKeyDown = (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggle();
             }
-            className="rounded-2xl border border-border/60 bg-background px-4 py-6 text-center shadow-sm"
-          >
-            <p className="text-3xl font-black tracking-[0.25em] text-foreground sm:text-4xl">
-              {getOrderDisplayNumber(order)}
-            </p>
-          </div>
-        ))
+          };
+
+          return (
+            <div
+              key={orderKey}
+              className="rounded-2xl border border-border/60 bg-background px-4 py-4 text-center shadow-sm transition-colors hover:border-primary/60"
+            >
+              <button
+                type="button"
+                className="flex w-full flex-col items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                onClick={toggle}
+                onKeyDown={handleKeyDown}
+              >
+                <p className="text-3xl font-black tracking-[0.25em] text-foreground sm:text-4xl">
+                  {getOrderDisplayNumber(order)}
+                </p>
+                <span className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+                  {isExpanded ? 'Hide items' : 'View items'}
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div className="mt-3 space-y-2 border-t border-dashed border-border/60 pt-3 text-left">
+                  {displayItems.length ? (
+                    displayItems.map((item, idx) => (
+                      <div
+                        key={`${orderKey}-item-${idx}`}
+                        className="flex items-start justify-between gap-3 text-sm text-foreground"
+                      >
+                        <span className="font-semibold">
+                          {getItemQuantity(item)}x
+                        </span>
+                        <span className="flex-1 text-right text-muted-foreground">
+                          {getItemLabel(item)}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No items available.
+                    </p>
+                  )}
+                  {remaining > 0 && (
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      +{remaining} more item{remaining === 1 ? '' : 's'}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })
       ) : (
         <div className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
           {emptyText}
@@ -129,6 +208,8 @@ const Section = ({ title, accent, orders, emptyText, className }) => (
 );
 
 const CustomerDisplay = ({ queue }) => {
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
   const orders = useMemo(() => {
     if (!queue) return [];
     if (Array.isArray(queue)) return queue;
@@ -157,6 +238,18 @@ const CustomerDisplay = ({ queue }) => {
     return { preparingOrders: prep, servingOrders: serving };
   }, [orders]);
 
+  const handleToggle = useCallback((orderKey) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderKey)) {
+        next.delete(orderKey);
+      } else {
+        next.add(orderKey);
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <Card className="h-full border border-border/60 bg-card/90 shadow-sm">
       <CardHeader className="space-y-2">
@@ -175,6 +268,8 @@ const CustomerDisplay = ({ queue }) => {
             orders={preparingOrders}
             emptyText="No orders currently in preparation."
             className="bg-blue-500/10 dark:bg-blue-500/20"
+            expandedIds={expandedIds}
+            onToggle={handleToggle}
           />
           <Section
             title=""
@@ -182,6 +277,8 @@ const CustomerDisplay = ({ queue }) => {
             orders={servingOrders}
             emptyText="No orders ready for pickup."
             className="bg-emerald-500/10 dark:bg-emerald-500/20 md:border-l md:border-border/60 md:pl-6"
+            expandedIds={expandedIds}
+            onToggle={handleToggle}
           />
         </div>
       </CardContent>
@@ -189,4 +286,4 @@ const CustomerDisplay = ({ queue }) => {
   );
 };
 
-export default CustomerDisplay; 
+export default CustomerDisplay;

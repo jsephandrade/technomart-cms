@@ -230,7 +230,7 @@ const POS = () => {
         <TabsList className="w-full grid grid-cols-3">
           <TabsTrigger value="pos">Point of Sale</TabsTrigger>
           <TabsTrigger value="queue">Order Queue</TabsTrigger>
-          <TabsTrigger value="display">Customer Display</TabsTrigger>
+          <TabsTrigger value="display">Claim Monitor</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pos">

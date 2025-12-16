@@ -1,80 +1,43 @@
-Can you follow these role-access for the list of modules?
+# Repository Guidelines
 
-Staff
+## Project Structure & Module Organization
 
-Account Management:
-Login / Logout
-Edit Password
-Edit Information
-Biometric Login (Face Scan)
+- `src/`: React web SPA (Vite). Components live in `src/components`, hooks in `src/hooks`, API clients in `src/api/services`.
+- `backend/`: Django API. Settings in `backend/config`, domain apps under `backend/api`, `accounts`, `menu`, `orders`, etc.
+- `mobile/`: Mobile client sources (not part of the web build).
+- Assets: `public/` for SPA statics; `backend/media/` for uploaded files in development; `docs/` for plans and checklists.
+- CI: `.github/workflows/ci.yml` runs frontend lint/build and backend checks/tests against MySQL + Redis services.
 
-Inventory Management:
-View Stock Levels
-Update Stock Levels
-Track Expiry Dates
+## Build, Test, and Development Commands
 
-Order Handling:
-Place Order
-View Order Status
-Handle Order Queue
-Update Order Status
-Track Bulk Order Progress
+- Install web deps: `npm ci`
+- Web dev server: `npm run dev`
+- Web lint: `npm run lint`
+- Web build: `npm run build`
+- Backend deps: `cd backend && python -m pip install -r requirements.txt`
+- Backend checks/tests: `cd backend && python manage.py check --deploy && python manage.py makemigrations --check --dry-run && python manage.py test`
+- Docker (local stack): from repo root, `docker compose up --build` (API, MySQL, Redis, Vite dev server).
 
-Payment and Transactions:
-Process Cash / Online Payment
-View Order History
-View Payment Records
+## Coding Style & Naming Conventions
 
-Staff and Work Scheduling:
-View Profile and Assigned Roles
-View and Edit Shift Schedule
+- JS/TS: Prettier + ESLint (flat config). 2-space indent via formatter; prefer single quotes. Components PascalCase; hooks camelCase with `use*`; files follow existing kebab/camel patterns.
+- React: Functional components, hooks-first; follow `react-hooks` lint rules.
+- Python: Django defaults; modules snake_case; keep settings via env vars.
 
-Notifications:
-Send Updates / Notifications
-Receive Notifications
-View Notifications
+## Testing Guidelines
 
-Manager
+- Web: No dedicated unit test suite; lint enforced. Add targeted tests near features when introduced.
+- Backend: Use Django test runner (`python manage.py test`). Name tests `test_*.py` in app `tests/` directories; cover state transitions for orders, inventory, payments, notifications.
+- CI uses MySQL/Redis containers—avoid reliance on local state or sqlite-only behavior.
 
-Account Management:
-Login / Logout
-Edit Password
-Edit Information
-Biometric Login (Face Scan)
+## Commit & Pull Request Guidelines
 
-Inventory Management:
-View Stock Levels
-Update Stock Levels
-Track Expiry Dates
-Manage Menu Items
-Send Low Stock Alerts
-Manage Restocking Schedule
+- Commits: concise, present tense (e.g., `fix: scope eslint to web`, `feat: add bulk order tracking`). Group related changes and avoid unrelated churn.
+- After completing work, ensure your changes are committed and pushed to the remote branch.
+- PRs: include summary, testing notes (`npm run lint`, `npm run build`, `python manage.py test`), and screenshots/GIFs for UI updates. Link issues/tickets when available.
 
-Order Handling:
-Handle Order Queue
-Update Order Status
-Track Bulk Order Progress
+## Security & Configuration Tips
 
-Payment and Transactions:
-Process Cash / Online Payment
-View Order History
-View Payment Records
-Process Refunds
-
-Staff and Work Scheduling
-View Profile and Assigned Roles
-View and Edit Shift Schedule
-Manage Attendance Records
-Manage Leave Records
-
-Reports and Analytics
-View Sales Reports (Daily / Monthly)
-View Inventory Reports
-View Order and Transaction Reports
-View Staff Attendance Reports
-View Customer Purchase History
-
-Notifications
-Send Updates / Notifications
-Receive Notifications
-View Notifications
+- Secrets: do not commit real `.env` files; use `.env.example` and `backend/.env.example` as templates.
+- DB/Redis config from env (`DJANGO_DB_*`, `REDIS_URL`); Docker Compose supplies local defaults.
+- Media: in dev, files served from `backend/media`; production should serve via web server or object storage.

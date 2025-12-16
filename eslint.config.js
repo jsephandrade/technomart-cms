@@ -6,8 +6,16 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import react from 'eslint-plugin-react';
 
 export default [
-  // Ignore build and vendor outputs
-  { ignores: ['dist/**', 'node_modules/**'] },
+  // Ignore build outputs, vendored assets, and non-web workspaces (mobile, backend virtualenv)
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'backend/**',
+      'mobile/**',
+      '**/.venv/**',
+    ],
+  },
 
   {
     files: ['**/*.{js,jsx,ts,tsx}'],

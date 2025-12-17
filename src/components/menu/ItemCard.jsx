@@ -8,6 +8,13 @@ import { Edit, Archive, Image as ImageIcon } from 'lucide-react';
 const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
   const [imageError, setImageError] = useState(false);
 
+  const mediaPlaceholder =
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      import.meta.env.VITE_MEDIA_BASE_URL &&
+      `${import.meta.env.VITE_MEDIA_BASE_URL.replace(/\/$/, '')}/placeholders/menu_placeholder.png`) ||
+    '/media/placeholders/menu_placeholder.png';
+
   const imageSrc = useMemo(() => {
     if (!item) return null;
     const candidates = [
@@ -26,7 +33,10 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
     return null;
   }, [item]);
 
-  const showImage = Boolean(imageSrc) && !imageError;
+  const displayImage = imageError
+    ? mediaPlaceholder
+    : imageSrc || mediaPlaceholder;
+  const showImage = Boolean(displayImage);
 
   return (
     <Card className="group relative h-full overflow-hidden border border-border/50 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
@@ -47,19 +57,12 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
       <div className="relative z-10">
         <CardHeader className="p-4 pb-0 space-y-3">
           <div className="relative rounded-lg border border-border/40 bg-background/60 backdrop-blur-sm shadow-inner">
-            {showImage ? (
-              <img
-                src={imageSrc}
-                alt={item.name}
-                className="h-28 w-full rounded-lg object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <div className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-lg bg-muted/50 text-muted-foreground">
-                <ImageIcon className="h-7 w-7" />
-                <span className="text-xs font-medium">No Image Available</span>
-              </div>
-            )}
+            <img
+              src={displayImage}
+              alt={item.name}
+              className="h-28 w-full rounded-lg object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+              onError={() => setImageError(true)}
+            />
             <div className="pointer-events-none absolute bottom-2 left-2">
               <Badge
                 variant={item.available ? 'outline' : 'destructive'}

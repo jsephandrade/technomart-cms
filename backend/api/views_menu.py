@@ -497,7 +497,11 @@ def menu_item_detail(request, item_id):
                 "preparation_time",
                 "is_special",
             }
-            fields = {k: v for k, v in fields.items() if k in allowed_fields}
+            fields = {
+                k: v
+                for k, v in fields.items()
+                if k in allowed_fields and hasattr(mi, k)
+            }
             # Apply changes defensively and only touch provided fields to avoid DB errors from unrelated data
             for k, v in fields.items():
                 setattr(mi, k, v)

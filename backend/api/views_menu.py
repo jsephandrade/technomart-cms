@@ -486,7 +486,10 @@ def menu_item_detail(request, item_id):
                     fields["preparation_time"] = prep
                 except Exception:
                     pass
-            # Keep only model-backed fields to avoid attribute errors (e.g., unexpected "quantity")
+            try:
+                model_fields = {f.name for f in MenuItem._meta.get_fields()}
+            except Exception:
+                model_fields = set()
             allowed_fields = {
                 "name",
                 "description",
@@ -497,7 +500,25 @@ def menu_item_detail(request, item_id):
                 "preparation_time",
                 "is_special",
             }
-            disallowed = {"quantity"}  # guard against accidental extra fields (e.g., inventory data)
+            if model_fields:
+                allowed_fields |= model_fields
+            disallowed = {
+                "quantity",
+                "qty",
+                "orderedQuantity",
+                "orderQuantity",
+            }  # guard against accidental extra fields (e.g., inventory/cart data)
+            allowed_input_keys = allowed_fields | {"preparationTime"}
+            unsupported_keys = {k for k in payload.keys() if k not in allowed_input_keys or k in disallowed}
+            if unsupported_keys:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Unsupported fields: "
+                        + ", ".join(sorted(unsupported_keys)),
+                    },
+                    status=400,
+                )
             fields = {
                 k: v
                 for k, v in fields.items()

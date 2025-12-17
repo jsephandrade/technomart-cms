@@ -71,10 +71,11 @@ export const useOrderAutoAdvance = () => {
   const autoAdvanceLocksRef = useRef(new Map());
   const intervalRef = useRef(null);
   const isProcessingRef = useRef(false);
+  const haltedRef = useRef(false);
 
   const processOrders = useCallback(async () => {
     // Skip if not authenticated or no permission
-    if (!user || !can('order.status.update')) {
+    if (!user || !can('order.status.update') || haltedRef.current) {
       return;
     }
 
@@ -169,7 +170,23 @@ export const useOrderAutoAdvance = () => {
         }
       }
     } catch (error) {
-      console.error('[Auto-Advance] Error processing orders:', error);
+      const status =
+        error?.status ??
+        error?.response?.status ??
+        error?.details?.status ??
+        null;
+      if (status === 401) {
+        haltedRef.current = true;
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        console.warn(
+          '[Auto-Advance] Stopped polling: unauthorized (401). Will resume after re-auth.'
+        );
+      } else {
+        console.error('[Auto-Advance] Error processing orders:', error);
+      }
     } finally {
       isProcessingRef.current = false;
     }
@@ -181,6 +198,7 @@ export const useOrderAutoAdvance = () => {
       return;
     }
 
+    haltedRef.current = false;
     console.log('[Auto-Advance] Background service started');
 
     // Start polling

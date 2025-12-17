@@ -402,6 +402,16 @@ def _actor_from_token(token: str):
         actor = next((u for u in USERS if str(u.get("id")) == sub), None)
         if actor:
             return actor
+
+    # Fallback: construct a lightweight actor from token claims so valid staff/manager/admin
+    # tokens without a DB record can still authorize.
+    if email or sub:
+        return {
+            "id": sub or email,
+            "email": email,
+            "role": (payload.get("role") or payload.get("user_role") or "staff"),
+            "permissions": payload.get("permissions") or [],
+        }
     return None
 
 def _actor_from_request(request):

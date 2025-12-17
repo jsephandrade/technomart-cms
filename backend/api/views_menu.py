@@ -497,14 +497,19 @@ def menu_item_detail(request, item_id):
                 "preparation_time",
                 "is_special",
             }
+            disallowed = {"quantity"}  # guard against accidental extra fields (e.g., inventory data)
             fields = {
                 k: v
                 for k, v in fields.items()
-                if k in allowed_fields and hasattr(mi, k)
+                if k in allowed_fields and k not in disallowed and hasattr(mi, k)
             }
             # Apply changes defensively and only touch provided fields to avoid DB errors from unrelated data
             for k, v in fields.items():
-                setattr(mi, k, v)
+                try:
+                    setattr(mi, k, v)
+                except AttributeError:
+                    # Skip any unexpected attributes defensively (e.g., if model changes)
+                    continue
             if fields:
                 try:
                     mi.save(update_fields=list(fields.keys()) + ["updated_at"])

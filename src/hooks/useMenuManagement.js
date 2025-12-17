@@ -142,7 +142,7 @@ export const useMenuManagement = (params = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [paramKey, params, toast, normalizeForState]);
+  }, [paramKey, toast, normalizeForState]);
 
   useEffect(() => {
     fetchMenuItems();

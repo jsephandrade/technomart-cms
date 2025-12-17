@@ -1,5 +1,5 @@
 // src/components/menu/EditItemDialog.jsx
-import React from 'react';
+import React, { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,8 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
+  const fileInputRef = useRef(null);
+
   if (!item) return null;
 
   const handleFileChange = (e) => {
@@ -25,6 +27,13 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
 
   const clearImage = () => {
     setItem({ ...item, imageFile: undefined, imageUrl: '' });
+  };
+
+  const triggerFilePicker = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
   };
 
   return (
@@ -109,37 +118,51 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
             </p>
           ) : null}
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="edit-image-file" className="text-right">
-              Upload Image
-            </Label>
-            <Input
-              id="edit-image-file"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="col-span-3"
-            />
-          </div>
-
-          {(item.imageUrl || item.image || item.imageFile) && (
-            <div className="grid grid-cols-4 items-start gap-4">
-              <div className="text-right font-medium pt-1">Preview</div>
-              <div className="col-span-3 space-y-2">
-                <img
-                  src={item.imageUrl || item.image}
-                  alt={item.name || 'Preview'}
-                  className="h-32 w-full object-cover rounded-md border"
-                />
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={clearImage}>
-                    Remove Image
+          <div className="grid grid-cols-4 items-start gap-4">
+            <Label className="text-right">Image</Label>
+            <div className="col-span-3 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-16 w-16 overflow-hidden rounded-md border bg-muted">
+                  {item.imageUrl || item.image ? (
+                    <img
+                      src={item.imageUrl || item.image}
+                      alt={item.name || 'Preview'}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                      No image
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={triggerFilePicker}>
+                    {item.imageUrl || item.image
+                      ? 'Change Image'
+                      : 'Upload Image'}
                   </Button>
+                  {(item.imageUrl || item.image || item.imageFile) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={clearImage}
+                    >
+                      Remove
+                    </Button>
+                  )}
                 </div>
               </div>
+              <input
+                ref={fileInputRef}
+                id="edit-image-file"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
             </div>
-          )}
-          {/* --- /Image --- */}
+          </div>
+          {/* --- /Image controls --- */}
         </div>
 
         <DialogFooter>

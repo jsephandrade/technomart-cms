@@ -276,6 +276,15 @@ class MenuService {
       : '';
     return { success: true, data: { imageUrl } };
   }
+
+  async deleteItemImage(itemId) {
+    const res = await apiClient.delete(`/menu/items/${itemId}/image`, {
+      retry: { retries: 1 },
+    });
+    const raw = unwrap(res);
+    const imageUrl = absoluteUrl(pickUrl(raw));
+    return { success: true, data: { imageUrl: imageUrl || null } };
+  }
 }
 
 export const menuService = new MenuService();

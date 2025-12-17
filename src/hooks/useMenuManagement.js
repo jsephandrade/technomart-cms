@@ -355,6 +355,32 @@ export const useMenuManagement = (params = {}) => {
     }
   };
 
+  const deleteItemImage = async (itemId) => {
+    try {
+      const response = await menuService.deleteItemImage(itemId);
+      if (response.success) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === itemId ? { ...item, image: null, imageUrl: null } : item
+          )
+        );
+        toast({
+          title: 'Image Removed',
+          description: 'Menu item image has been deleted.',
+        });
+        return true;
+      }
+      throw new Error('Failed to delete image');
+    } catch (error) {
+      toast({
+        title: 'Error Removing Image',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const refetch = useCallback(() => fetchMenuItems(), [fetchMenuItems]);
 
   useEffect(() => {
@@ -378,6 +404,7 @@ export const useMenuManagement = (params = {}) => {
     restoreMenuItem,
     updateItemAvailability,
     uploadItemImage,
+    deleteItemImage,
     refetch,
   };
 };

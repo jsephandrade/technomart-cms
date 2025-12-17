@@ -688,7 +688,7 @@ def menu_item_availability(request, item_id):
     return JsonResponse({"success": True, "data": updated})
 
 
-@require_http_methods(["POST"]) 
+@require_http_methods(["POST", "DELETE"]) 
 def menu_item_image(request, item_id):
     actor, err = _actor_from_request(request)
     if not actor:
@@ -700,6 +700,18 @@ def menu_item_image(request, item_id):
         mi = MenuItem.objects.filter(id=item_id).first()
         if not mi:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
+        if request.method == "DELETE":
+            try:
+                if getattr(mi, "image", None) and mi.image.name:
+                    try:
+                        default_storage.delete(mi.image.name)
+                    except Exception:
+                        pass
+                mi.image = None
+                mi.save(update_fields=["image", "updated_at"])
+            except Exception:
+                return JsonResponse({"success": False, "message": "Failed to remove image"}, status=500)
+            return JsonResponse({"success": True, "data": {"imageUrl": None}})
         payload = None
         img = request.FILES.get("image")
         if not img:

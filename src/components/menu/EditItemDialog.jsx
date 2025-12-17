@@ -14,7 +14,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { UploadCloud } from 'lucide-react';
 
-const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
+const EditItemDialog = ({ item, setItem, onSave, onClose, onRemoveImage }) => {
   if (!item) return null;
 
   const handleFileChange = (event) => {
@@ -31,7 +31,10 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
     if (item.imageUrl && item.imageUrl.startsWith('blob:')) {
       URL.revokeObjectURL(item.imageUrl);
     }
-    setItem({ ...item, imageFile: null, imageUrl: '' });
+    setItem({ ...item, imageFile: null, imageUrl: '', image: null });
+    if (onRemoveImage && item?.id) {
+      onRemoveImage(item.id);
+    }
   };
 
   return (

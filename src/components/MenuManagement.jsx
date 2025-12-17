@@ -34,6 +34,7 @@ const MenuManagement = () => {
     updateMenuItem,
     deleteMenuItem: archiveMenuItem,
     uploadItemImage,
+    deleteItemImage,
     refetch: refetchActive,
   } = useMenuManagement({});
   const {
@@ -223,6 +224,20 @@ const MenuManagement = () => {
         item={editingItem}
         setItem={setEditingItem}
         onSave={handleEditItem}
+        onRemoveImage={async (id) => {
+          const targetId = id || editingItem?.id;
+          if (!targetId) return;
+          const ok = await deleteItemImage(targetId);
+          if (ok) {
+            setEditingItem((prev) =>
+              prev
+                ? { ...prev, image: null, imageUrl: null, imageFile: null }
+                : prev
+            );
+            refetchActive?.();
+            refetchArchived?.();
+          }
+        }}
         onClose={() => setEditingItem(null)}
       />
 

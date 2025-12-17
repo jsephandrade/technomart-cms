@@ -2,6 +2,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { UploadCloud } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -167,13 +168,24 @@ const AddItemDialog = ({
               Upload Image
             </Label>
             <div className="col-span-3 space-y-2">
-              <Input
-                id="image-file"
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="w-full cursor-pointer"
-              />
+              <div className="rounded-lg border border-dashed bg-muted/40 p-3">
+                <label
+                  htmlFor="image-file"
+                  className="flex cursor-pointer items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <UploadCloud className="h-4 w-4" />
+                    <span>Click to upload or drop an image</span>
+                  </div>
+                  <Input
+                    id="image-file"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
               {(newItem.imageUrl || newItem.imageFile) && (
                 <div className="rounded-lg border bg-muted p-2">
                   <div className="text-xs text-muted-foreground mb-1">

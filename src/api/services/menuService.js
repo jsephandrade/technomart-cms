@@ -170,6 +170,10 @@ class MenuService {
     return { success: true, data: unwrap(res) };
   }
 
+  /**
+   * Upload a menu item image with fast client-side compression (WebP)
+   * for efficient transfers. Falls back to FormData if conversion fails.
+   */
   async uploadItemImage(itemId, imageFile) {
     if (!itemId) throw new Error('Menu item id is required');
     if (!imageFile) throw new Error('Image file is required');
@@ -193,6 +197,38 @@ class MenuService {
         }
       });
 
+    const toWebpDataUrl = async (file) => {
+      try {
+        const dataUrl = await toDataUrl(file);
+        if (typeof document === 'undefined') return dataUrl;
+        const img = document.createElement('img');
+        const loaded = await new Promise((resolve, reject) => {
+          img.onload = () => resolve(true);
+          img.onerror = reject;
+          img.src = dataUrl;
+        });
+        if (!loaded) return dataUrl;
+        const canvas = document.createElement('canvas');
+        const maxDim = 1024;
+        let { width, height } = img;
+        if (width > height && width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else if (height >= width && height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const webp = canvas.toDataURL('image/webp', 0.8);
+        return webp || dataUrl;
+      } catch {
+        return toDataUrl(file);
+      }
+    };
+
     const sendFormPayload = () => {
       const formData = new FormData();
       formData.append('image', imageFile);
@@ -203,7 +239,7 @@ class MenuService {
     };
 
     const sendBase64Payload = async () => {
-      const dataUrl = await toDataUrl(imageFile);
+      const dataUrl = await toWebpDataUrl(imageFile);
       const filename = imageFile?.name || imageFile?.filename || undefined;
       return apiClient.post(
         `/menu/items/${itemId}/image`,

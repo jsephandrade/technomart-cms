@@ -1042,10 +1042,11 @@ def order_generate_number(request):
 @require_http_methods(["GET"])  # queue
 @rate_limit(limit=60, window_seconds=60)
 def order_queue(request):
+    allow_public = getattr(settings, "ORDER_QUEUE_PUBLIC", False)
     actor, err = _actor_from_request(request)
-    if not actor:
+    if not actor and not allow_public:
         return err
-    if not _has_permission(actor, "order.queue.handle"):
+    if actor and not _has_permission(actor, "order.queue.handle"):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
     try:
         from .models import Order, OrderItem, OrderEvent

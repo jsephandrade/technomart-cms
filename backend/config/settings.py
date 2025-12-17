@@ -136,6 +136,12 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
 }
 
+# Allow public access to the live order queue (useful for kiosk/FOH displays in dev)
+ORDER_QUEUE_PUBLIC = (
+    os.getenv("ORDER_QUEUE_PUBLIC", "0").lower() in {"1", "true", "yes", "on"}
+    or DEBUG
+)
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

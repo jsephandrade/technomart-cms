@@ -1,5 +1,5 @@
 // src/components/menu/ItemCard.jsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,11 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
     }
     return null;
   }, [item]);
+
+  useEffect(() => {
+    // Reset broken-state when a new image URL arrives so fresh uploads render
+    setImageError(false);
+  }, [imageSrc]);
 
   const showImage = Boolean(imageSrc) && !imageError;
 

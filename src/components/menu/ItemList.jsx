@@ -67,7 +67,8 @@ const ItemList = ({
       {items.map((item, index) => {
         const imageSrc = resolveImageSrc(item);
         const brokenKey = item?.id ?? item?.name ?? index;
-        const showImage = Boolean(imageSrc) && !brokenImages[brokenKey];
+        const failedSrc = brokenImages[brokenKey];
+        const showImage = Boolean(imageSrc) && failedSrc !== imageSrc;
         const category = item.category || item.categoryName || 'Uncategorized';
         const availabilityBadge =
           mode === 'archived'
@@ -106,7 +107,10 @@ const ItemList = ({
                   alt={item.name}
                   className="relative h-16 w-16 rounded-xl border border-border/60 object-cover shadow-sm transition duration-300 group-hover:scale-[1.03]"
                   onError={() =>
-                    setBrokenImages((prev) => ({ ...prev, [brokenKey]: true }))
+                    setBrokenImages((prev) => ({
+                      ...prev,
+                      [brokenKey]: imageSrc || true,
+                    }))
                   }
                 />
               ) : (

@@ -36,6 +36,7 @@ const MenuManagement = () => {
     uploadItemImage,
     deleteItemImage,
     refetch: refetchActive,
+    setLocalImage,
   } = useMenuManagement({});
   const {
     items: archivedItems,
@@ -87,7 +88,11 @@ const MenuManagement = () => {
         preparationTime: 0,
       };
       const created = await createMenuItem(payload);
+      const previewUrl = newItem.imageUrl;
       if (newItem.imageFile && created?.id) {
+        if (previewUrl) {
+          setLocalImage(created.id, previewUrl);
+        }
         setUploadQueue((prev) => [
           ...prev,
           { id: created.id, file: newItem.imageFile },

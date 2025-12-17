@@ -115,6 +115,21 @@ export const useMenuManagement = (params = {}) => {
     [updateMenuCaches]
   );
 
+  const setLocalImage = useCallback(
+    (id, imageUrl) => {
+      if (!id || !imageUrl) return;
+      updateMenuCaches((response) => {
+        const current = response?.data || [];
+        if (!Array.isArray(current)) return response;
+        const nextData = current.map((it) =>
+          it.id === id ? { ...it, image: imageUrl, imageUrl } : it
+        );
+        return { ...(response || {}), data: nextData };
+      });
+    },
+    [updateMenuCaches]
+  );
+
   // Create a stable key for params to avoid infinite refetch loops on new object identities
   const paramKey = JSON.stringify(
     (() => {
@@ -390,6 +405,7 @@ export const useMenuManagement = (params = {}) => {
       await deleteImageMutation.mutateAsync(itemId);
       return true;
     },
+    setLocalImage,
     refetch: itemsQuery.refetch,
   };
 };

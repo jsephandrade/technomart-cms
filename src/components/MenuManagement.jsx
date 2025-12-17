@@ -1,5 +1,5 @@
 // src/pages/MenuManagement.jsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import useMenuManagement, {
   useMenuCategories,
 } from '@/hooks/useMenuManagement';
@@ -66,6 +66,8 @@ const MenuManagement = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [comboDialogOpen, setComboDialogOpen] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleAddItem = async () => {
     if (adding) return;
@@ -86,9 +88,10 @@ const MenuManagement = () => {
       };
       const created = await createMenuItem(payload);
       if (newItem.imageFile && created?.id) {
-        uploadItemImage(created.id, newItem.imageFile).catch((err) => {
-          console.error('Menu image upload failed', err);
-        });
+        setUploadQueue((prev) => [
+          ...prev,
+          { id: created.id, file: newItem.imageFile },
+        ]);
       }
       setNewItem({
         name: '',
@@ -106,6 +109,33 @@ const MenuManagement = () => {
       setAdding(false);
     }
   };
+
+  useEffect(() => {
+    if (isUploading || uploadQueue.length === 0) return;
+    const nextJob = uploadQueue[0];
+    if (!nextJob?.id || !nextJob?.file) {
+      setUploadQueue((prev) => prev.slice(1));
+      return;
+    }
+    let canceled = false;
+    const runUpload = async () => {
+      setIsUploading(true);
+      try {
+        await uploadItemImage(nextJob.id, nextJob.file);
+      } catch (err) {
+        console.error('Menu image upload failed', err);
+      } finally {
+        if (!canceled) {
+          setUploadQueue((prev) => prev.slice(1));
+          setIsUploading(false);
+        }
+      }
+    };
+    runUpload();
+    return () => {
+      canceled = true;
+    };
+  }, [uploadQueue, isUploading, uploadItemImage]);
 
   const handleEditItem = async (overrideItem) => {
     try {

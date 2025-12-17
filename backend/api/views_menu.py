@@ -509,16 +509,11 @@ def menu_item_detail(request, item_id):
                 "orderQuantity",
             }  # guard against accidental extra fields (e.g., inventory/cart data)
             allowed_input_keys = allowed_fields | {"preparationTime"}
-            unsupported_keys = {k for k in payload.keys() if k not in allowed_input_keys or k in disallowed}
-            if unsupported_keys:
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "message": "Unsupported fields: "
-                        + ", ".join(sorted(unsupported_keys)),
-                    },
-                    status=400,
-                )
+            # Silently ignore unsupported/accidental fields (e.g., quantity from carts)
+            safe_payload = {
+                k: v for k, v in payload.items() if k in allowed_input_keys and k not in disallowed
+            }
+            payload = safe_payload
             fields = {
                 k: v
                 for k, v in fields.items()

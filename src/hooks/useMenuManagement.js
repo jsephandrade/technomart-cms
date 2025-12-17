@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import menuService from '@/api/services/menuService';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export const useMenuManagement = (params = {}) => {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const sanitizeUpdatePayload = useCallback((updates = {}) => {
     const safe = {};
@@ -71,24 +69,50 @@ export const useMenuManagement = (params = {}) => {
     };
   }, []);
 
+  const updateMenuCaches = useCallback(
+    (mutator) => {
+      const queries = queryClient.getQueriesData({ queryKey: ['menuItems'] });
+      queries.forEach(([key, data]) => {
+        const next = mutator(data);
+        if (next !== data) {
+          queryClient.setQueryData(key, next);
+        }
+      });
+    },
+    [queryClient]
+  );
+
   const upsertItem = useCallback(
     (incoming) => {
       const normalized = normalizeForState(incoming);
       if (!normalized) return;
-      setItems((prev) => {
-        const idx =
-          normalized.id !== undefined && normalized.id !== null
-            ? prev.findIndex((it) => it.id === normalized.id)
-            : -1;
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = { ...next[idx], ...normalized };
-          return next;
-        }
-        return [normalized, ...prev];
+      updateMenuCaches((response) => {
+        const current = response?.data || [];
+        if (!Array.isArray(current)) return response;
+        const idx = current.findIndex((it) => it.id === normalized.id);
+        const nextData =
+          idx >= 0
+            ? current.map((it, i) =>
+                i === idx ? { ...it, ...normalized } : it
+              )
+            : [normalized, ...current];
+        return { ...(response || {}), data: nextData };
       });
     },
-    [normalizeForState]
+    [normalizeForState, updateMenuCaches]
+  );
+
+  const removeItemFromCaches = useCallback(
+    (id) => {
+      updateMenuCaches((response) => {
+        const current = response?.data || [];
+        if (!Array.isArray(current)) return response;
+        const nextData = current.filter((it) => it.id !== id);
+        if (nextData.length === current.length) return response;
+        return { ...(response || {}), data: nextData };
+      });
+    },
+    [updateMenuCaches]
   );
 
   // Create a stable key for params to avoid infinite refetch loops on new object identities
@@ -108,326 +132,265 @@ export const useMenuManagement = (params = {}) => {
     })()
   );
 
-  const isArchivedView = (() => {
-    const flag = params?.archived;
-    if (flag === undefined || flag === null || flag === '') return false;
-    if (typeof flag === 'boolean') return flag;
-    return String(flag).toLowerCase() === 'true';
-  })();
-
-  const fetchMenuItems = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
+  const itemsQuery = useQuery({
+    queryKey: ['menuItems', paramKey],
+    queryFn: async () => {
       const response = await menuService.getMenuItems(params);
-
-      if (response.success) {
-        const normalized =
-          Array.isArray(response.data) && response.data.length > 0
-            ? response.data.map((it) => normalizeForState(it))
-            : response.data;
-        setItems(normalized || []);
-        setPagination(response.pagination);
-      } else {
-        throw new Error('Failed to fetch menu items');
-      }
-    } catch (error) {
-      setError(error.message);
+      if (!response?.success) throw new Error('Failed to fetch menu items');
+      const normalized =
+        Array.isArray(response.data) && response.data.length > 0
+          ? response.data.map((it) => normalizeForState(it))
+          : response.data;
+      return { ...response, data: normalized || [] };
+    },
+    staleTime: 20_000,
+    gcTime: 5 * 60_000,
+    keepPreviousData: true,
+    refetchOnWindowFocus: false,
+    onError: () => {
       toast({
         title: 'Error Loading Menu',
         description: 'Failed to load menu items. Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
-    }
-  }, [paramKey, toast, normalizeForState]);
+    },
+  });
 
-  useEffect(() => {
-    fetchMenuItems();
-  }, [fetchMenuItems]);
-
-  const createMenuItem = async (itemData) => {
+  const broadcastMenuEvent = (detail) => {
     try {
-      const response = await menuService.createMenuItem(itemData);
+      window?.dispatchEvent?.(
+        new CustomEvent('menu.items.updated', { detail: detail || null })
+      );
+    } catch {}
+  };
 
-      if (response.success) {
-        upsertItem(response.data);
-        try {
-          window?.dispatchEvent?.(
-            new CustomEvent('menu.items.updated', {
-              detail: { type: 'create', item: response.data },
-            })
-          );
-        } catch {}
-        toast({
-          title: 'Menu Item Created',
-          description: `${itemData.name} has been added to the menu.`,
-        });
-        return response.data;
-      } else {
-        throw new Error('Failed to create menu item');
-      }
-    } catch (error) {
+  const invalidateMenu = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['menuItems'] }),
+    [queryClient]
+  );
+
+  const createMenuItemMutation = useMutation({
+    mutationFn: (itemData) => menuService.createMenuItem(itemData),
+    onSuccess: (res, variables) => {
+      upsertItem(res.data);
+      broadcastMenuEvent({ type: 'create', item: res.data });
+      toast({
+        title: 'Menu Item Created',
+        description: `${variables.name || 'Item'} has been added to the menu.`,
+      });
+      invalidateMenu();
+    },
+    onError: (error) => {
       toast({
         title: 'Error Creating Item',
-        description: error.message,
+        description: error?.message || 'Failed to create menu item',
         variant: 'destructive',
       });
-      throw error;
-    }
-  };
+    },
+  });
 
-  const updateMenuItem = async (itemId, updates) => {
-    try {
-      const payload = sanitizeUpdatePayload(updates);
-      const response = await menuService.updateMenuItem(itemId, payload);
-
-      if (response.success) {
-        upsertItem({ id: itemId, ...response.data });
-        try {
-          window?.dispatchEvent?.(
-            new CustomEvent('menu.items.updated', {
-              detail: { type: 'update', id: itemId, updates: response.data },
-            })
-          );
-        } catch {}
-        toast({
-          title: 'Menu Item Updated',
-          description: 'Menu item has been updated successfully.',
-        });
-        return response.data;
-      } else {
-        throw new Error('Failed to update menu item');
-      }
-    } catch (error) {
-      const message = error?.message || 'Failed to update menu item';
+  const updateMenuItemMutation = useMutation({
+    mutationFn: ({ itemId, updates }) =>
+      menuService.updateMenuItem(itemId, sanitizeUpdatePayload(updates)),
+    onSuccess: (res, variables) => {
+      upsertItem({ id: variables.itemId, ...res.data });
+      broadcastMenuEvent({
+        type: 'update',
+        id: variables.itemId,
+        updates: res.data,
+      });
+      toast({
+        title: 'Menu Item Updated',
+        description: 'Menu item has been updated successfully.',
+      });
+      invalidateMenu();
+    },
+    onError: (error) => {
       toast({
         title: 'Error Updating Item',
-        description: message,
+        description: error?.message || 'Failed to update menu item',
         variant: 'destructive',
       });
-      throw error;
-    }
-  };
+    },
+  });
 
-  const deleteMenuItem = async (itemId) => {
-    try {
-      const response = await menuService.deleteMenuItem(itemId);
-
-      if (response.success) {
-        setItems((prev) => prev.filter((item) => item.id !== itemId));
-        toast({
-          title: 'Menu Item Archived',
-          description: 'The item has been moved to the archive.',
-        });
-        try {
-          window?.dispatchEvent?.(
-            new CustomEvent('menu.items.updated', {
-              detail: { type: 'archive', id: itemId },
-            })
-          );
-        } catch {}
-        return true;
-      } else {
-        throw new Error('Failed to archive menu item');
-      }
-    } catch (error) {
+  const deleteMenuItemMutation = useMutation({
+    mutationFn: (itemId) => menuService.deleteMenuItem(itemId),
+    onSuccess: (_, itemId) => {
+      removeItemFromCaches(itemId);
+      toast({
+        title: 'Menu Item Archived',
+        description: 'The item has been moved to the archive.',
+      });
+      broadcastMenuEvent({ type: 'archive', id: itemId });
+      invalidateMenu();
+    },
+    onError: (error) => {
       toast({
         title: 'Error Archiving Item',
-        description: error.message,
+        description: error?.message || 'Failed to archive menu item',
         variant: 'destructive',
       });
-      throw error;
-    }
-  };
+    },
+  });
 
-  const restoreMenuItem = async (itemId) => {
-    try {
-      const response = await menuService.restoreMenuItem(itemId);
-
-      if (response.success) {
-        const restored =
-          (response.data && response.data.data) || response.data || null;
-        if (isArchivedView) {
-          setItems((prev) => prev.filter((item) => item.id !== itemId));
-        } else if (restored) {
-          upsertItem(restored);
-        }
-        toast({
-          title: 'Menu Item Restored',
-          description: 'The item has been moved back to the active menu.',
-        });
-        try {
-          window?.dispatchEvent?.(
-            new CustomEvent('menu.items.updated', {
-              detail: { type: 'restore', id: itemId },
-            })
-          );
-        } catch {}
-        return restored;
-      }
-      throw new Error('Failed to restore menu item');
-    } catch (error) {
+  const restoreMenuItemMutation = useMutation({
+    mutationFn: (itemId) => menuService.restoreMenuItem(itemId),
+    onSuccess: (res, itemId) => {
+      const restored = (res.data && res.data.data) || res.data || null;
+      if (restored) upsertItem(restored);
+      toast({
+        title: 'Menu Item Restored',
+        description: 'The item has been moved back to the active menu.',
+      });
+      broadcastMenuEvent({ type: 'restore', id: itemId });
+      invalidateMenu();
+    },
+    onError: (error) => {
       toast({
         title: 'Error Restoring Item',
-        description: error.message,
+        description: error?.message || 'Failed to restore menu item',
         variant: 'destructive',
       });
-      throw error;
-    }
-  };
+    },
+  });
 
-  const updateItemAvailability = async (itemId, available) => {
-    try {
-      const response = await menuService.updateItemAvailability(
-        itemId,
-        available
-      );
-
-      if (response.success) {
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === itemId ? { ...item, available } : item
-          )
-        );
-        toast({
-          title: 'Availability Updated',
-          description: `Menu item is now ${available ? 'available' : 'unavailable'}.`,
-        });
-        return response.data;
-      } else {
-        throw new Error('Failed to update availability');
-      }
-    } catch (error) {
+  const updateAvailabilityMutation = useMutation({
+    mutationFn: ({ itemId, available }) =>
+      menuService.updateItemAvailability(itemId, available),
+    onSuccess: (_, variables) => {
+      upsertItem({ id: variables.itemId, available: variables.available });
+      toast({
+        title: 'Availability Updated',
+        description: `Menu item is now ${
+          variables.available ? 'available' : 'unavailable'
+        }.`,
+      });
+      broadcastMenuEvent({
+        type: 'availability',
+        id: variables.itemId,
+        available: variables.available,
+      });
+      invalidateMenu();
+    },
+    onError: (error) => {
       toast({
         title: 'Error Updating Availability',
-        description: error.message,
+        description: error?.message || 'Failed to update availability',
         variant: 'destructive',
       });
-      throw error;
-    }
-  };
+    },
+  });
 
-  const uploadItemImage = async (itemId, imageFile) => {
-    try {
-      const response = await menuService.uploadItemImage(itemId, imageFile);
+  const uploadImageMutation = useMutation({
+    mutationFn: ({ itemId, imageFile }) =>
+      menuService.uploadItemImage(itemId, imageFile),
+    onSuccess: (res, variables) => {
+      const uploadedUrl = res.data?.imageUrl || '';
+      const looksLikeFallback =
+        uploadedUrl &&
+        variables.itemId &&
+        uploadedUrl.includes(`/menu_items/${variables.itemId}-`);
+      const nextUrl = looksLikeFallback ? '' : uploadedUrl;
 
-      if (response.success) {
-        const uploadedUrl = response.data?.imageUrl || '';
-        const looksLikeFallback =
-          uploadedUrl &&
-          itemId &&
-          uploadedUrl.includes(`/menu_items/${itemId}-`);
-        const nextUrl = looksLikeFallback ? '' : uploadedUrl;
+      upsertItem({ id: variables.itemId, image: nextUrl, imageUrl: nextUrl });
+      broadcastMenuEvent({
+        type: 'image',
+        id: variables.itemId,
+        imageUrl: nextUrl,
+      });
 
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === itemId
-              ? {
-                  ...item,
-                  image: nextUrl,
-                  imageUrl: nextUrl,
-                }
-              : item
-          )
-        );
-        try {
-          window?.dispatchEvent?.(
-            new CustomEvent('menu.items.updated', {
-              detail: {
-                type: 'image',
-                id: itemId,
-                imageUrl: nextUrl,
-              },
-            })
+      if (looksLikeFallback) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn(
+            'Menu item image upload returned a placeholder URL; check media storage configuration.'
           );
-        } catch {}
-
-        if (looksLikeFallback) {
-          // Avoid spamming users with an error toast when the backend returns a placeholder path
-          // (common in dev when media storage is not configured). Keep the image blank and log for debugging.
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn(
-              'Menu item image upload returned a placeholder URL; check media storage configuration.'
-            );
-          }
-        } else {
-          toast({
-            title: 'Image Uploaded',
-            description: 'Menu item image has been updated successfully.',
-          });
         }
-        return {
-          ...response.data,
-          imageUrl: nextUrl,
-          fallback: looksLikeFallback,
-        };
       } else {
-        throw new Error('Failed to upload image');
+        toast({
+          title: 'Image Uploaded',
+          description: 'Menu item image has been updated successfully.',
+        });
       }
-    } catch (error) {
+    },
+    onError: (error) => {
       toast({
         title: 'Error Uploading Image',
-        description: error.message,
+        description: error?.message || 'Failed to upload image',
         variant: 'destructive',
       });
-      throw error;
-    }
-  };
+    },
+  });
 
-  const deleteItemImage = async (itemId) => {
-    try {
-      const response = await menuService.deleteItemImage(itemId);
-      if (response.success) {
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === itemId ? { ...item, image: null, imageUrl: null } : item
-          )
-        );
-        toast({
-          title: 'Image Removed',
-          description: 'Menu item image has been deleted.',
-        });
-        return true;
-      }
-      throw new Error('Failed to delete image');
-    } catch (error) {
+  const deleteImageMutation = useMutation({
+    mutationFn: (itemId) => menuService.deleteItemImage(itemId),
+    onSuccess: (_, itemId) => {
+      upsertItem({ id: itemId, image: null, imageUrl: null });
+      toast({
+        title: 'Image Removed',
+        description: 'Menu item image has been deleted.',
+      });
+      broadcastMenuEvent({ type: 'image-delete', id: itemId });
+      invalidateMenu();
+    },
+    onError: (error) => {
       toast({
         title: 'Error Removing Image',
-        description: error.message,
+        description: error?.message || 'Failed to delete image',
         variant: 'destructive',
       });
-      return false;
-    }
-  };
-
-  const refetch = useCallback(() => fetchMenuItems(), [fetchMenuItems]);
+    },
+  });
 
   useEffect(() => {
-    const handler = () => {
-      fetchMenuItems();
-    };
+    const handler = () => invalidateMenu();
     window?.addEventListener?.('menu.items.updated', handler);
     return () => {
       window?.removeEventListener?.('menu.items.updated', handler);
     };
-  }, [fetchMenuItems]);
+  }, [invalidateMenu]);
 
   return {
-    items,
-    loading,
-    error,
-    pagination,
-    createMenuItem,
-    updateMenuItem,
-    deleteMenuItem,
-    restoreMenuItem,
-    updateItemAvailability,
-    uploadItemImage,
-    deleteItemImage,
-    refetch,
+    items: itemsQuery.data?.data || [],
+    loading: itemsQuery.isLoading,
+    fetching: itemsQuery.isFetching,
+    error: itemsQuery.error?.message || null,
+    pagination: itemsQuery.data?.pagination,
+    createMenuItem: async (itemData) => {
+      const res = await createMenuItemMutation.mutateAsync(itemData);
+      return res?.data || res;
+    },
+    updateMenuItem: async (itemId, updates) => {
+      const res = await updateMenuItemMutation.mutateAsync({
+        itemId,
+        updates,
+      });
+      return res?.data || res;
+    },
+    deleteMenuItem: async (itemId) => {
+      await deleteMenuItemMutation.mutateAsync(itemId);
+      return true;
+    },
+    restoreMenuItem: async (itemId) => {
+      const res = await restoreMenuItemMutation.mutateAsync(itemId);
+      return (res?.data && res.data.data) || res?.data || res;
+    },
+    updateItemAvailability: async (itemId, available) => {
+      const res = await updateAvailabilityMutation.mutateAsync({
+        itemId,
+        available,
+      });
+      return res?.data || res;
+    },
+    uploadItemImage: async (itemId, imageFile) => {
+      const res = await uploadImageMutation.mutateAsync({ itemId, imageFile });
+      return res?.data || res;
+    },
+    deleteItemImage: async (itemId) => {
+      await deleteImageMutation.mutateAsync(itemId);
+      return true;
+    },
+    refetch: itemsQuery.refetch,
   };
 };
 

@@ -1,5 +1,5 @@
 // src/pages/MenuManagement.jsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import useMenuManagement, {
   useMenuCategories,
 } from '@/hooks/useMenuManagement';
@@ -66,6 +66,24 @@ const MenuManagement = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [comboDialogOpen, setComboDialogOpen] = useState(false);
+
+  // Auto-refresh items/categories periodically and when tab is focused
+  useEffect(() => {
+    const refreshAll = () => {
+      refetchActive?.();
+      refetchArchived?.();
+      refetchCategories?.();
+    };
+    const intervalId = window.setInterval(refreshAll, 10000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshAll();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [refetchActive, refetchArchived, refetchCategories]);
 
   const handleAddItem = async () => {
     if (adding) return;

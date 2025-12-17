@@ -56,7 +56,7 @@ const MenuManagement = () => {
   const [newItem, setNewItem] = useState({
     name: '',
     description: '',
-    price: 0,
+    price: '',
     category: '',
     available: true,
     imageUrl: '',
@@ -91,7 +91,7 @@ const MenuManagement = () => {
       setNewItem({
         name: '',
         description: '',
-        price: 0,
+        price: '',
         category: '',
         available: true,
         imageUrl: '',

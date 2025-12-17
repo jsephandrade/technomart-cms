@@ -10,7 +10,7 @@ export default function useMenuManager() {
   const [newItem, setNewItem] = useState({
     name: '',
     description: '',
-    price: 0,
+    price: '',
     category: '',
     available: true,
   });
@@ -40,7 +40,7 @@ export default function useMenuManager() {
     setNewItem({
       name: '',
       description: '',
-      price: 0,
+      price: '',
       category: '',
       available: true,
     });

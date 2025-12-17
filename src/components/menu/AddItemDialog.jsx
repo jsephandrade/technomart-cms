@@ -50,6 +50,18 @@ const AddItemDialog = ({
     setNewItem({ ...newItem, imageFile: null, imageUrl: '' });
   };
 
+  const handlePriceChange = (event) => {
+    const value = event.target.value;
+    const cleaned = value.replace(/[eE]/g, '');
+    setNewItem({ ...newItem, price: cleaned === '' ? '' : cleaned });
+  };
+
+  const blockExponentInput = (event) => {
+    if (event.key === 'e' || event.key === 'E') {
+      event.preventDefault();
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -99,13 +111,10 @@ const AddItemDialog = ({
             <Input
               id="price"
               type="number"
-              value={newItem.price}
-              onChange={(e) =>
-                setNewItem({
-                  ...newItem,
-                  price: parseFloat(e.target.value) || 0,
-                })
-              }
+              inputMode="decimal"
+              value={newItem.price ?? ''}
+              onChange={handlePriceChange}
+              onKeyDown={blockExponentInput}
               className="col-span-3"
             />
           </div>

@@ -347,11 +347,34 @@ def _has_permission(user_or_dict, perm_code: str) -> bool:
 
 
 def _actor_from_token(token: str):
+    """Decode JWT tokens issued by either our custom signer or SimpleJWT.
+
+    Some deployments set DJANGO_JWT_SECRET (used by our auth) while SimpleJWT
+    signs with SECRET_KEY. We attempt both to avoid false 401s when valid
+    staff/manager/admin tokens hit endpoints like /api/orders/queue.
+    """
     if not token:
         return None
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-    except Exception:
+
+    payload = None
+    # Try both secrets (custom first, then SECRET_KEY for SimpleJWT)
+    candidate_keys = [getattr(settings, "JWT_SECRET", None), getattr(settings, "SECRET_KEY", None)]
+    seen_keys = set()
+    for key in candidate_keys:
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        try:
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=list({settings.JWT_ALGORITHM, "HS256", "RS256"}),
+                options={"verify_aud": False},
+            )
+            break
+        except Exception:
+            continue
+    if not payload:
         return None
 
     # Support both custom JWTs (sub/email) and SimpleJWT style tokens (user_id)

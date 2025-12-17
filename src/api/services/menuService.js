@@ -25,7 +25,11 @@ const absoluteUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
   if (/^(blob:|data:|https?:\/\/)/i.test(url)) return url;
   const path = url.startsWith('/') ? url : `/${url}`;
-  const baseOrigin = getBackendOrigin();
+  const baseOrigin =
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      import.meta.env.VITE_MEDIA_BASE_URL) ||
+    getBackendOrigin();
   try {
     return baseOrigin ? new URL(path, baseOrigin).toString() : path;
   } catch {

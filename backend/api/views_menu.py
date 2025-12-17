@@ -783,11 +783,15 @@ def menu_item_image(request, item_id):
         else:
             mi.image.save(img.name, img, save=True)
         image_url = mi.image.url if getattr(mi, "image", None) else None
+        if image_url and image_url.startswith("/media/"):
+            host = getattr(settings, "FRONTEND_BASE_URL", "") or getattr(settings, "MEDIA_HOST", "")
+            if host:
+                image_url = f"{host.rstrip('/')}{image_url}"
     except Exception:
         if getattr(settings, "DISABLE_INMEM_FALLBACK", False):
             return JsonResponse({"success": False, "message": "Failed to upload image"}, status=500)
         # Fallback: simulate URL when storage unavailable (dev only)
-        image_url = f"/images/menu/{item_id}-{int(datetime.now().timestamp())}.jpg"
+        image_url = f"/media/menu_items/{item_id}-{int(datetime.now().timestamp())}.jpg"
     try:
         record_audit(
             request,

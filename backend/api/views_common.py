@@ -354,8 +354,9 @@ def _actor_from_token(token: str):
     except Exception:
         return None
 
+    # Support both custom JWTs (sub/email) and SimpleJWT style tokens (user_id)
     email = (payload.get("email") or "").lower().strip()
-    sub = str(payload.get("sub") or "")
+    sub = str(payload.get("sub") or payload.get("user_id") or payload.get("userId") or "")
 
     try:
         from .models import AppUser
@@ -386,13 +387,23 @@ def _actor_from_request(request):
     Returns (actor, error_response) where actor is either AppUser instance or a
     dict from USERS fallback. If not authorized/invalid, returns (None, JsonResponse).
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
-        return None, JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
-    actor = _actor_from_token(token)
-    if actor:
-        return actor, None
+    auth = request.META.get("HTTP_AUTHORIZATION", "") or ""
+    if auth.startswith("Bearer "):
+        token = auth.split(" ", 1)[1].strip()
+        actor = _actor_from_token(token)
+        if actor:
+            return actor, None
+
+    # Fallback: allow Django-authenticated users (session/cookie) that carry role info
+    try:
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            # Ensure we have role/email fields to drive permissions
+            if getattr(user, "role", None) or getattr(user, "email", None):
+                return user, None
+    except Exception:
+        pass
+
     return None, JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
 
 

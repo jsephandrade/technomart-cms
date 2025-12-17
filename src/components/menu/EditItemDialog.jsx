@@ -16,17 +16,6 @@ import { Switch } from '@/components/ui/switch';
 const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
   if (!item) return null;
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const previewUrl = URL.createObjectURL(file);
-    setItem({ ...item, imageFile: file, imageUrl: previewUrl });
-  };
-
-  const clearImage = () => {
-    setItem({ ...item, imageFile: undefined, imageUrl: '' });
-  };
-
   return (
     <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
@@ -101,38 +90,6 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
               }
             />
           </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="edit-image-file" className="text-right">
-              Upload Image
-            </Label>
-            <Input
-              id="edit-image-file"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="col-span-3"
-            />
-          </div>
-
-          {(item.imageUrl || item.image || item.imageFile) && (
-            <div className="grid grid-cols-4 items-start gap-4">
-              <div className="text-right font-medium pt-1">Preview</div>
-              <div className="col-span-3 space-y-2">
-                <img
-                  src={item.imageUrl || item.image}
-                  alt={item.name || 'Preview'}
-                  className="h-32 w-full object-cover rounded-md border"
-                />
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={clearImage}>
-                    Remove Image
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* --- /Image --- */}
         </div>
 
         <DialogFooter>

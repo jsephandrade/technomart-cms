@@ -13,8 +13,6 @@ export default function useMenuManager() {
     price: 0,
     category: '',
     available: true,
-    imageUrl: '',
-    imageFile: null,
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);

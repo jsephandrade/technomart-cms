@@ -32,17 +32,6 @@ const AddItemDialog = ({
   onAddCategory,
   loading = false,
 }) => {
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const previewUrl = URL.createObjectURL(file);
-    setNewItem({ ...newItem, imageFile: file, imageUrl: previewUrl });
-  };
-
-  const clearImage = () => {
-    setNewItem({ ...newItem, imageFile: undefined, imageUrl: '' });
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -155,42 +144,14 @@ const AddItemDialog = ({
               }
             />
           </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="image-file" className="text-right">
-              Upload Image
-            </Label>
-            <Input
-              id="image-file"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="col-span-3"
-            />
-          </div>
-
-          {(newItem.imageUrl || newItem.imageFile) && (
-            <div className="grid grid-cols-4 items-start gap-4">
-              <div className="text-right font-medium pt-1">Preview</div>
-              <div className="col-span-3 space-y-2">
-                <img
-                  src={newItem.imageUrl}
-                  alt={newItem.name || 'Preview'}
-                  className="h-32 w-full object-cover rounded-md border"
-                />
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={clearImage}>
-                    Remove Image
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* --- /Image --- */}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
             Cancel
           </Button>
           <Button onClick={onAdd} disabled={loading}>

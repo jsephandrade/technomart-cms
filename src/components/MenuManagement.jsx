@@ -13,35 +13,6 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, Menu as MenuIcon } from 'lucide-react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 
-const pickImageSrc = (item = {}) => {
-  const candidates = [
-    item.image,
-    item.imageUrl,
-    item.image_url,
-    item.photo,
-    item.picture,
-    item.thumbnail,
-    item.thumb,
-    item.img,
-    item?.image?.url,
-  ];
-  for (const src of candidates) {
-    if (typeof src === 'string' && src.trim()) return src;
-  }
-  return '';
-};
-
-const normalizeItemImages = (item) => {
-  if (!item) return item;
-  const image = pickImageSrc(item);
-  return {
-    ...item,
-    image: image || item.image || item.imageUrl || '',
-    imageUrl: image || item.imageUrl || item.image || '',
-  };
-};
-
-const mapWithImages = (list = []) => (list || []).map(normalizeItemImages);
 const stripUnsupportedFields = (item = {}) => {
   if (!item) return item;
   // Remove fields the backend update endpoint ignores/complains about
@@ -62,7 +33,6 @@ const MenuManagement = () => {
     createMenuItem,
     updateMenuItem,
     deleteMenuItem: archiveMenuItem,
-    uploadItemImage,
     refetch: refetchActive,
   } = useMenuManagement({});
   const {
@@ -77,11 +47,8 @@ const MenuManagement = () => {
     () => (categoryRows || []).map((c) => c.name),
     [categoryRows]
   );
-  const itemsWithImages = useMemo(() => mapWithImages(items), [items]);
-  const archivedItemsWithImages = useMemo(
-    () => mapWithImages(archivedItems),
-    [archivedItems]
-  );
+  const itemsWithImages = items;
+  const archivedItemsWithImages = archivedItems;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newItem, setNewItem] = useState({
@@ -90,8 +57,6 @@ const MenuManagement = () => {
     price: 0,
     category: '',
     available: true,
-    imageUrl: '',
-    imageFile: null,
   });
   const [adding, setAdding] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -115,18 +80,13 @@ const MenuManagement = () => {
         ingredients: [],
         preparationTime: 0,
       };
-      const created = await createMenuItem(payload);
-      if (newItem.imageFile && created?.id) {
-        await uploadItemImage(created.id, newItem.imageFile);
-      }
+      await createMenuItem(payload);
       setNewItem({
         name: '',
         description: '',
         price: 0,
         category: '',
         available: true,
-        imageUrl: '',
-        imageFile: null,
       });
       setDialogOpen(false);
       // Fire-and-forget refresh; UI already has the optimistic insert
@@ -170,9 +130,6 @@ const MenuManagement = () => {
         updates.available = false;
       }
       await updateMenuItem(source.id, updates);
-      if (source.imageFile) {
-        await uploadItemImage(source.id, source.imageFile);
-      }
       setEditingItem(null);
       refetchActive?.();
       refetchArchived?.();
@@ -240,7 +197,7 @@ const MenuManagement = () => {
           categories={categories}
           onEdit={(it) =>
             setEditingItem({
-              ...stripUnsupportedFields(normalizeItemImages(it)),
+              ...stripUnsupportedFields(it),
             })
           }
           onArchive={handleArchiveItem}

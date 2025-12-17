@@ -85,9 +85,10 @@ const MenuManagement = () => {
         preparationTime: 0,
       };
       const created = await createMenuItem(payload);
-      if (newItem.imageFile && created?.id) {
-        await uploadItemImage(created.id, newItem.imageFile);
-      }
+      const imagePromise =
+        newItem.imageFile && created?.id
+          ? uploadItemImage(created.id, newItem.imageFile)
+          : null;
       setNewItem({
         name: '',
         description: '',
@@ -99,8 +100,11 @@ const MenuManagement = () => {
       });
       setDialogOpen(false);
       // Fire-and-forget refresh; UI already has the optimistic insert
-      refetchActive?.();
-      refetchCategories?.();
+      if (imagePromise) {
+        imagePromise.catch((err) => {
+          console.error('Menu image upload failed', err);
+        });
+      }
     } catch (e) {
       toast.error(e?.message || 'Failed to add menu item');
     } finally {

@@ -203,6 +203,64 @@ def _decode_base64_image(data, filename_hint=None):
     return file_obj
 
 
+def _save_menu_image_for_item(request, menu_item, img):
+    """
+    Validate and persist an uploaded image (file or ContentFile) for a MenuItem.
+    Returns the absolute/relative URL or raises ValueError for validation errors.
+    """
+    if not menu_item or not img:
+        return None
+
+    allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+    content_type = (getattr(img, "content_type", "") or "").lower()
+    if content_type and content_type not in allowed_types:
+        raise ValueError("Unsupported image type")
+
+    try:
+        max_mb = int(os.getenv("DJANGO_MENU_IMAGE_MAX_MB", "25"))
+    except Exception:
+        max_mb = 25
+    max_size = max_mb * 1024 * 1024
+    if getattr(img, "size", 0) > max_size:
+        raise ValueError(f"Image too large (max {max_mb}MB)")
+
+    # Verify image with Pillow and infer content type when missing
+    try:
+        from PIL import Image
+
+        img.file.seek(0)
+        with Image.open(img.file) as im:
+            detected_format = (im.format or "").lower()
+            im.verify()
+        img.file.seek(0)
+        if not content_type and detected_format:
+            mapped = {
+                "jpeg": "image/jpeg",
+                "jpg": "image/jpeg",
+                "png": "image/png",
+                "webp": "image/webp",
+            }.get(detected_format)
+            if mapped:
+                content_type = mapped
+                img.content_type = mapped
+    except Exception:
+        raise ValueError("Invalid image")
+
+    storage_name = menu_item.image.field.generate_filename(menu_item, img.name)
+    if default_storage.exists(storage_name):
+        menu_item.image.name = storage_name
+        menu_item.save(update_fields=["image", "updated_at"])
+    else:
+        menu_item.image.save(img.name, img, save=True)
+
+    image_url = menu_item.image.url if getattr(menu_item, "image", None) else None
+    if image_url and image_url.startswith("/media/"):
+        host = getattr(settings, "FRONTEND_BASE_URL", "") or getattr(settings, "MEDIA_HOST", "")
+        if host:
+            image_url = f"{host.rstrip('/')}{image_url}"
+    return image_url
+
+
 def _archive_menu_item_fallback(request, actor, item_dict):
     changed = not bool(item_dict.get("archived"))
     item_dict["archived"] = True
@@ -337,7 +395,50 @@ def menu_items(request):
     try:
         from decimal import Decimal, ROUND_HALF_UP
         from .models import MenuItem
-        payload = json.loads(request.body.decode("utf-8") or "{}")
+
+        content_type = (
+            (request.META.get("CONTENT_TYPE") or request.content_type or "")
+            .split(";")[0]
+            .strip()
+            .lower()
+        )
+        is_multipart = content_type.startswith("multipart/form-data")
+        image_file = None
+        image_base64 = None
+        if is_multipart:
+            payload = request.POST.dict()
+            image_file = (
+                request.FILES.get("image")
+                or request.FILES.get("photo")
+                or request.FILES.get("file")
+            )
+            if not image_file:
+                image_base64 = (
+                    payload.get("imageData")
+                    or payload.get("image_data")
+                    or payload.get("imageBase64")
+                    or payload.get("image")
+                )
+        else:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+            if isinstance(payload, dict):
+                image_base64 = (
+                    payload.get("imageData")
+                    or payload.get("image_data")
+                    or payload.get("imageBase64")
+                    or payload.get("image")
+                )
+        if not isinstance(payload, dict):
+            payload = {}
+        img = None
+        if image_file:
+            img = image_file
+        elif image_base64:
+            img = _decode_base64_image(
+                image_base64,
+                (payload or {}).get("filename") or (payload or {}).get("name"),
+            )
+
         name = (payload.get("name") or "").strip()
         if not name:
             return JsonResponse({"success": False, "message": "name is required"}, status=400)
@@ -352,6 +453,11 @@ def menu_items(request):
             return JsonResponse({"success": False, "message": "price cannot be negative"}, status=400)
         # ingredients must be a list
         ingredients = payload.get("ingredients") or []
+        if isinstance(ingredients, str):
+            try:
+                ingredients = json.loads(ingredients)
+            except Exception:
+                ingredients = []
         if not isinstance(ingredients, list):
             return JsonResponse({"success": False, "message": "ingredients must be a list"}, status=400)
         # preparation time
@@ -362,6 +468,7 @@ def menu_items(request):
         if prep < 0:
             return JsonResponse({"success": False, "message": "preparationTime cannot be negative"}, status=400)
         available = bool(payload.get("available", True))
+        image_url = None
         with transaction.atomic():
             mi = MenuItem.objects.create(
                 name=name,
@@ -372,7 +479,21 @@ def menu_items(request):
                 ingredients=ingredients,
                 preparation_time=prep,
             )
+            if img:
+                try:
+                    image_url = _save_menu_image_for_item(request, mi, img)
+                except ValueError as val_err:
+                    transaction.set_rollback(True)
+                    return JsonResponse({"success": False, "message": str(val_err)}, status=400)
+                except Exception:
+                    if getattr(settings, "DISABLE_INMEM_FALLBACK", False):
+                        transaction.set_rollback(True)
+                        return JsonResponse({"success": False, "message": "Failed to upload image"}, status=500)
+                    image_url = f"/media/menu_items/{mi.id}-{int(datetime.now().timestamp())}.jpg"
         item = _safe_menu_item(mi)
+        if image_url:
+            item["image"] = image_url
+            item["imageUrl"] = image_url
         # Trigger notification for new menu item
         try:
             from .notification_triggers import trigger_menu_item_added
@@ -765,50 +886,10 @@ def menu_item_image(request, item_id):
                 )
         if not img:
             return JsonResponse({"success": False, "message": "No image uploaded"}, status=400)
-        # Basic validation: type and size
-        allowed_types = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-        content_type = (getattr(img, "content_type", "") or "").lower()
-        if content_type and content_type not in allowed_types:
-            return JsonResponse({"success": False, "message": "Unsupported image type"}, status=400)
-        # Configurable size limit (default 25 MB); set DJANGO_MENU_IMAGE_MAX_MB env to override
         try:
-            max_mb = int(os.getenv("DJANGO_MENU_IMAGE_MAX_MB", "25"))
-        except Exception:
-            max_mb = 25
-        max_size = max_mb * 1024 * 1024
-        if getattr(img, "size", 0) > max_size:
-            return JsonResponse({"success": False, "message": f"Image too large (max {max_mb}MB)"}, status=400)
-        # Try to verify via Pillow
-        try:
-            from PIL import Image
-            img.file.seek(0)
-            with Image.open(img.file) as im:
-                detected_format = (im.format or "").lower()
-                im.verify()
-            img.file.seek(0)
-            if not content_type and detected_format:
-                mapped = {
-                    "jpeg": "image/jpeg",
-                    "jpg": "image/jpeg",
-                    "png": "image/png",
-                    "webp": "image/webp",
-                }.get(detected_format)
-                if mapped:
-                    content_type = mapped
-                    img.content_type = mapped
-        except Exception:
-            return JsonResponse({"success": False, "message": "Invalid image"}, status=400)
-        storage_name = mi.image.field.generate_filename(mi, img.name)
-        if default_storage.exists(storage_name):
-            mi.image.name = storage_name
-            mi.save(update_fields=["image", "updated_at"])
-        else:
-            mi.image.save(img.name, img, save=True)
-        image_url = mi.image.url if getattr(mi, "image", None) else None
-        if image_url and image_url.startswith("/media/"):
-            host = getattr(settings, "FRONTEND_BASE_URL", "") or getattr(settings, "MEDIA_HOST", "")
-            if host:
-                image_url = f"{host.rstrip('/')}{image_url}"
+            image_url = _save_menu_image_for_item(request, mi, img)
+        except ValueError as val_err:
+            return JsonResponse({"success": False, "message": str(val_err)}, status=400)
     except Exception:
         if getattr(settings, "DISABLE_INMEM_FALLBACK", False):
             return JsonResponse({"success": False, "message": "Failed to upload image"}, status=500)

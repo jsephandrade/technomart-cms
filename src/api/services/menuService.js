@@ -119,6 +119,39 @@ class MenuService {
   }
 
   async createMenuItem(itemData) {
+    const hasFile =
+      typeof FormData !== 'undefined' &&
+      itemData &&
+      itemData.imageFile instanceof Blob;
+
+    if (hasFile) {
+      const formData = new FormData();
+      const entries = {
+        name: itemData.name,
+        description: itemData.description,
+        price: itemData.price,
+        category: itemData.category,
+        available: itemData.available,
+        ingredients: itemData.ingredients,
+        preparationTime: itemData.preparationTime,
+      };
+      Object.entries(entries).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        if (key === 'ingredients' && Array.isArray(value)) {
+          formData.append(key, JSON.stringify(value));
+        } else {
+          formData.append(key, value);
+        }
+      });
+      formData.append('image', itemData.imageFile);
+
+      const res = await apiClient.post('/menu/items', null, {
+        body: formData,
+        retry: { retries: 1 },
+      });
+      return { success: true, data: normalizeMenuItem(unwrap(res)) };
+    }
+
     const res = await apiClient.post('/menu/items', itemData, {
       retry: { retries: 1 },
     });

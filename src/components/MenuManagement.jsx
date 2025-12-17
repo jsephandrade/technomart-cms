@@ -83,12 +83,9 @@ const MenuManagement = () => {
         available: Boolean(newItem.available),
         ingredients: [],
         preparationTime: 0,
+        imageFile: newItem.imageFile,
       };
       const created = await createMenuItem(payload);
-      const imagePromise =
-        newItem.imageFile && created?.id
-          ? uploadItemImage(created.id, newItem.imageFile)
-          : null;
       setNewItem({
         name: '',
         description: '',
@@ -99,12 +96,6 @@ const MenuManagement = () => {
         imageFile: null,
       });
       setDialogOpen(false);
-      // Fire-and-forget refresh; UI already has the optimistic insert
-      if (imagePromise) {
-        imagePromise.catch((err) => {
-          console.error('Menu image upload failed', err);
-        });
-      }
     } catch (e) {
       toast.error(e?.message || 'Failed to add menu item');
     } finally {

@@ -1046,7 +1046,7 @@ def order_queue(request):
     actor, err = _actor_from_request(request)
     if not actor and not allow_public:
         return err
-    if actor and not _has_permission(actor, "order.queue.handle"):
+    if actor and not _has_permission(actor, "order.queue.handle") and not allow_public:
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
     try:
         from .models import Order, OrderItem, OrderEvent

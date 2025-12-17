@@ -140,7 +140,19 @@ const MenuManagement = () => {
       }
       await updateMenuItem(source.id, updates);
       if (source.imageFile) {
-        await uploadItemImage(source.id, source.imageFile);
+        const res = await uploadItemImage(source.id, source.imageFile);
+        if (res?.imageUrl) {
+          setEditingItem((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  imageUrl: res.imageUrl,
+                  image: res.imageUrl,
+                  imageFile: null,
+                }
+              : prev
+          );
+        }
       }
       setEditingItem(null);
       refetchActive?.();

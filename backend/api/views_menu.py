@@ -56,6 +56,10 @@ def _safe_menu_item(mi, category_map=None):
     try:
         category_name = getattr(mi, "category", "")
         category_id = _resolve_category_id(category_name, category_map)
+        placeholder_url = getattr(settings, "MENU_IMAGE_PLACEHOLDER_URL", "/media/placeholders/menu-placeholder.svg")
+        host = getattr(settings, "FRONTEND_BASE_URL", "") or getattr(settings, "MEDIA_HOST", "")
+        if host and isinstance(placeholder_url, str) and placeholder_url.startswith("/"):
+            placeholder_url = f"{host.rstrip('/')}{placeholder_url}"
         image_url = None
         try:
             image_field = getattr(mi, "image", None)
@@ -72,6 +76,8 @@ def _safe_menu_item(mi, category_map=None):
                         pass
         except Exception:
             image_url = None
+        if not image_url:
+            image_url = placeholder_url
         return {
             "id": str(mi.id),
             "name": mi.name,

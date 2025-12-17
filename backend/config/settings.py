@@ -52,6 +52,10 @@ INSTALLED_APPS = [
 ]
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+MENU_IMAGE_PLACEHOLDER_URL = os.getenv(
+    "MENU_IMAGE_PLACEHOLDER_URL",
+    "/media/placeholders/menu-placeholder.svg",
+)
 
 CORS_ALLOW_ALL_ORIGINS = True
 

@@ -346,12 +346,13 @@ export const useMenuManagement = (params = {}) => {
         } catch {}
 
         if (looksLikeFallback) {
-          toast({
-            title: 'Image upload returned a placeholder',
-            description:
-              'The server did not provide a saved image URL. Check media storage or permissions.',
-            variant: 'destructive',
-          });
+          // Avoid spamming users with an error toast when the backend returns a placeholder path
+          // (common in dev when media storage is not configured). Keep the image blank and log for debugging.
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn(
+              'Menu item image upload returned a placeholder URL; check media storage configuration.'
+            );
+          }
         } else {
           toast({
             title: 'Image Uploaded',

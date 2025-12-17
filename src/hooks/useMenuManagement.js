@@ -9,6 +9,44 @@ export const useMenuManagement = (params = {}) => {
   const [pagination, setPagination] = useState(null);
   const { toast } = useToast();
 
+  const sanitizeUpdatePayload = useCallback((updates = {}) => {
+    const safe = {};
+    if (typeof updates.name === 'string') {
+      const name = updates.name.trim();
+      if (name) safe.name = name;
+    }
+    if ('description' in updates) {
+      const desc =
+        typeof updates.description === 'string'
+          ? updates.description.trim()
+          : '';
+      safe.description = desc || '';
+    }
+    if (updates.category !== undefined && updates.category !== null) {
+      const cat = String(updates.category || '').trim();
+      if (cat) safe.category = cat;
+    }
+    if ('price' in updates) {
+      const priceNum = Number(updates.price);
+      if (!Number.isNaN(priceNum) && priceNum >= 0) {
+        safe.price = Number(priceNum.toFixed(2));
+      }
+    }
+    if ('available' in updates) {
+      safe.available = Boolean(updates.available);
+    }
+    if (Array.isArray(updates.ingredients)) {
+      safe.ingredients = updates.ingredients;
+    }
+    if ('preparationTime' in updates) {
+      const prep = parseInt(updates.preparationTime, 10);
+      if (!Number.isNaN(prep) && prep >= 0) {
+        safe.preparationTime = prep;
+      }
+    }
+    return safe;
+  }, []);
+
   const normalizeForState = useCallback((item) => {
     if (!item) return null;
     const img =
@@ -23,12 +61,7 @@ export const useMenuManagement = (params = {}) => {
       typeof cat === 'string'
         ? cat
         : typeof cat === 'object'
-          ? cat?.name ||
-            cat?.label ||
-            cat?.title ||
-            cat?.slug ||
-            cat?.id ||
-            ''
+          ? cat?.name || cat?.label || cat?.title || cat?.slug || cat?.id || ''
           : String(cat || '');
     return {
       ...item,
@@ -148,7 +181,8 @@ export const useMenuManagement = (params = {}) => {
 
   const updateMenuItem = async (itemId, updates) => {
     try {
-      const response = await menuService.updateMenuItem(itemId, updates);
+      const payload = sanitizeUpdatePayload(updates);
+      const response = await menuService.updateMenuItem(itemId, payload);
 
       if (response.success) {
         upsertItem({ id: itemId, ...response.data });
@@ -168,9 +202,10 @@ export const useMenuManagement = (params = {}) => {
         throw new Error('Failed to update menu item');
       }
     } catch (error) {
+      const message = error?.message || 'Failed to update menu item';
       toast({
         title: 'Error Updating Item',
-        description: error.message,
+        description: message,
         variant: 'destructive',
       });
       throw error;

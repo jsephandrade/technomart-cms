@@ -13,6 +13,36 @@ import { Button } from '@/components/ui/button';
 import { PlusCircle, Menu as MenuIcon } from 'lucide-react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 
+const pickImageSrc = (item = {}) => {
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.photo,
+    item.picture,
+    item.thumbnail,
+    item.thumb,
+    item.img,
+    item?.image?.url,
+  ];
+  for (const src of candidates) {
+    if (typeof src === 'string' && src.trim()) return src;
+  }
+  return '';
+};
+
+const normalizeItemImages = (item) => {
+  if (!item) return item;
+  const image = pickImageSrc(item);
+  return {
+    ...item,
+    image: image || item.image || item.imageUrl || '',
+    imageUrl: image || item.imageUrl || item.image || '',
+  };
+};
+
+const mapWithImages = (list = []) => (list || []).map(normalizeItemImages);
+
 const MenuManagement = () => {
   const {
     items,
@@ -33,6 +63,11 @@ const MenuManagement = () => {
   const categories = useMemo(
     () => (categoryRows || []).map((c) => c.name),
     [categoryRows]
+  );
+  const itemsWithImages = useMemo(() => mapWithImages(items), [items]);
+  const archivedItemsWithImages = useMemo(
+    () => mapWithImages(archivedItems),
+    [archivedItems]
   );
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -111,6 +146,13 @@ const MenuManagement = () => {
         price: priceNum,
         category,
         available: Boolean(editingItem.available),
+        ingredients: Array.isArray(editingItem.ingredients)
+          ? editingItem.ingredients
+          : undefined,
+        preparationTime:
+          editingItem.preparationTime ??
+          editingItem.preparation_time ??
+          undefined,
       };
       // Backend rejects making archived items available; guard early.
       if (editingItem.archived && updates.available) {
@@ -122,6 +164,8 @@ const MenuManagement = () => {
         await uploadItemImage(editingItem.id, editingItem.imageFile);
       }
       setEditingItem(null);
+      refetchActive?.();
+      refetchArchived?.();
     } catch (e) {
       toast.error(e?.message || 'Failed to update menu item');
     }
@@ -182,22 +226,15 @@ const MenuManagement = () => {
         contentClassName="space-y-6"
       >
         <CategoryTabs
-          items={(items || []).map((it) => ({
-            ...it,
-            imageUrl: it.image || it.imageUrl || '',
-          }))}
+          items={itemsWithImages}
           categories={categories}
           onEdit={(it) =>
             setEditingItem({
-              ...it,
-              imageUrl: it.image || it.imageUrl || '',
+              ...normalizeItemImages(it),
             })
           }
           onArchive={handleArchiveItem}
-          archivedItems={(archivedItems || []).map((it) => ({
-            ...it,
-            imageUrl: it.image || it.imageUrl || '',
-          }))}
+          archivedItems={archivedItemsWithImages}
           archivedLoading={archivedLoading}
           onRestore={handleRestoreItem}
         />

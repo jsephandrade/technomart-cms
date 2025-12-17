@@ -1,5 +1,5 @@
 // src/components/menu/EditItemDialog.jsx
-import React, { useRef } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +14,6 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
-  const fileInputRef = useRef(null);
-
   if (!item) return null;
 
   const handleFileChange = (e) => {
@@ -27,13 +25,6 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
 
   const clearImage = () => {
     setItem({ ...item, imageFile: undefined, imageUrl: '' });
-  };
-
-  const triggerFilePicker = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-      fileInputRef.current.click();
-    }
   };
 
   return (
@@ -105,71 +96,50 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
             <Switch
               id="edit-available"
               checked={item.available}
-              disabled={item.archived}
               onCheckedChange={(checked) =>
                 setItem({ ...item, available: checked })
               }
             />
           </div>
 
-          {item.archived ? (
-            <p className="col-span-4 text-sm text-amber-600">
-              Restore this item before marking it available.
-            </p>
-          ) : null}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="edit-image-file" className="text-right">
+              Upload Image
+            </Label>
+            <Input
+              id="edit-image-file"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="col-span-3"
+            />
+          </div>
 
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label className="text-right">Image</Label>
-            <div className="col-span-3 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="h-16 w-16 overflow-hidden rounded-md border bg-muted">
-                  {item.imageUrl || item.image ? (
-                    <img
-                      src={item.imageUrl || item.image}
-                      alt={item.name || 'Preview'}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                      No image
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={triggerFilePicker}>
-                    {item.imageUrl || item.image
-                      ? 'Change Image'
-                      : 'Upload Image'}
+          {(item.imageUrl || item.image || item.imageFile) && (
+            <div className="grid grid-cols-4 items-start gap-4">
+              <div className="text-right font-medium pt-1">Preview</div>
+              <div className="col-span-3 space-y-2">
+                <img
+                  src={item.imageUrl || item.image}
+                  alt={item.name || 'Preview'}
+                  className="h-32 w-full object-cover rounded-md border"
+                />
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={clearImage}>
+                    Remove Image
                   </Button>
-                  {(item.imageUrl || item.image || item.imageFile) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={clearImage}
-                    >
-                      Remove
-                    </Button>
-                  )}
                 </div>
               </div>
-              <input
-                ref={fileInputRef}
-                id="edit-image-file"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
             </div>
-          </div>
-          {/* --- /Image controls --- */}
+          )}
+          {/* --- /Image --- */}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={onSave}>Save Changes</Button>
+          <Button onClick={() => onSave?.(item)}>Save Changes</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

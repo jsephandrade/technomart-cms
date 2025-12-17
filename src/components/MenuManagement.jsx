@@ -42,6 +42,19 @@ const normalizeItemImages = (item) => {
 };
 
 const mapWithImages = (list = []) => (list || []).map(normalizeItemImages);
+const stripUnsupportedFields = (item = {}) => {
+  if (!item) return item;
+  // Remove fields the backend update endpoint ignores/complains about
+  // (seen in some list responses like cart/combo contexts)
+  // Keep reference when no forbidden keys to avoid extra renders.
+  const { quantity, qty, orderedQuantity, orderQuantity, ...rest } = item;
+  const hadUnsupported =
+    quantity !== undefined ||
+    qty !== undefined ||
+    orderedQuantity !== undefined ||
+    orderQuantity !== undefined;
+  return hadUnsupported ? rest : item;
+};
 
 const MenuManagement = () => {
   const {
@@ -126,42 +139,39 @@ const MenuManagement = () => {
     }
   };
 
-  const handleEditItem = async () => {
+  const handleEditItem = async (overrideItem) => {
     try {
-      if (!editingItem) return;
-      const name = (editingItem.name || '').trim();
-      const category = (editingItem.category || '').trim();
-      if (!name || !category) {
-        toast.error('Name and category are required');
+      const source = stripUnsupportedFields(overrideItem || editingItem);
+      if (!source) return;
+      if (!source.id) {
+        toast.error('Cannot update: missing item id.');
         return;
       }
-      const priceNum = Number(editingItem.price);
-      if (Number.isNaN(priceNum) || priceNum < 0) {
-        toast.error('Price must be zero or greater');
-        return;
-      }
+      const name = (source.name || '').trim();
+      const category = (source.category || '').trim();
       const updates = {
-        name,
-        description: editingItem.description || '',
-        price: priceNum,
-        category,
-        available: Boolean(editingItem.available),
-        ingredients: Array.isArray(editingItem.ingredients)
-          ? editingItem.ingredients
+        description: source.description || '',
+        available: Boolean(source.available),
+        ingredients: Array.isArray(source.ingredients)
+          ? source.ingredients
           : undefined,
         preparationTime:
-          editingItem.preparationTime ??
-          editingItem.preparation_time ??
-          undefined,
+          source.preparationTime ?? source.preparation_time ?? undefined,
       };
+      if (name) updates.name = name;
+      if (category) updates.category = category;
+      const priceNum = Number(source.price);
+      if (!Number.isNaN(priceNum) && priceNum >= 0) {
+        updates.price = priceNum;
+      }
       // Backend rejects making archived items available; guard early.
-      if (editingItem.archived && updates.available) {
+      if (source.archived && updates.available) {
         toast.error('Restore this item before making it available.');
         updates.available = false;
       }
-      await updateMenuItem(editingItem.id, updates);
-      if (editingItem.imageFile) {
-        await uploadItemImage(editingItem.id, editingItem.imageFile);
+      await updateMenuItem(source.id, updates);
+      if (source.imageFile) {
+        await uploadItemImage(source.id, source.imageFile);
       }
       setEditingItem(null);
       refetchActive?.();
@@ -230,7 +240,7 @@ const MenuManagement = () => {
           categories={categories}
           onEdit={(it) =>
             setEditingItem({
-              ...normalizeItemImages(it),
+              ...stripUnsupportedFields(normalizeItemImages(it)),
             })
           }
           onArchive={handleArchiveItem}

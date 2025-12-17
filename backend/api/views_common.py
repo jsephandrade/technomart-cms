@@ -374,6 +374,16 @@ def _actor_from_token(token: str):
             break
         except Exception:
             continue
+    # As a last resort in dev, decode without verifying signature so staff/admin tokens
+    # issued by other compatible services can pass. Still enforce exp if present.
+    if not payload and getattr(settings, "DEBUG", False):
+        try:
+            payload = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+            exp = payload.get("exp")
+            if exp and time.time() > float(exp):
+                payload = None
+        except Exception:
+            payload = None
     if not payload:
         return None
 

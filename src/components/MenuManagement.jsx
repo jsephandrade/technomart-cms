@@ -67,21 +67,31 @@ const MenuManagement = () => {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [comboDialogOpen, setComboDialogOpen] = useState(false);
 
-  // Auto-refresh items/categories periodically and when tab is focused
+  // Auto-refresh items/categories periodically and when tab gains focus/online
   useEffect(() => {
     const refreshAll = () => {
       refetchActive?.();
       refetchArchived?.();
       refetchCategories?.();
     };
-    const intervalId = window.setInterval(refreshAll, 10000);
+    // Immediate refresh on mount
+    refreshAll();
+
+    const intervalId = window.setInterval(refreshAll, 7000);
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') refreshAll();
     };
+    const handleFocus = () => refreshAll();
+    const handleOnline = () => refreshAll();
+
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
     return () => {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
     };
   }, [refetchActive, refetchArchived, refetchCategories]);
 

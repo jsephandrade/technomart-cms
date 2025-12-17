@@ -56,6 +56,22 @@ def _safe_menu_item(mi, category_map=None):
     try:
         category_name = getattr(mi, "category", "")
         category_id = _resolve_category_id(category_name, category_map)
+        image_url = None
+        try:
+            image_field = getattr(mi, "image", None)
+            image_name = getattr(image_field, "name", "") or None
+            if image_name:
+                if default_storage.exists(image_name):
+                    image_url = image_field.url
+                else:
+                    # Clear dangling reference if file is gone
+                    mi.image = None
+                    try:
+                        mi.save(update_fields=["image", "updated_at"])
+                    except Exception:
+                        pass
+        except Exception:
+            image_url = None
         return {
             "id": str(mi.id),
             "name": mi.name,
@@ -66,7 +82,7 @@ def _safe_menu_item(mi, category_map=None):
             "available": bool(mi.available),
             "archived": bool(getattr(mi, "archived", False)),
             "archivedAt": mi.archived_at.isoformat() if getattr(mi, "archived_at", None) else None,
-            "image": (mi.image.url if getattr(mi, "image", None) else None),
+            "image": image_url,
             "ingredients": getattr(mi, "ingredients", []) or [],
             "preparationTime": getattr(mi, "preparation_time", 0) or 0,
             "createdAt": mi.created_at.isoformat() if getattr(mi, "created_at", None) else None,
@@ -86,7 +102,7 @@ def _safe_menu_item(mi, category_map=None):
             "available": bool(getattr(mi, "available", True)),
             "archived": bool(getattr(mi, "archived", False)),
             "archivedAt": getattr(mi, "archivedAt", None),
-            "image": getattr(mi, "image", None),
+            "image": image_url,
             "ingredients": getattr(mi, "ingredients", []) or [],
             "preparationTime": getattr(mi, "preparationTime", 0) or 0,
         }

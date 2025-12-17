@@ -26,13 +26,6 @@ from .views_common import MENU_ITEMS, _paginate, _actor_from_request, _has_permi
 from .utils_audit import record_audit
 
 
-def _cache_bust(url: str):
-    if not url:
-        return url
-    sep = "&" if "?" in url else "?"
-    return f"{url}{sep}v={int(datetime.now().timestamp())}"
-
-
 def _resolve_category_id(category_value, category_map=None):
     category = (category_value or "").strip()
     if not category:
@@ -74,9 +67,6 @@ def _safe_menu_item(mi, category_map=None):
             if image_name:
                 if default_storage.exists(image_name):
                     image_url = image_field.url
-                    if image_url.startswith("/media/") and host:
-                        image_url = f"{host.rstrip('/')}{image_url}"
-                    image_url = _cache_bust(image_url)
                 else:
                     # Clear dangling reference if file is gone
                     mi.image = None
@@ -87,7 +77,7 @@ def _safe_menu_item(mi, category_map=None):
         except Exception:
             image_url = None
         if not image_url:
-            image_url = _cache_bust(placeholder_url)
+            image_url = placeholder_url
         return {
             "id": str(mi.id),
             "name": mi.name,

@@ -1,5 +1,5 @@
 // src/pages/MenuManagement.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import useMenuManagement, {
   useMenuCategories,
 } from '@/hooks/useMenuManagement';
@@ -66,34 +66,6 @@ const MenuManagement = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [comboDialogOpen, setComboDialogOpen] = useState(false);
-
-  // Auto-refresh items/categories periodically and when tab gains focus/online
-  useEffect(() => {
-    const refreshAll = () => {
-      refetchActive?.();
-      refetchArchived?.();
-      refetchCategories?.();
-    };
-    // Immediate refresh on mount
-    refreshAll();
-
-    const intervalId = window.setInterval(refreshAll, 7000);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') refreshAll();
-    };
-    const handleFocus = () => refreshAll();
-    const handleOnline = () => refreshAll();
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('online', handleOnline);
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('online', handleOnline);
-    };
-  }, [refetchActive, refetchArchived, refetchCategories]);
 
   const handleAddItem = async () => {
     if (adding) return;
@@ -168,19 +140,7 @@ const MenuManagement = () => {
       }
       await updateMenuItem(source.id, updates);
       if (source.imageFile) {
-        const res = await uploadItemImage(source.id, source.imageFile);
-        if (res?.imageUrl) {
-          setEditingItem((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  imageUrl: res.imageUrl,
-                  image: res.imageUrl,
-                  imageFile: null,
-                }
-              : prev
-          );
-        }
+        await uploadItemImage(source.id, source.imageFile);
       }
       setEditingItem(null);
       refetchActive?.();

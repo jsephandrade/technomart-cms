@@ -43,13 +43,6 @@ const resolveImageSrc = (item) => {
   return null;
 };
 
-const mediaPlaceholder =
-  (typeof import.meta !== 'undefined' &&
-    import.meta.env &&
-    import.meta.env.VITE_MEDIA_BASE_URL &&
-    `${import.meta.env.VITE_MEDIA_BASE_URL.replace(/\/$/, '')}/placeholders/menu-placeholder.svg`) ||
-  '/media/placeholders/menu-placeholder.svg';
-
 const ItemList = ({
   items = [],
   onEdit,
@@ -74,9 +67,7 @@ const ItemList = ({
       {items.map((item, index) => {
         const imageSrc = resolveImageSrc(item);
         const brokenKey = item?.id ?? item?.name ?? index;
-        const resolvedSrc =
-          brokenImages[brokenKey] || imageSrc || mediaPlaceholder;
-        const showImage = Boolean(resolvedSrc);
+        const showImage = Boolean(imageSrc) && !brokenImages[brokenKey];
         const category = item.category || item.categoryName || 'Uncategorized';
         const availabilityBadge =
           mode === 'archived'
@@ -111,14 +102,11 @@ const ItemList = ({
               <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent blur-md opacity-0 transition group-hover:opacity-100" />
               {showImage ? (
                 <img
-                  src={resolvedSrc}
+                  src={imageSrc}
                   alt={item.name}
                   className="relative h-16 w-16 rounded-xl border border-border/60 object-cover shadow-sm transition duration-300 group-hover:scale-[1.03]"
                   onError={() =>
-                    setBrokenImages((prev) => ({
-                      ...prev,
-                      [brokenKey]: mediaPlaceholder,
-                    }))
+                    setBrokenImages((prev) => ({ ...prev, [brokenKey]: true }))
                   }
                 />
               ) : (

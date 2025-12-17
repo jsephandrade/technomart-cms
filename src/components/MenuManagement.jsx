@@ -83,9 +83,13 @@ const MenuManagement = () => {
         available: Boolean(newItem.available),
         ingredients: [],
         preparationTime: 0,
-        imageFile: newItem.imageFile,
       };
       const created = await createMenuItem(payload);
+      if (newItem.imageFile && created?.id) {
+        uploadItemImage(created.id, newItem.imageFile).catch((err) => {
+          console.error('Menu image upload failed', err);
+        });
+      }
       setNewItem({
         name: '',
         description: '',

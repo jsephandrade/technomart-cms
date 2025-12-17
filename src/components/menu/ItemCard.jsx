@@ -12,8 +12,8 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
     (typeof import.meta !== 'undefined' &&
       import.meta.env &&
       import.meta.env.VITE_MEDIA_BASE_URL &&
-      `${import.meta.env.VITE_MEDIA_BASE_URL.replace(/\/$/, '')}/placeholders/menu_placeholder.png`) ||
-    '/media/placeholders/menu_placeholder.png';
+      `${import.meta.env.VITE_MEDIA_BASE_URL.replace(/\/$/, '')}/placeholders/menu-placeholder.svg`) ||
+    '/media/placeholders/menu-placeholder.svg';
 
   const imageSrc = useMemo(() => {
     if (!item) return null;

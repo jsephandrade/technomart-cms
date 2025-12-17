@@ -111,6 +111,8 @@ const Section = ({
   className,
   expandedIds,
   onToggle,
+  completedItems,
+  onToggleItem,
 }) => (
   <div
     className={cn(
@@ -137,8 +139,6 @@ const Section = ({
           const orderKey = getOrderKey(order);
           const isExpanded = expandedIds.has(orderKey);
           const items = Array.isArray(order.items) ? order.items : [];
-          const displayItems = items.slice(0, 4);
-          const remaining = Math.max(0, items.length - displayItems.length);
 
           const toggle = () => onToggle(orderKey);
           const handleKeyDown = (event) => {
@@ -169,28 +169,35 @@ const Section = ({
 
               {isExpanded && (
                 <div className="mt-3 space-y-2 border-t border-dashed border-border/60 pt-3 text-left">
-                  {displayItems.length ? (
-                    displayItems.map((item, idx) => (
-                      <div
-                        key={`${orderKey}-item-${idx}`}
-                        className="flex items-start justify-between gap-3 text-sm text-foreground"
-                      >
-                        <span className="font-semibold">
-                          {getItemQuantity(item)}x
-                        </span>
-                        <span className="flex-1 text-right text-muted-foreground">
-                          {getItemLabel(item)}
-                        </span>
-                      </div>
-                    ))
+                  {items.length ? (
+                    items.map((item, idx) => {
+                      const itemKey = `${orderKey}-item-${idx}`;
+                      const checked = completedItems.has(itemKey);
+                      return (
+                        <label
+                          key={itemKey}
+                          className="flex items-start justify-between gap-3 text-sm text-foreground"
+                        >
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
+                              checked={checked}
+                              onChange={() => onToggleItem(itemKey)}
+                            />
+                            <span className="font-semibold">
+                              {getItemQuantity(item)}x
+                            </span>
+                          </span>
+                          <span className="flex-1 text-right text-muted-foreground">
+                            {getItemLabel(item)}
+                          </span>
+                        </label>
+                      );
+                    })
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       No items available.
-                    </p>
-                  )}
-                  {remaining > 0 && (
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      +{remaining} more item{remaining === 1 ? '' : 's'}
                     </p>
                   )}
                 </div>
@@ -209,6 +216,7 @@ const Section = ({
 
 const CustomerDisplay = ({ queue }) => {
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const [completedItems, setCompletedItems] = useState(new Set());
 
   const orders = useMemo(() => {
     if (!queue) return [];
@@ -250,6 +258,18 @@ const CustomerDisplay = ({ queue }) => {
     });
   }, []);
 
+  const handleToggleItem = useCallback((itemKey) => {
+    setCompletedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemKey)) {
+        next.delete(itemKey);
+      } else {
+        next.add(itemKey);
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <Card className="h-full border border-border/60 bg-card/90 shadow-sm">
       <CardHeader className="space-y-2">
@@ -270,6 +290,8 @@ const CustomerDisplay = ({ queue }) => {
             className="bg-blue-500/10 dark:bg-blue-500/20"
             expandedIds={expandedIds}
             onToggle={handleToggle}
+            completedItems={completedItems}
+            onToggleItem={handleToggleItem}
           />
           <Section
             title=""
@@ -279,6 +301,8 @@ const CustomerDisplay = ({ queue }) => {
             className="bg-emerald-500/10 dark:bg-emerald-500/20 md:border-l md:border-border/60 md:pl-6"
             expandedIds={expandedIds}
             onToggle={handleToggle}
+            completedItems={completedItems}
+            onToggleItem={handleToggleItem}
           />
         </div>
       </CardContent>

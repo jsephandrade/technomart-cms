@@ -169,6 +169,77 @@ class MenuService {
     });
     return { success: true, data: unwrap(res) };
   }
+
+  async uploadItemImage(itemId, imageFile) {
+    if (!itemId) throw new Error('Menu item id is required');
+    if (!imageFile) throw new Error('Image file is required');
+
+    const toDataUrl = (file) =>
+      new Promise((resolve, reject) => {
+        try {
+          if (typeof FileReader === 'undefined') {
+            reject(
+              new Error('FileReader is not available in this environment')
+            );
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () =>
+            reject(reader.error || new Error('Unable to read image file'));
+          reader.readAsDataURL(file);
+        } catch (error) {
+          reject(error);
+        }
+      });
+
+    const sendFormPayload = () => {
+      const formData = new FormData();
+      formData.append('image', imageFile);
+      return apiClient.post(`/menu/items/${itemId}/image`, null, {
+        body: formData,
+        retry: { retries: 1 },
+      });
+    };
+
+    const sendBase64Payload = async () => {
+      const dataUrl = await toDataUrl(imageFile);
+      const filename = imageFile?.name || imageFile?.filename || undefined;
+      return apiClient.post(
+        `/menu/items/${itemId}/image`,
+        {
+          imageData: dataUrl,
+          filename,
+        },
+        { retry: { retries: 1 } }
+      );
+    };
+
+    const canUseFormData =
+      typeof FormData !== 'undefined' &&
+      (typeof Blob === 'undefined' || imageFile instanceof Blob);
+
+    let res;
+    try {
+      res = canUseFormData
+        ? await sendFormPayload()
+        : await sendBase64Payload();
+    } catch (error) {
+      const status = error?.status ?? error?.response?.status ?? null;
+      if (canUseFormData && status && status >= 400 && status < 500) {
+        res = await sendBase64Payload();
+      } else {
+        throw error;
+      }
+    }
+
+    const raw = unwrap(res) || {};
+    const imageUrlAbs = absoluteUrl(pickUrl(raw));
+    const imageUrl = imageUrlAbs
+      ? `${imageUrlAbs}${imageUrlAbs.includes('?') ? '&' : '?'}v=${Date.now()}`
+      : '';
+    return { success: true, data: { imageUrl } };
+  }
 }
 
 export const menuService = new MenuService();

@@ -16,6 +16,23 @@ import { Switch } from '@/components/ui/switch';
 const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
   if (!item) return null;
 
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (item.imageUrl && item.imageUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(item.imageUrl);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setItem({ ...item, imageFile: file, imageUrl: previewUrl });
+  };
+
+  const clearImage = () => {
+    if (item.imageUrl && item.imageUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(item.imageUrl);
+    }
+    setItem({ ...item, imageFile: null, imageUrl: '' });
+  };
+
   return (
     <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
@@ -89,6 +106,38 @@ const EditItemDialog = ({ item, setItem, onSave, onClose }) => {
                 setItem({ ...item, available: checked })
               }
             />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="edit-image-file" className="text-right">
+              Upload Image
+            </Label>
+            <div className="col-span-3 space-y-2">
+              <Input
+                id="edit-image-file"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="w-full cursor-pointer"
+              />
+              {(item.imageUrl || item.image || item.imageFile) && (
+                <div className="rounded-lg border bg-muted p-2">
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Preview
+                  </div>
+                  <img
+                    src={item.imageUrl || item.image}
+                    alt={item.name || 'Preview'}
+                    className="h-32 w-full rounded-md object-cover"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button variant="outline" size="sm" onClick={clearImage}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

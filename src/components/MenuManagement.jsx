@@ -33,6 +33,7 @@ const MenuManagement = () => {
     createMenuItem,
     updateMenuItem,
     deleteMenuItem: archiveMenuItem,
+    uploadItemImage,
     refetch: refetchActive,
   } = useMenuManagement({});
   const {
@@ -57,6 +58,8 @@ const MenuManagement = () => {
     price: 0,
     category: '',
     available: true,
+    imageUrl: '',
+    imageFile: null,
   });
   const [adding, setAdding] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -80,13 +83,18 @@ const MenuManagement = () => {
         ingredients: [],
         preparationTime: 0,
       };
-      await createMenuItem(payload);
+      const created = await createMenuItem(payload);
+      if (newItem.imageFile && created?.id) {
+        await uploadItemImage(created.id, newItem.imageFile);
+      }
       setNewItem({
         name: '',
         description: '',
         price: 0,
         category: '',
         available: true,
+        imageUrl: '',
+        imageFile: null,
       });
       setDialogOpen(false);
       // Fire-and-forget refresh; UI already has the optimistic insert
@@ -130,6 +138,9 @@ const MenuManagement = () => {
         updates.available = false;
       }
       await updateMenuItem(source.id, updates);
+      if (source.imageFile) {
+        await uploadItemImage(source.id, source.imageFile);
+      }
       setEditingItem(null);
       refetchActive?.();
       refetchArchived?.();
@@ -198,6 +209,7 @@ const MenuManagement = () => {
           onEdit={(it) =>
             setEditingItem({
               ...stripUnsupportedFields(it),
+              imageFile: null,
             })
           }
           onArchive={handleArchiveItem}

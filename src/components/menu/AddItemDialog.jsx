@@ -32,6 +32,23 @@ const AddItemDialog = ({
   onAddCategory,
   loading = false,
 }) => {
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (newItem.imageUrl && newItem.imageUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(newItem.imageUrl);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setNewItem({ ...newItem, imageFile: file, imageUrl: previewUrl });
+  };
+
+  const handleRemoveImage = () => {
+    if (newItem.imageUrl && newItem.imageUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(newItem.imageUrl);
+    }
+    setNewItem({ ...newItem, imageFile: null, imageUrl: '' });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -143,6 +160,43 @@ const AddItemDialog = ({
                 setNewItem({ ...newItem, available: checked })
               }
             />
+          </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="image-file" className="text-right">
+              Upload Image
+            </Label>
+            <div className="col-span-3 space-y-2">
+              <Input
+                id="image-file"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="w-full cursor-pointer"
+              />
+              {(newItem.imageUrl || newItem.imageFile) && (
+                <div className="rounded-lg border bg-muted p-2">
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Preview
+                  </div>
+                  <img
+                    src={newItem.imageUrl}
+                    alt={newItem.name || 'Preview'}
+                    className="h-32 w-full rounded-md object-cover"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveImage}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

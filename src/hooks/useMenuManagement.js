@@ -310,6 +310,51 @@ export const useMenuManagement = (params = {}) => {
     }
   };
 
+  const uploadItemImage = async (itemId, imageFile) => {
+    try {
+      const response = await menuService.uploadItemImage(itemId, imageFile);
+
+      if (response.success) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  image: response.data.imageUrl,
+                  imageUrl: response.data.imageUrl,
+                }
+              : item
+          )
+        );
+        try {
+          window?.dispatchEvent?.(
+            new CustomEvent('menu.items.updated', {
+              detail: {
+                type: 'image',
+                id: itemId,
+                imageUrl: response.data.imageUrl,
+              },
+            })
+          );
+        } catch {}
+        toast({
+          title: 'Image Uploaded',
+          description: 'Menu item image has been updated successfully.',
+        });
+        return response.data;
+      } else {
+        throw new Error('Failed to upload image');
+      }
+    } catch (error) {
+      toast({
+        title: 'Error Uploading Image',
+        description: error.message,
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
   const refetch = useCallback(() => fetchMenuItems(), [fetchMenuItems]);
 
   useEffect(() => {
@@ -332,6 +377,7 @@ export const useMenuManagement = (params = {}) => {
     deleteMenuItem,
     restoreMenuItem,
     updateItemAvailability,
+    uploadItemImage,
     refetch,
   };
 };

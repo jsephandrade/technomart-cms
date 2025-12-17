@@ -54,7 +54,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 MENU_IMAGE_PLACEHOLDER_URL = os.getenv(
     "MENU_IMAGE_PLACEHOLDER_URL",
-    "/media/placeholders/menu-placeholder.svg",
+    "/media/placeholders/menu_placeholder.png",
 )
 
 CORS_ALLOW_ALL_ORIGINS = True

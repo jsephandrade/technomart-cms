@@ -315,13 +315,20 @@ export const useMenuManagement = (params = {}) => {
       const response = await menuService.uploadItemImage(itemId, imageFile);
 
       if (response.success) {
+        const uploadedUrl = response.data?.imageUrl || '';
+        const looksLikeFallback =
+          uploadedUrl &&
+          itemId &&
+          uploadedUrl.includes(`/menu_items/${itemId}-`);
+        const nextUrl = looksLikeFallback ? '' : uploadedUrl;
+
         setItems((prev) =>
           prev.map((item) =>
             item.id === itemId
               ? {
                   ...item,
-                  image: response.data.imageUrl,
-                  imageUrl: response.data.imageUrl,
+                  image: nextUrl,
+                  imageUrl: nextUrl,
                 }
               : item
           )
@@ -332,16 +339,30 @@ export const useMenuManagement = (params = {}) => {
               detail: {
                 type: 'image',
                 id: itemId,
-                imageUrl: response.data.imageUrl,
+                imageUrl: nextUrl,
               },
             })
           );
         } catch {}
-        toast({
-          title: 'Image Uploaded',
-          description: 'Menu item image has been updated successfully.',
-        });
-        return response.data;
+
+        if (looksLikeFallback) {
+          toast({
+            title: 'Image upload returned a placeholder',
+            description:
+              'The server did not provide a saved image URL. Check media storage or permissions.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Image Uploaded',
+            description: 'Menu item image has been updated successfully.',
+          });
+        }
+        return {
+          ...response.data,
+          imageUrl: nextUrl,
+          fallback: looksLikeFallback,
+        };
       } else {
         throw new Error('Failed to upload image');
       }

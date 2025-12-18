@@ -45,6 +45,7 @@ const CategoryTabs = ({
   const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
   const [hardDeleting, setHardDeleting] = useState(false);
   const hardDeletingRef = useRef(false);
+  const tabsListRef = useRef(null);
   const showArchived = activeTab === 'archived';
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
@@ -123,6 +124,23 @@ const CategoryTabs = ({
     }
   }, [hardDeleteTarget, onHardDelete, setHardDeletingSafe]);
 
+  const handleTabsListWheel = useCallback((event) => {
+    const el = tabsListRef.current;
+    if (!el) return;
+    if (event.shiftKey) return;
+
+    const canScroll = el.scrollWidth > el.clientWidth;
+    if (!canScroll) return;
+
+    const deltaX = event.deltaX || 0;
+    const deltaY = event.deltaY || 0;
+    const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+    if (!delta) return;
+
+    el.scrollLeft += delta;
+    event.preventDefault();
+  }, []);
+
   const renderItems = (list, mode = 'active') =>
     view === 'grid' ? (
       <ItemGrid
@@ -147,7 +165,11 @@ const CategoryTabs = ({
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <TabsList className="flex h-auto w-full flex-1 min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto scrollbar-hide sm:gap-2">
+        <TabsList
+          ref={tabsListRef}
+          onWheel={handleTabsListWheel}
+          className="flex h-auto w-full flex-1 min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overflow-y-hidden scrollbar-hide sm:gap-2"
+        >
           <TabsTrigger value="all" className={tabTriggerClasses}>
             All Items
           </TabsTrigger>

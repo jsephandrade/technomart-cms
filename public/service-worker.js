@@ -130,9 +130,26 @@ self.addEventListener('notificationclose', (event) => {
 
 // Fetch event - serve from cache when offline
 self.addEventListener('fetch', (event) => {
+  // Only handle same-origin GET requests. This avoids noisy console errors when
+  // third-party resources (fonts, auth scripts) are blocked/unavailable.
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+  // Never interfere with API/media requests.
+  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/media')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+      if (response) return response;
+      return fetch(event.request).catch(() => {
+        // SPA fallback when offline.
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        return new Response('', { status: 504, statusText: 'Offline' });
+      });
     })
   );
 });

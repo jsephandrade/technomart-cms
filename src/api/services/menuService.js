@@ -86,26 +86,78 @@ const normalizeMenuItem = (item) => {
 
 class MenuService {
   async getMenuItems(params = {}) {
-    const qs = new URLSearchParams();
-    Object.entries(params || {}).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
-    });
-    const res = await apiClient.get(`/menu/items?${qs.toString()}`, {
-      retry: { retries: 1 },
-    });
-    const raw = unwrap(res);
-    const list = raw?.data || raw || [];
-    const normalized = Array.isArray(list)
-      ? list.map((it) => normalizeMenuItem(it))
-      : [];
-    return {
-      success: true,
-      data: normalized,
-      pagination: raw?.pagination || {
-        page: 1,
-        limit: Array.isArray(list) ? list.length : 0,
+    const cleanParams = { ...(params || {}) };
+    const explicitPage =
+      cleanParams.page !== undefined &&
+      cleanParams.page !== null &&
+      cleanParams.page !== '';
+
+    const requestedLimit = (() => {
+      const n = parseInt(cleanParams.limit, 10);
+      if (!Number.isFinite(n) || n <= 0) return 200;
+      return Math.min(n, 200);
+    })();
+
+    const maxPages = (() => {
+      const n = parseInt(cleanParams.maxPages, 10);
+      if (!Number.isFinite(n) || n <= 0) return 50;
+      return Math.min(n, 200);
+    })();
+
+    delete cleanParams.maxPages;
+
+    const fetchPage = async (page) => {
+      const qs = new URLSearchParams();
+      const pageParams = {
+        ...cleanParams,
+        limit: requestedLimit,
+        ...(page ? { page } : {}),
+      };
+      Object.entries(pageParams).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
+      });
+      const res = await apiClient.get(`/menu/items?${qs.toString()}`, {
+        retry: { retries: 1 },
+      });
+      const raw = res || {};
+      const list = raw?.data || raw || [];
+      const normalized = Array.isArray(list)
+        ? list.map((it) => normalizeMenuItem(it))
+        : [];
+      const pagination = raw?.pagination || {
+        page: page || 1,
+        limit: Array.isArray(list) ? list.length : requestedLimit,
         total: Array.isArray(list) ? list.length : 0,
         totalPages: 1,
+      };
+      return { raw, data: normalized, pagination };
+    };
+
+    const first = await fetchPage(explicitPage ? cleanParams.page : 1);
+    if (explicitPage) {
+      return { success: true, data: first.data, pagination: first.pagination };
+    }
+
+    const totalPages = Math.max(1, Number(first.pagination?.totalPages || 1));
+    const targetPages = Math.min(totalPages, maxPages);
+    if (targetPages <= 1) {
+      return { success: true, data: first.data, pagination: first.pagination };
+    }
+
+    const all = [...first.data];
+    for (let page = 2; page <= targetPages; page += 1) {
+      const next = await fetchPage(page);
+      all.push(...next.data);
+    }
+
+    return {
+      success: true,
+      data: all,
+      pagination: {
+        ...first.pagination,
+        page: 1,
+        limit: requestedLimit,
+        totalPages,
       },
     };
   }

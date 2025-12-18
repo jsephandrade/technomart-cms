@@ -277,17 +277,15 @@ const MenuSelection = ({
             className="flex flex-1 flex-col"
           >
             <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-              <div className="border-b md:w-52 md:flex-shrink-0 md:border-b-0 md:border-r">
-                <TabsList className="!h-auto !w-full !justify-start overflow-x-auto overflow-y-hidden !p-0 md:!h-full md:flex-col md:!items-stretch md:overflow-y-auto md:overflow-x-hidden md:!p-1">
+              <div className="border-b md:flex-shrink-0 md:border-b-0 md:border-r">
+                <TabsList className="!h-auto w-full !justify-start overflow-x-auto overflow-y-hidden !p-0 md:!h-full md:w-fit md:flex-col md:!items-stretch md:overflow-y-auto md:overflow-x-hidden md:!p-1">
                   {categories.map((category) => (
                     <TabsTrigger
                       key={category.id}
                       value={category.id}
-                      className="!px-4 !py-2 md:w-full md:!justify-start md:!px-3 md:!py-2 transition-colors data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground"
+                      className="!px-4 !py-2 md:!justify-start md:!px-3 md:!py-2 transition-colors data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground"
                     >
-                      <span className="block w-full truncate">
-                        {category.name}
-                      </span>
+                      <span className="block truncate">{category.name}</span>
                     </TabsTrigger>
                   ))}
                 </TabsList>

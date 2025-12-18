@@ -20,6 +20,7 @@ const NUMBER_PAD_LAYOUT = [
 ];
 
 const CASH_DENOMINATIONS = [20, 50, 100, 200, 500, 1000];
+const PHP_SYMBOL = '\u20b1';
 
 const formatMoneyInput = (value) => {
   const numeric = typeof value === 'number' ? value : Number(value);
@@ -226,8 +227,8 @@ const PaymentModal = ({
 
   return (
     <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="mx-4 flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden">
+        <CardHeader className="shrink-0 flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
             <CardTitle>Complete Payment</CardTitle>
             <CardDescription>Enter payment amount</CardDescription>
@@ -241,9 +242,12 @@ const PaymentModal = ({
             <X className="h-4 w-4" />
           </Button>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="flex-1 min-h-0 space-y-6 overflow-y-auto scrollbar-hide">
           <div className="text-center">
-            <p className="text-3xl font-bold">₱{totalAmount.toFixed(2)}</p>
+            <p className="text-3xl font-bold">
+              {PHP_SYMBOL}
+              {totalAmount.toFixed(2)}
+            </p>
             <p className="text-sm text-muted-foreground">Total amount due</p>
           </div>
 
@@ -280,11 +284,11 @@ const PaymentModal = ({
                     className="h-10 shrink-0 text-sm font-semibold"
                     disabled={isProcessing}
                     onClick={() => setPaymentAmountFromNumber(suggestion.value)}
-                    title={`${suggestion.label} (ƒ,ñ${formatMoneyInput(suggestion.value)})`}
+                    title={`${suggestion.label} (${PHP_SYMBOL}${formatMoneyInput(suggestion.value)})`}
                   >
                     {suggestion.label === 'Exact'
                       ? 'Exact'
-                      : `ƒ,ñ${formatMoneyInput(suggestion.value)}`}
+                      : `${PHP_SYMBOL}${formatMoneyInput(suggestion.value)}`}
                   </Button>
                 ))}
               </div>
@@ -297,9 +301,10 @@ const PaymentModal = ({
                     className="h-10 shrink-0 text-sm font-semibold"
                     disabled={isProcessing}
                     onClick={() => handleAddDenomination(value)}
-                    title={`Add ƒ,ñ${formatMoneyInput(value)}`}
+                    title={`Add ${PHP_SYMBOL}${formatMoneyInput(value)}`}
                   >
-                    ƒ,ñ{formatMoneyInput(value)}
+                    {PHP_SYMBOL}
+                    {formatMoneyInput(value)}
                   </Button>
                 ))}
               </div>
@@ -342,13 +347,14 @@ const PaymentModal = ({
 
             <div className="text-center">
               <p className="text-2xl font-semibold text-green-600">
-                ₱{change.toFixed(2)}
+                {PHP_SYMBOL}
+                {change.toFixed(2)}
               </p>
               <p className="text-sm text-muted-foreground">Change</p>
             </div>
           </div>
         </CardContent>
-        <CardFooter className="flex gap-3">
+        <CardFooter className="shrink-0 flex gap-3">
           <Button
             className="flex-1"
             onClick={handleProcessPayment}

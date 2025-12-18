@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useEffect,
 } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -27,6 +28,8 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Maximize2,
+  Minimize2,
   Pencil,
   RotateCcw,
 } from 'lucide-react';
@@ -35,6 +38,7 @@ import ItemList from './ItemList';
 import EditCategoryDialog from './EditCategoryDialog';
 
 const MAX_VISIBLE_MENU_CATEGORIES = 8;
+const MENU_DENSITY_STORAGE_KEY = 'menu_density_pref';
 
 const CategoryTabs = ({
   items = [],
@@ -56,6 +60,16 @@ const CategoryTabs = ({
   const [hardDeleting, setHardDeleting] = useState(false);
   const hardDeletingRef = useRef(false);
   const tabsListRef = useRef(null);
+  const [density, setDensity] = useState(() => {
+    if (typeof window === 'undefined') return 'comfortable';
+    try {
+      const raw = localStorage.getItem(MENU_DENSITY_STORAGE_KEY);
+      if (raw === 'compact' || raw === 'comfortable') return raw;
+      return 'comfortable';
+    } catch {
+      return 'comfortable';
+    }
+  });
   const [tabsListMaxWidth, setTabsListMaxWidth] = useState(null);
   const [tabsHasOverflow, setTabsHasOverflow] = useState(false);
   const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false);
@@ -65,6 +79,13 @@ const CategoryTabs = ({
   const view = showArchived ? archivedView : activeView;
   const tabTriggerClasses =
     'min-w-fit cursor-pointer select-none whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(MENU_DENSITY_STORAGE_KEY, density);
+    } catch {}
+  }, [density]);
 
   const unavailableItems = useMemo(
     () => (items || []).filter((item) => item?.available === false),
@@ -242,6 +263,7 @@ const CategoryTabs = ({
         onArchive={onArchive}
         onHardDeleteRequest={requestHardDelete}
         mode={mode}
+        density={density}
         onRestore={mode === 'archived' ? onRestore : undefined}
       />
     ) : (
@@ -251,6 +273,7 @@ const CategoryTabs = ({
         onArchive={onArchive}
         onHardDeleteRequest={requestHardDelete}
         mode={mode}
+        density={density}
         onRestore={mode === 'archived' ? onRestore : undefined}
       />
     );
@@ -344,7 +367,35 @@ const CategoryTabs = ({
             </>
           ) : null}
         </div>
-        <div className="flex items-center gap-2 self-end md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-end md:self-auto">
+          <ToggleGroup
+            type="single"
+            value={density}
+            onValueChange={(v) => {
+              if (!v) return;
+              setDensity(v);
+            }}
+            variant="outline"
+            size="sm"
+            aria-label="Card density"
+          >
+            <ToggleGroupItem
+              value="comfortable"
+              aria-label="Comfortable density"
+              title="Comfortable"
+            >
+              <Maximize2 className="h-4 w-4" />
+              <span className="ml-1 hidden sm:inline">Comfortable</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="compact"
+              aria-label="Compact density"
+              title="Compact"
+            >
+              <Minimize2 className="h-4 w-4" />
+              <span className="ml-1 hidden sm:inline">Compact</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
           <ToggleGroup
             type="single"
             value={view}
@@ -417,6 +468,7 @@ const CategoryTabs = ({
                 onEdit={onEdit}
                 onArchive={onArchive}
                 showCategory
+                density={density}
               />
             ) : (
               <ItemList
@@ -424,6 +476,7 @@ const CategoryTabs = ({
                 onEdit={onEdit}
                 onArchive={onArchive}
                 showCategory
+                density={density}
               />
             )}
           </TabsContent>

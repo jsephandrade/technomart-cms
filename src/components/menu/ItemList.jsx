@@ -51,8 +51,10 @@ const ItemList = ({
   mode = 'active',
   onRestore = () => {},
   onHardDeleteRequest,
+  density = 'comfortable',
 }) => {
   const [brokenImages, setBrokenImages] = useState({});
+  const isCompact = density === 'compact';
 
   if (!items || items.length === 0) {
     return (
@@ -96,7 +98,11 @@ const ItemList = ({
         return (
           <div
             key={item.id}
-            className="group relative flex flex-col gap-4 border-b border-border/60 bg-background/60 px-4 py-4 transition hover:bg-muted/40 sm:flex-row sm:items-center sm:gap-6 sm:px-6"
+            className={`group relative flex flex-col border-b border-border/60 bg-background/60 transition hover:bg-muted/40 sm:flex-row sm:items-center ${
+              isCompact
+                ? 'gap-3 px-3 py-3 sm:gap-4 sm:px-4'
+                : 'gap-4 px-4 py-4 sm:gap-6 sm:px-6'
+            }`}
           >
             {/* subtle gradient accent */}
             <div className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-primary/60 via-primary/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
@@ -107,7 +113,9 @@ const ItemList = ({
                 <img
                   src={imageSrc}
                   alt={item.name}
-                  className="relative h-16 w-16 rounded-xl border border-border/60 object-cover shadow-sm transition duration-300 group-hover:scale-[1.03]"
+                  className={`relative rounded-xl border border-border/60 object-cover shadow-sm transition duration-300 group-hover:scale-[1.03] ${
+                    isCompact ? 'h-14 w-14' : 'h-16 w-16'
+                  }`}
                   onError={() =>
                     setBrokenImages((prev) => ({
                       ...prev,
@@ -116,7 +124,11 @@ const ItemList = ({
                   }
                 />
               ) : (
-                <div className="relative flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted text-muted-foreground transition duration-300 group-hover:scale-[1.03]">
+                <div
+                  className={`relative flex items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted text-muted-foreground transition duration-300 group-hover:scale-[1.03] ${
+                    isCompact ? 'h-14 w-14' : 'h-16 w-16'
+                  }`}
+                >
                   <ImageIcon className="h-6 w-6" />
                 </div>
               )}
@@ -124,7 +136,11 @@ const ItemList = ({
 
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p className="text-base font-semibold text-foreground">
+                <p
+                  className={`font-semibold text-foreground ${
+                    isCompact ? 'text-sm' : 'text-base'
+                  }`}
+                >
                   {item.name}
                 </p>
                 <Badge
@@ -172,7 +188,11 @@ const ItemList = ({
             </div>
 
             <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:flex-col sm:items-end sm:justify-center sm:text-right">
-              <span className="text-lg font-semibold text-primary">
+              <span
+                className={`font-semibold text-primary ${
+                  isCompact ? 'text-base' : 'text-lg'
+                }`}
+              >
                 ₱{Number(item.price).toFixed(2)}
               </span>
 
@@ -180,7 +200,9 @@ const ItemList = ({
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-9 w-9 rounded-full border-border/70 transition hover:border-primary hover:text-primary"
+                  className={`rounded-full border-border/70 transition hover:border-primary hover:text-primary ${
+                    isCompact ? 'h-8 w-8' : 'h-9 w-9'
+                  }`}
                   onClick={() => onEdit(item)}
                   aria-label={`Edit ${item.name}`}
                   title={`Edit ${item.name}`}
@@ -192,7 +214,7 @@ const ItemList = ({
                     <Button
                       variant="default"
                       size="icon"
-                      className="h-9 w-9 rounded-full"
+                      className={`rounded-full ${isCompact ? 'h-8 w-8' : 'h-9 w-9'}`}
                       onClick={() => onRestore(item)}
                       aria-label={`Restore ${item.name}`}
                       title={`Restore ${item.name}`}
@@ -203,7 +225,7 @@ const ItemList = ({
                       <Button
                         variant="destructive"
                         size="icon"
-                        className="h-9 w-9 rounded-full"
+                        className={`rounded-full ${isCompact ? 'h-8 w-8' : 'h-9 w-9'}`}
                         onClick={() => onHardDeleteRequest(item)}
                         aria-label={`Delete ${item.name} permanently`}
                         title={`Delete ${item.name} permanently`}
@@ -216,7 +238,9 @@ const ItemList = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 rounded-full text-rose-500 hover:bg-rose-50 hover:text-rose-600"
+                    className={`rounded-full text-rose-500 hover:bg-rose-50 hover:text-rose-600 ${
+                      isCompact ? 'h-8 w-8' : 'h-9 w-9'
+                    }`}
                     onClick={() => onArchive(item.id)}
                     aria-label={`Archive ${item.name}`}
                     title={`Archive ${item.name}`}

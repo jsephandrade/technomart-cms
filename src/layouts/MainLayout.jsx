@@ -215,7 +215,7 @@ const MainLayout = ({ children }) => {
             </header>
 
             {/* Page Content */}
-            <main className="hide-scrollbar flex-1 overflow-y-auto bg-muted/30 p-4 sm:p-5 md:p-6 lg:p-6">
+            <main className="hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden bg-muted/30 p-4 sm:p-5 md:p-6 lg:p-6">
               <PageTransition>{children}</PageTransition>
             </main>
           </SidebarInset>

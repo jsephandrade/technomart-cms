@@ -225,6 +225,8 @@ const AddItemDialog = ({
             </div>
           </div>
 
+          <Separator />
+
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <CircleDollarSign className="h-4 w-4" />
@@ -298,6 +300,8 @@ const AddItemDialog = ({
               />
             </div>
           </div>
+
+          <Separator />
 
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">

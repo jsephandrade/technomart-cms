@@ -259,6 +259,18 @@ class MenuService {
     return { success: true, data: unwrap(res) };
   }
 
+  async updateCategory(categoryId, updates = {}) {
+    if (!categoryId) throw new Error('Category id is required');
+    const res = await apiClient.put(
+      `/menu/categories/${encodeURIComponent(categoryId)}`,
+      updates,
+      {
+        retry: { retries: 1 },
+      }
+    );
+    return { success: true, data: unwrap(res) };
+  }
+
   /**
    * Upload a menu item image with fast client-side compression (WebP)
    * for efficient transfers. Falls back to FormData if conversion fails.

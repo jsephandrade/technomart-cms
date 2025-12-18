@@ -1,6 +1,20 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn, formatOrderNumber } from '@/lib/utils';
+
+const LS_COMPLETED_ITEMS_KEY = 'pos_customer_display_completed_items';
+
+const loadCompletedItems = () => {
+  try {
+    const raw = localStorage.getItem(LS_COMPLETED_ITEMS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value) => typeof value === 'string'));
+  } catch {
+    return new Set();
+  }
+};
 
 const STATUS_CANONICAL_MAP = {
   pending: 'new',
@@ -176,9 +190,9 @@ const Section = ({
                       return (
                         <label
                           key={itemKey}
-                          className="flex items-start justify-between gap-3 text-sm text-foreground"
+                          className="flex items-start gap-3 text-sm text-foreground"
                         >
-                          <span className="flex items-center gap-2">
+                          <span className="flex flex-1 items-center gap-2">
                             <input
                               type="checkbox"
                               className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
@@ -188,9 +202,9 @@ const Section = ({
                             <span className="font-semibold">
                               {getItemQuantity(item)}x
                             </span>
-                          </span>
-                          <span className="flex-1 text-right text-muted-foreground">
-                            {getItemLabel(item)}
+                            <span className="text-muted-foreground">
+                              {getItemLabel(item)}
+                            </span>
                           </span>
                         </label>
                       );
@@ -216,7 +230,20 @@ const Section = ({
 
 const CustomerDisplay = ({ queue }) => {
   const [expandedIds, setExpandedIds] = useState(new Set());
-  const [completedItems, setCompletedItems] = useState(new Set());
+  const [completedItems, setCompletedItems] = useState(loadCompletedItems);
+
+  useEffect(() => {
+    try {
+      if (!completedItems.size) {
+        localStorage.removeItem(LS_COMPLETED_ITEMS_KEY);
+        return;
+      }
+      localStorage.setItem(
+        LS_COMPLETED_ITEMS_KEY,
+        JSON.stringify(Array.from(completedItems))
+      );
+    } catch {}
+  }, [completedItems]);
 
   const orders = useMemo(() => {
     if (!queue) return [];

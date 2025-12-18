@@ -72,6 +72,11 @@ urlpatterns = [
     path("menu/items/<str:item_id>/availability", menu_views.menu_item_availability, name="menu_item_availability"),
     path("menu/items/<str:item_id>/image", menu_views.menu_item_image, name="menu_item_image"),
     path("menu/categories", menu_views.menu_categories, name="menu_categories"),
+    path(
+        "menu/categories/<str:category_id>",
+        menu_views.menu_category_detail,
+        name="menu_category_detail",
+    ),
 
     # Users endpoints
     path("users", user_views.users, name="users"),

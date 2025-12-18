@@ -256,6 +256,7 @@ const MenuManagement = () => {
         <CategoryTabs
           items={itemsWithImages}
           categories={categories}
+          categoryRows={categoryRows}
           onEdit={(it) =>
             setEditingItem({
               ...stripUnsupportedFields(it),
@@ -263,6 +264,11 @@ const MenuManagement = () => {
             })
           }
           onArchive={handleArchiveItem}
+          onCategoryUpdated={() => {
+            refetchCategories();
+            refetchActive?.();
+            refetchArchived?.();
+          }}
           archivedItems={archivedItemsWithImages}
           archivedLoading={archivedLoading}
           onRestore={handleRestoreItem}

@@ -1006,6 +1006,114 @@ def menu_categories(request):
         return JsonResponse({"success": False, "message": f"Failed to create category: {str(e)}"}, status=500)
 
 
+@require_http_methods(["PUT", "PATCH"])
+def menu_category_detail(request, category_id):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    if not _has_permission(actor, "menu.manage") and not _has_permission(
+        actor, "inventory.menu.manage"
+    ):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        from .models import MenuCategory, MenuItem
+
+        category = None
+        try:
+            category_uuid = uuid.UUID(str(category_id))
+            category = MenuCategory.objects.filter(id=category_uuid).first()
+        except Exception:
+            category = MenuCategory.objects.filter(name__iexact=str(category_id)).first()
+
+        if not category:
+            return JsonResponse(
+                {"success": False, "message": "Category not found"}, status=404
+            )
+
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        old_name = category.name
+        changed = False
+
+        if "name" in payload:
+            name = (payload.get("name") or "").strip()
+            if not name:
+                return JsonResponse(
+                    {"success": False, "message": "Category name is required"},
+                    status=400,
+                )
+            if (
+                MenuCategory.objects.filter(name__iexact=name)
+                .exclude(id=category.id)
+                .exists()
+            ):
+                return JsonResponse(
+                    {"success": False, "message": "Category already exists"},
+                    status=400,
+                )
+            if name != category.name:
+                category.name = name
+                changed = True
+
+        if "description" in payload:
+            category.description = (payload.get("description") or "").strip()
+            changed = True
+
+        if "sortOrder" in payload:
+            sort_order = payload.get("sortOrder", 0)
+            try:
+                sort_order = int(sort_order)
+            except Exception:
+                sort_order = 0
+            sort_order = max(0, sort_order)
+            if sort_order != category.sort_order:
+                category.sort_order = sort_order
+                changed = True
+
+        if changed:
+            category.save()
+
+            if category.name != old_name:
+                # Keep menu items in sync with category renames (MenuItem.category is a string field).
+                now = dj_tz.now()
+                MenuItem.objects.filter(category__iexact=old_name).update(
+                    category=category.name,
+                    updated_at=now,
+                )
+
+            details = (
+                f"Renamed category '{old_name}' to '{category.name}'"
+                if category.name != old_name
+                else f"Updated category '{category.name}'"
+            )
+            _record_menu_audit(
+                request,
+                actor,
+                action="Category updated",
+                details=details,
+                severity="info",
+                meta={"id": str(category.id), "name": category.name},
+            )
+
+        count = MenuItem.objects.filter(category=category.name, archived=False).count()
+        result = {
+            "id": str(category.id),
+            "name": category.name,
+            "description": category.description or "",
+            "itemCount": count,
+            "sortOrder": category.sort_order,
+            "createdAt": category.created_at.isoformat() if category.created_at else None,
+            "updatedAt": category.updated_at.isoformat() if category.updated_at else None,
+        }
+
+        return JsonResponse({"success": True, "data": result})
+    except Exception as e:
+        return JsonResponse(
+            {"success": False, "message": f"Failed to update category: {str(e)}"},
+            status=500,
+        )
+
+
 __all__ = [
     "menu_items",
     "menu_item_detail",
@@ -1014,4 +1122,5 @@ __all__ = [
     "menu_item_availability",
     "menu_item_image",
     "menu_categories",
+    "menu_category_detail",
 ]

@@ -1,30 +1,86 @@
 // src/components/menu/CategoryTabs.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
-import { Archive, LayoutGrid, List, Loader2, RotateCcw } from 'lucide-react';
+import {
+  Archive,
+  LayoutGrid,
+  List,
+  Loader2,
+  Pencil,
+  RotateCcw,
+} from 'lucide-react';
 import ItemGrid from './ItemGrid';
 import ItemList from './ItemList';
+import EditCategoryDialog from './EditCategoryDialog';
 
 const CategoryTabs = ({
   items = [],
   categories = [],
+  categoryRows = [],
   onEdit = () => {},
   onArchive = () => {},
+  onCategoryUpdated = () => {},
   archivedItems = [],
   archivedLoading = false,
   onRestore = () => {},
 }) => {
   const [view, setView] = useState('grid');
   const [activeTab, setActiveTab] = useState('all');
+  const [editingCategory, setEditingCategory] = useState(null);
   const showArchived = activeTab === 'archived';
   const tabTriggerClasses =
     'min-w-fit whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
 
+  const categoryMetaByName = useMemo(() => {
+    const map = new Map();
+    (categoryRows || []).forEach((row) => {
+      if (!row || typeof row !== 'object') return;
+      const name = String(
+        row?.name || row?.label || row?.title || row?.slug || ''
+      ).trim();
+      if (!name) return;
+      map.set(name.toLowerCase(), {
+        id: row?.id || row?.slug || name,
+        name,
+        description: row?.description || '',
+        sortOrder: row?.sortOrder ?? row?.sort_order ?? 0,
+      });
+    });
+    return map;
+  }, [categoryRows]);
+
   useEffect(() => {
     if (showArchived) setView('list');
   }, [showArchived]);
+
+  const openEditCategory = useCallback(
+    (event, categoryName) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      const meta = categoryMetaByName.get(
+        String(categoryName || '')
+          .trim()
+          .toLowerCase()
+      );
+      if (!meta) return;
+      setEditingCategory(meta);
+    },
+    [categoryMetaByName]
+  );
+
+  const handleCategoryUpdated = useCallback(
+    (updated) => {
+      const previousName = editingCategory?.name || '';
+      const nextName = String(updated?.name || '').trim();
+      if (previousName && nextName && activeTab === previousName) {
+        setActiveTab(nextName);
+      }
+      onCategoryUpdated?.(updated);
+    },
+    [activeTab, editingCategory, onCategoryUpdated]
+  );
 
   const renderItems = (list) =>
     view === 'grid' ? (
@@ -48,9 +104,33 @@ const CategoryTabs = ({
             <TabsTrigger
               key={category}
               value={category}
-              className={tabTriggerClasses}
+              className={`${tabTriggerClasses} justify-between gap-2 pr-1`}
+              asChild
             >
-              {category}
+              <div>
+                <span className="truncate">{category}</span>
+                {categoryMetaByName.has(
+                  String(category || '')
+                    .trim()
+                    .toLowerCase()
+                ) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 p-0 border"
+                    aria-label={`Edit ${category} category`}
+                    title={`Edit ${category}`}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onClick={(event) => openEditCategory(event, category)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </TabsTrigger>
           ))}
           <TabsTrigger value="archived" className="hidden">
@@ -160,6 +240,12 @@ const CategoryTabs = ({
           </div>
         )}
       </TabsContent>
+
+      <EditCategoryDialog
+        category={editingCategory}
+        onClose={() => setEditingCategory(null)}
+        onUpdated={handleCategoryUpdated}
+      />
     </Tabs>
   );
 };

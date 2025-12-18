@@ -104,7 +104,7 @@ const EditItemDialog = ({ item, setItem, onSave, onClose, onRemoveImage }) => {
 
   return (
     <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[650px]">
+      <DialogContent className="scrollbar-hide max-h-[90vh] overflow-y-auto sm:max-w-[650px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <SquarePen className="h-5 w-5" />

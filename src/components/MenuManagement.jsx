@@ -42,6 +42,7 @@ const MenuManagement = () => {
     items: archivedItems,
     loading: archivedLoading,
     restoreMenuItem: restoreArchivedItem,
+    hardDeleteMenuItem: hardDeleteArchivedItem,
     refetch: refetchArchived,
   } = useMenuManagement({ archived: true });
   const { categories: categoryRows, refetch: refetchCategories } =
@@ -220,6 +221,16 @@ const MenuManagement = () => {
     }
   };
 
+  const handleHardDeleteItem = async (item) => {
+    if (!item?.id) {
+      toast.error('Missing menu item id.');
+      return;
+    }
+    await hardDeleteArchivedItem(item.id);
+    refetchArchived();
+    refetchActive();
+  };
+
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
       <Button
@@ -272,6 +283,7 @@ const MenuManagement = () => {
           archivedItems={archivedItemsWithImages}
           archivedLoading={archivedLoading}
           onRestore={handleRestoreItem}
+          onHardDelete={handleHardDeleteItem}
         />
       </FeaturePanelCard>
 

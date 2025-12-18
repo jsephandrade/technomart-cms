@@ -3,7 +3,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Archive, Edit, Image as ImageIcon, RotateCcw } from 'lucide-react';
+import {
+  Archive,
+  Edit,
+  Image as ImageIcon,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 
 const ItemCard = ({
   item,
@@ -11,6 +17,7 @@ const ItemCard = ({
   onEdit,
   onArchive = () => {},
   onRestore = () => {},
+  onHardDeleteRequest,
 }) => {
   const [imageError, setImageError] = useState(false);
   const isArchived = mode === 'archived';
@@ -134,16 +141,30 @@ const ItemCard = ({
               <Edit className="h-3 w-3 mr-1" /> Edit
             </Button>
             {isArchived ? (
-              <Button
-                variant="default"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onRestore(item)}
-                aria-label={`Restore ${item.name}`}
-                title={`Restore ${item.name}`}
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
+              <>
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => onRestore(item)}
+                  aria-label={`Restore ${item.name}`}
+                  title={`Restore ${item.name}`}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+                {typeof onHardDeleteRequest === 'function' ? (
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => onHardDeleteRequest(item)}
+                    aria-label={`Delete ${item.name} permanently`}
+                    title={`Delete ${item.name} permanently`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </>
             ) : (
               <Button
                 variant="destructive"

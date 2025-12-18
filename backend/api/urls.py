@@ -69,6 +69,7 @@ urlpatterns = [
     path("menu/items/<str:item_id>", menu_views.menu_item_detail, name="menu_item_detail"),
     path("menu/items/<str:item_id>/archive", menu_views.menu_item_archive, name="menu_item_archive"),
     path("menu/items/<str:item_id>/restore", menu_views.menu_item_restore, name="menu_item_restore"),
+    path("menu/items/<str:item_id>/hard-delete", menu_views.menu_item_hard_delete, name="menu_item_hard_delete"),
     path("menu/items/<str:item_id>/availability", menu_views.menu_item_availability, name="menu_item_availability"),
     path("menu/items/<str:item_id>/image", menu_views.menu_item_image, name="menu_item_image"),
     path("menu/categories", menu_views.menu_categories, name="menu_categories"),

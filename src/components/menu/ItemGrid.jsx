@@ -7,6 +7,7 @@ const ItemGrid = ({
   onEdit,
   onArchive = () => {},
   onRestore = () => {},
+  onHardDeleteRequest,
   mode = 'active',
   showCategory = false,
 }) => {
@@ -19,6 +20,7 @@ const ItemGrid = ({
           onEdit={onEdit}
           onArchive={onArchive}
           onRestore={onRestore}
+          onHardDeleteRequest={onHardDeleteRequest}
           mode={mode}
         />
       ))}

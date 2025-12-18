@@ -6,6 +6,7 @@ import {
   Edit,
   Archive,
   RotateCcw,
+  Trash2,
   Image as ImageIcon,
   Clock,
   Layers,
@@ -49,6 +50,7 @@ const ItemList = ({
   onArchive = () => {},
   mode = 'active',
   onRestore = () => {},
+  onHardDeleteRequest,
 }) => {
   const [brokenImages, setBrokenImages] = useState({});
 
@@ -186,16 +188,30 @@ const ItemList = ({
                   <Edit className="h-4 w-4" />
                 </Button>
                 {mode === 'archived' ? (
-                  <Button
-                    variant="default"
-                    size="icon"
-                    className="h-9 w-9 rounded-full"
-                    onClick={() => onRestore(item)}
-                    aria-label={`Restore ${item.name}`}
-                    title={`Restore ${item.name}`}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </Button>
+                  <>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      className="h-9 w-9 rounded-full"
+                      onClick={() => onRestore(item)}
+                      aria-label={`Restore ${item.name}`}
+                      title={`Restore ${item.name}`}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                    {typeof onHardDeleteRequest === 'function' ? (
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="h-9 w-9 rounded-full"
+                        onClick={() => onHardDeleteRequest(item)}
+                        aria-label={`Delete ${item.name} permanently`}
+                        title={`Delete ${item.name} permanently`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </>
                 ) : (
                   <Button
                     variant="ghost"

@@ -1,8 +1,18 @@
 // src/components/menu/CategoryTabs.jsx
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Archive,
   CircleSlash,
@@ -26,11 +36,15 @@ const CategoryTabs = ({
   archivedItems = [],
   archivedLoading = false,
   onRestore = () => {},
+  onHardDelete = () => {},
 }) => {
   const [activeView, setActiveView] = useState('grid');
   const [archivedView, setArchivedView] = useState('list');
   const [activeTab, setActiveTab] = useState('all');
   const [editingCategory, setEditingCategory] = useState(null);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
+  const [hardDeleting, setHardDeleting] = useState(false);
+  const hardDeletingRef = useRef(false);
   const showArchived = activeTab === 'archived';
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
@@ -87,12 +101,35 @@ const CategoryTabs = ({
     [activeTab, editingCategory, onCategoryUpdated]
   );
 
+  const setHardDeletingSafe = useCallback((value) => {
+    hardDeletingRef.current = Boolean(value);
+    setHardDeleting(Boolean(value));
+  }, []);
+
+  const requestHardDelete = useCallback((item) => {
+    setHardDeleteTarget(item || null);
+  }, []);
+
+  const handleConfirmHardDelete = useCallback(async () => {
+    if (!hardDeleteTarget?.id || hardDeletingRef.current) return;
+    setHardDeletingSafe(true);
+    try {
+      await onHardDelete?.(hardDeleteTarget);
+      setHardDeleteTarget(null);
+    } catch {
+      // Caller handles toast; keep dialog open for retry.
+    } finally {
+      setHardDeletingSafe(false);
+    }
+  }, [hardDeleteTarget, onHardDelete, setHardDeletingSafe]);
+
   const renderItems = (list, mode = 'active') =>
     view === 'grid' ? (
       <ItemGrid
         items={list}
         onEdit={onEdit}
         onArchive={onArchive}
+        onHardDeleteRequest={requestHardDelete}
         mode={mode}
         onRestore={mode === 'archived' ? onRestore : undefined}
       />
@@ -101,6 +138,7 @@ const CategoryTabs = ({
         items={list}
         onEdit={onEdit}
         onArchive={onArchive}
+        onHardDeleteRequest={requestHardDelete}
         mode={mode}
         onRestore={mode === 'archived' ? onRestore : undefined}
       />
@@ -309,6 +347,53 @@ const CategoryTabs = ({
         onClose={() => setEditingCategory(null)}
         onUpdated={handleCategoryUpdated}
       />
+
+      <AlertDialog
+        open={Boolean(hardDeleteTarget)}
+        onOpenChange={(open) => {
+          if (open) return;
+          if (hardDeletingRef.current) return;
+          setHardDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete menu item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{' '}
+              <span className="font-semibold text-foreground">
+                {hardDeleteTarget?.name || 'this item'}
+              </span>{' '}
+              from the database. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setHardDeleteTarget(null)}
+              disabled={hardDeleting}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                handleConfirmHardDelete();
+              }}
+              disabled={hardDeleting}
+            >
+              {hardDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete permanently'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Tabs>
   );
 };

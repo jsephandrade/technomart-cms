@@ -235,6 +235,15 @@ class MenuService {
     return { success: true, data: normalizeMenuItem(unwrap(res)) };
   }
 
+  async hardDeleteMenuItem(itemId) {
+    const res = await apiClient.post(
+      `/menu/items/${encodeURIComponent(itemId)}/hard-delete`,
+      {},
+      { retry: { retries: 1 } }
+    );
+    return { success: true, data: unwrap(res) };
+  }
+
   async updateItemAvailability(itemId, available) {
     const res = await apiClient.patch(
       `/menu/items/${itemId}/availability`,

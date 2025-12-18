@@ -285,6 +285,27 @@ export const useMenuManagement = (params = {}) => {
     },
   });
 
+  const hardDeleteMenuItemMutation = useMutation({
+    mutationFn: (itemId) => menuService.hardDeleteMenuItem(itemId),
+    onSuccess: (_, itemId) => {
+      removeItemFromCaches(itemId);
+      toast({
+        title: 'Menu Item Deleted',
+        description: 'The item has been permanently deleted from the database.',
+        variant: 'destructive',
+      });
+      broadcastMenuEvent({ type: 'hard-delete', id: itemId });
+      invalidateMenu();
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error Deleting Item',
+        description: error?.message || 'Failed to delete menu item',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const updateAvailabilityMutation = useMutation({
     mutationFn: ({ itemId, available }) =>
       menuService.updateItemAvailability(itemId, available),
@@ -404,6 +425,10 @@ export const useMenuManagement = (params = {}) => {
     restoreMenuItem: async (itemId) => {
       const res = await restoreMenuItemMutation.mutateAsync(itemId);
       return (res?.data && res.data.data) || res?.data || res;
+    },
+    hardDeleteMenuItem: async (itemId) => {
+      await hardDeleteMenuItemMutation.mutateAsync(itemId);
+      return true;
     },
     updateItemAvailability: async (itemId, available) => {
       const res = await updateAvailabilityMutation.mutateAsync({

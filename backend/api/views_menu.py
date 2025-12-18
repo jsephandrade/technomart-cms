@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 
 from django.db import transaction
 from django.db.models import Q, Max
+from django.db.models.deletion import ProtectedError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
@@ -807,6 +808,100 @@ def menu_item_restore(request, item_id):
     return JsonResponse({"success": True, "data": payload})
 
 
+@require_http_methods(["POST", "DELETE"])
+def menu_item_hard_delete(request, item_id):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    if not _has_permission(actor, "menu.manage") and not _has_permission(
+        actor, "inventory.menu.manage"
+    ):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    db_error = False
+    mi = None
+    try:
+        from .models import MenuItem
+
+        mi = MenuItem.objects.filter(id=item_id).first()
+    except Exception:
+        db_error = True
+
+    if mi:
+        if not bool(getattr(mi, "archived", False)):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Only archived items can be permanently deleted",
+                },
+                status=400,
+            )
+
+        deleted_id = str(getattr(mi, "id", item_id))
+        deleted_name = getattr(mi, "name", "Menu item")
+        try:
+            # Best-effort: remove the stored image file as well (avoid orphans).
+            img = getattr(mi, "image", None)
+            if img:
+                try:
+                    img.delete(save=False)
+                except Exception:
+                    pass
+            mi.delete()
+        except ProtectedError:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Cannot delete this menu item because it is referenced by other records.",
+                },
+                status=409,
+            )
+        except Exception:
+            return JsonResponse(
+                {"success": False, "message": "Failed to delete menu item"},
+                status=500,
+            )
+
+        _record_menu_audit(
+            request,
+            actor,
+            action="Menu item permanently deleted",
+            details=f"Permanently deleted '{deleted_name}'",
+            severity="warning",
+            meta={"id": deleted_id, "name": deleted_name},
+        )
+        return JsonResponse({"success": True, "data": {"id": deleted_id}})
+
+    if not db_error:
+        return JsonResponse({"success": False, "message": "Not found"}, status=404)
+    if getattr(settings, "DISABLE_INMEM_FALLBACK", False):
+        return JsonResponse(
+            {"success": False, "message": "Failed to delete menu item"}, status=500
+        )
+
+    idx = next((i for i, it in enumerate(MENU_ITEMS) if it.get("id") == item_id), -1)
+    if idx == -1:
+        return JsonResponse({"success": False, "message": "Not found"}, status=404)
+    if not MENU_ITEMS[idx].get("archived"):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Only archived items can be permanently deleted",
+            },
+            status=400,
+        )
+    deleted = MENU_ITEMS.pop(idx)
+    _record_menu_audit(
+        request,
+        actor,
+        action="Menu item permanently deleted",
+        details=f"Permanently deleted '{deleted.get('name','Unnamed')}'",
+        severity="warning",
+        meta={"id": deleted.get("id"), "name": deleted.get("name")},
+    )
+    return JsonResponse({"success": True, "data": {"id": deleted.get("id")}})
+
+
 @require_http_methods(["PATCH"]) 
 def menu_item_availability(request, item_id):
     # Try DB first
@@ -1151,6 +1246,7 @@ __all__ = [
     "menu_item_detail",
     "menu_item_archive",
     "menu_item_restore",
+    "menu_item_hard_delete",
     "menu_item_availability",
     "menu_item_image",
     "menu_categories",

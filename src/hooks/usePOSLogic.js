@@ -218,6 +218,18 @@ export const usePOSLogic = () => {
         : Math.max(0, tenderedAmount - total);
     let createdOrder = null;
     try {
+      const scheduleOrderIdentifierRefresh = () => {
+        const trigger = () => {
+          refreshOrderIdentifiers().catch((error) => console.error(error));
+        };
+
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          window.requestIdleCallback(trigger);
+        } else {
+          setTimeout(trigger, 0);
+        }
+      };
+
       const payload = {
         items: currentOrder.map((it) => ({
           menuItemId: it.menuItemId,
@@ -258,7 +270,11 @@ export const usePOSLogic = () => {
         change,
       });
       clearOrder();
-      await refreshOrderIdentifiers();
+
+      if (isMountedRef.current) {
+        setOrderIdentifiers(createFallbackOrderIdentifiers());
+      }
+      scheduleOrderIdentifierRefresh();
       return info;
     } catch (e) {
       console.error(e);

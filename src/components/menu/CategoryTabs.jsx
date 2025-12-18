@@ -5,6 +5,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
 import {
   Archive,
+  CircleSlash,
   LayoutGrid,
   List,
   Loader2,
@@ -31,9 +32,15 @@ const CategoryTabs = ({
   const [activeTab, setActiveTab] = useState('all');
   const [editingCategory, setEditingCategory] = useState(null);
   const showArchived = activeTab === 'archived';
+  const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
   const tabTriggerClasses =
     'min-w-fit whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
+
+  const unavailableItems = useMemo(
+    () => (items || []).filter((item) => item?.available === false),
+    [items]
+  );
 
   const categoryMetaByName = useMemo(() => {
     const map = new Map();
@@ -142,6 +149,9 @@ const CategoryTabs = ({
           <TabsTrigger value="archived" className="hidden">
             Archived
           </TabsTrigger>
+          <TabsTrigger value="unavailable" className="hidden">
+            Unavailable
+          </TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2 self-end md:self-auto">
           <ToggleGroup
@@ -167,6 +177,26 @@ const CategoryTabs = ({
             </ToggleGroupItem>
           </ToggleGroup>
           <Button
+            variant={showUnavailable ? 'default' : 'outline'}
+            size="icon"
+            onClick={() =>
+              setActiveTab((prev) =>
+                prev === 'unavailable' ? 'all' : 'unavailable'
+              )
+            }
+            aria-pressed={showUnavailable}
+            aria-label={
+              showUnavailable
+                ? 'Show all menu items'
+                : 'Show unavailable menu items'
+            }
+            title={
+              showUnavailable ? 'Show all menu items' : 'Show unavailable items'
+            }
+          >
+            <CircleSlash className="h-4 w-4" />
+          </Button>
+          <Button
             variant={showArchived ? 'default' : 'outline'}
             size="icon"
             onClick={() =>
@@ -177,6 +207,9 @@ const CategoryTabs = ({
               showArchived
                 ? 'Show active menu items'
                 : 'Show archived menu items'
+            }
+            title={
+              showArchived ? 'Show active menu items' : 'Show archived items'
             }
           >
             <Archive className="h-4 w-4" />
@@ -201,6 +234,34 @@ const CategoryTabs = ({
                 onArchive={onArchive}
                 showCategory
               />
+            )}
+          </TabsContent>
+
+          <TabsContent value="unavailable" className="mt-6 space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Unavailable Items</h3>
+                <p className="text-sm text-muted-foreground">
+                  Items currently marked as unavailable.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveTab('all')}
+                className="self-start md:self-auto"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Back to All Items
+              </Button>
+            </div>
+
+            {unavailableItems.length > 0 ? (
+              renderItems(unavailableItems)
+            ) : (
+              <div className="rounded-md border border-dashed border-muted-foreground/40 p-8 text-center text-sm text-muted-foreground">
+                No unavailable menu items.
+              </div>
             )}
           </TabsContent>
 

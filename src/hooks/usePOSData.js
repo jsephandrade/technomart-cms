@@ -55,6 +55,12 @@ export const usePOSData = () => {
         if (!c || typeof c !== 'object') return String(c || '');
         return c.name || c.label || c.title || c.slug || c.id || String(c);
       };
+      const getCatSortOrder = (c) => {
+        if (!c || typeof c !== 'object') return null;
+        const raw = c.sortOrder ?? c.sort_order ?? c.sort ?? c.order ?? null;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
       // Normalize items and ensure category is a string
       const toImage = (obj) => {
         const cands = [obj?.image, obj?.imageUrl, obj?.photo, obj?.picture];
@@ -76,30 +82,81 @@ export const usePOSData = () => {
         };
       });
 
-      // Aggregate category names from API and from items to be safe
-      const rawCats = (catsRes?.data || []).map(getCatName);
-      const catSet = new Set(
-        [...rawCats, ...items.map((it) => it.category)]
-          .map((s) => String(s || '').trim())
-          .filter(Boolean)
-      );
-
-      // Build category list with 'All' first
-      const byCat = new Map();
-      // 'All' category contains all items
-      byCat.set('All', { id: 'all', name: 'All', items: [...items] });
-
-      Array.from(catSet)
-        .sort((a, b) => a.localeCompare(b))
-        .forEach((name) => {
-          if (name === 'All') return;
-          byCat.set(name, { id: name, name, items: [] });
+      const apiCatsRaw = Array.isArray(catsRes?.data) ? catsRes.data : [];
+      const apiCats = apiCatsRaw
+        .map((c) => {
+          const name = String(getCatName(c) || '').trim();
+          if (!name) return null;
+          if (name.toLowerCase() === 'all') return null;
+          return { name, sortOrder: getCatSortOrder(c) };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+          const aOrder =
+            a.sortOrder !== null ? a.sortOrder : Number.MAX_SAFE_INTEGER;
+          const bOrder =
+            b.sortOrder !== null ? b.sortOrder : Number.MAX_SAFE_INTEGER;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.name.localeCompare(b.name);
         });
 
-      items.forEach((it) => {
-        const name = it.category || 'General';
-        if (!byCat.has(name)) byCat.set(name, { id: name, name, items: [] });
-        byCat.get(name).items.push(it);
+      const knownCatsLower = new Set(apiCats.map((c) => c.name.toLowerCase()));
+      const itemCatNames = [];
+      const itemCatSeen = new Set();
+      (items || []).forEach((it) => {
+        const name = String(it?.category || '').trim();
+        if (!name) return;
+        const lower = name.toLowerCase();
+        if (lower === 'all' || itemCatSeen.has(lower)) return;
+        itemCatSeen.add(lower);
+        itemCatNames.push(name);
+      });
+
+      const extraCats = itemCatNames
+        .filter((name) => !knownCatsLower.has(name.toLowerCase()))
+        .sort((a, b) => a.localeCompare(b));
+
+      const orderedCatNames = [];
+      const orderedSeenLower = new Set();
+      const addOrdered = (name) => {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) return;
+        const lower = trimmed.toLowerCase();
+        if (lower === 'all' || orderedSeenLower.has(lower)) return;
+        orderedSeenLower.add(lower);
+        orderedCatNames.push(trimmed);
+      };
+      apiCats.forEach((c) => addOrdered(c.name));
+      extraCats.forEach((name) => addOrdered(name));
+
+      const canonicalByLower = new Map(
+        orderedCatNames.map((name) => [name.toLowerCase(), name])
+      );
+
+      const normalizedItems = (items || []).map((it) => {
+        const rawName = String(it.category || 'General').trim() || 'General';
+        const canonical =
+          canonicalByLower.get(rawName.toLowerCase()) || rawName;
+        return { ...it, category: canonical };
+      });
+
+      // Build category list with 'All' first, then by sort order.
+      const byCat = new Map();
+      byCat.set('All', { id: 'all', name: 'All', items: [...normalizedItems] });
+
+      orderedCatNames.forEach((name) => {
+        if (!name) return;
+        if (name.toLowerCase() === 'all') return;
+        if (byCat.has(name)) return;
+        byCat.set(name, { id: name, name, items: [] });
+      });
+
+      normalizedItems.forEach((it) => {
+        const canonical = String(it.category || 'General').trim() || 'General';
+        if (!byCat.has(canonical)) {
+          byCat.set(canonical, { id: canonical, name: canonical, items: [] });
+        }
+        byCat.get(canonical).items.push(it);
       });
 
       const grouped = Array.from(byCat.values());

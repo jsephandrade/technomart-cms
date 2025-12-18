@@ -18,11 +18,9 @@ const ItemCard = ({
   onArchive = () => {},
   onRestore = () => {},
   onHardDeleteRequest,
-  density = 'comfortable',
 }) => {
   const [imageError, setImageError] = useState(false);
   const isArchived = mode === 'archived';
-  const isCompact = density === 'compact';
 
   const imageSrc = useMemo(() => {
     if (!item) return null;
@@ -83,25 +81,17 @@ const ItemCard = ({
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/60 via-primary to-primary/60 z-10" />
 
       <div className="relative z-10">
-        <CardHeader
-          className={isCompact ? 'p-3 pb-0 space-y-2' : 'p-4 pb-0 space-y-3'}
-        >
+        <CardHeader className="p-4 pb-0 space-y-3">
           <div className="relative rounded-lg border border-border/40 bg-background/60 backdrop-blur-sm shadow-inner">
             {showImage ? (
               <img
                 src={imageSrc}
                 alt={item.name}
-                className={`w-full rounded-lg object-cover transition-transform duration-500 group-hover:scale-[1.02] ${
-                  isCompact ? 'h-20' : 'h-28'
-                }`}
+                className="h-28 w-full rounded-lg object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                 onError={() => setImageError(true)}
               />
             ) : (
-              <div
-                className={`flex w-full flex-col items-center justify-center gap-1 rounded-lg bg-muted/50 text-muted-foreground ${
-                  isCompact ? 'h-20' : 'h-28'
-                }`}
-              >
+              <div className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-lg bg-muted/50 text-muted-foreground">
                 <ImageIcon className="h-7 w-7" />
                 <span className="text-xs font-medium">No Image Available</span>
               </div>
@@ -116,29 +106,19 @@ const ItemCard = ({
             </div>
           </div>
           <div className="space-y-1">
-            <CardTitle
-              className={`font-semibold leading-tight text-foreground line-clamp-2 ${
-                isCompact ? 'text-base sm:text-lg' : 'text-lg sm:text-xl'
-              }`}
-            >
+            <CardTitle className="text-l font-semibold leading-tight text-foreground line-clamp-2">
               {item.name}
             </CardTitle>
           </div>
         </CardHeader>
 
-        <CardContent
-          className={isCompact ? 'p-3 pt-2 space-y-2' : 'p-4 pt-3 space-y-3'}
-        >
+        <CardContent className="p-4 pt-3 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                 Starting at
               </p>
-              <p
-                className={`font-semibold text-primary ${
-                  isCompact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'
-                }`}
-              >
+              <p className="text-2xl font-semibold text-primary">
                 ₱{Number(item.price).toFixed(2)}
               </p>
             </div>
@@ -151,15 +131,11 @@ const ItemCard = ({
               </Badge>
             )}
           </div>
-          <div
-            className={`flex items-center justify-end gap-2 ${
-              isCompact ? 'pt-1' : 'pt-2'
-            }`}
-          >
+          <div className="flex items-center justify-end gap-2 pt-2">
             <Button
               variant="outline"
               size="sm"
-              className={isCompact ? 'h-7 px-2 text-xs' : 'h-8 px-2 text-xs'}
+              className="h-8 px-2 text-xs"
               onClick={() => onEdit(item)}
             >
               <Edit className="h-3 w-3 mr-1" /> Edit
@@ -169,7 +145,7 @@ const ItemCard = ({
                 <Button
                   variant="default"
                   size="icon"
-                  className={isCompact ? 'h-7 w-7' : 'h-8 w-8'}
+                  className="h-8 w-8"
                   onClick={() => onRestore(item)}
                   aria-label={`Restore ${item.name}`}
                   title={`Restore ${item.name}`}
@@ -180,7 +156,7 @@ const ItemCard = ({
                   <Button
                     variant="destructive"
                     size="icon"
-                    className={isCompact ? 'h-7 w-7' : 'h-8 w-8'}
+                    className="h-8 w-8"
                     onClick={() => onHardDeleteRequest(item)}
                     aria-label={`Delete ${item.name} permanently`}
                     title={`Delete ${item.name} permanently`}
@@ -193,7 +169,7 @@ const ItemCard = ({
               <Button
                 variant="destructive"
                 size="icon"
-                className={isCompact ? 'h-7 w-7' : 'h-8 w-8'}
+                className="h-8 w-8"
                 onClick={() => onArchive(item.id)}
                 aria-label={`Archive ${item.name}`}
                 title={`Archive ${item.name}`}

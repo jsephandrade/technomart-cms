@@ -1,5 +1,5 @@
 // src/components/menu/CategoryTabs.jsx
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
@@ -26,10 +26,12 @@ const CategoryTabs = ({
   archivedLoading = false,
   onRestore = () => {},
 }) => {
-  const [view, setView] = useState('grid');
+  const [activeView, setActiveView] = useState('grid');
+  const [archivedView, setArchivedView] = useState('list');
   const [activeTab, setActiveTab] = useState('all');
   const [editingCategory, setEditingCategory] = useState(null);
   const showArchived = activeTab === 'archived';
+  const view = showArchived ? archivedView : activeView;
   const tabTriggerClasses =
     'min-w-fit whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
 
@@ -50,10 +52,6 @@ const CategoryTabs = ({
     });
     return map;
   }, [categoryRows]);
-
-  useEffect(() => {
-    if (showArchived) setView('list');
-  }, [showArchived]);
 
   const openEditCategory = useCallback(
     (event, categoryName) => {
@@ -82,21 +80,29 @@ const CategoryTabs = ({
     [activeTab, editingCategory, onCategoryUpdated]
   );
 
-  const renderItems = (list) =>
+  const renderItems = (list, mode = 'active') =>
     view === 'grid' ? (
-      <ItemGrid items={list} onEdit={onEdit} onArchive={onArchive} />
+      <ItemGrid
+        items={list}
+        onEdit={onEdit}
+        onArchive={onArchive}
+        mode={mode}
+        onRestore={mode === 'archived' ? onRestore : undefined}
+      />
     ) : (
-      <ItemList items={list} onEdit={onEdit} onArchive={onArchive} />
+      <ItemList
+        items={list}
+        onEdit={onEdit}
+        onArchive={onArchive}
+        mode={mode}
+        onRestore={mode === 'archived' ? onRestore : undefined}
+      />
     );
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <TabsList
-          className={`${
-            showArchived ? 'hidden md:flex md:opacity-60' : 'flex'
-          } h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/80 p-1 shadow-sm sm:gap-2`}
-        >
+        <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/80 p-1 shadow-sm sm:gap-2">
           <TabsTrigger value="all" className={tabTriggerClasses}>
             All Items
           </TabsTrigger>
@@ -138,27 +144,28 @@ const CategoryTabs = ({
           </TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2 self-end md:self-auto">
-          <div
-            className={
-              showArchived ? 'pointer-events-none opacity-40' : undefined
-            }
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => {
+              if (!v) return;
+              if (showArchived) {
+                setArchivedView(v);
+              } else {
+                setActiveView(v);
+              }
+            }}
+            variant="outline"
+            size="sm"
+            aria-label="View mode"
           >
-            <ToggleGroup
-              type="single"
-              value={view}
-              onValueChange={(v) => v && setView(v)}
-              variant="outline"
-              size="sm"
-              aria-label="View mode"
-            >
-              <ToggleGroupItem value="grid" aria-label="Grid view">
-                <LayoutGrid className="h-4 w-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="list" aria-label="List view">
-                <List className="h-4 w-4" />
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
+            <ToggleGroupItem value="grid" aria-label="Grid view">
+              <LayoutGrid className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
           <Button
             variant={showArchived ? 'default' : 'outline'}
             size="icon"
@@ -228,12 +235,7 @@ const CategoryTabs = ({
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : archivedItems && archivedItems.length > 0 ? (
-          <ItemList
-            items={archivedItems}
-            onEdit={onEdit}
-            mode="archived"
-            onRestore={onRestore}
-          />
+          renderItems(archivedItems, 'archived')
         ) : (
           <div className="rounded-md border border-dashed border-muted-foreground/40 p-8 text-center text-sm text-muted-foreground">
             No archived menu items yet.

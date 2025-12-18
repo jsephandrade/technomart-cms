@@ -6,6 +6,8 @@ const ItemGrid = ({
   items = [],
   onEdit,
   onArchive = () => {},
+  onRestore = () => {},
+  mode = 'active',
   showCategory = false,
 }) => {
   return (
@@ -16,6 +18,8 @@ const ItemGrid = ({
           item={showCategory ? item : { ...item }}
           onEdit={onEdit}
           onArchive={onArchive}
+          onRestore={onRestore}
+          mode={mode}
         />
       ))}
     </div>

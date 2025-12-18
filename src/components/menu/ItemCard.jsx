@@ -3,10 +3,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Edit, Archive, Image as ImageIcon } from 'lucide-react';
+import { Archive, Edit, Image as ImageIcon, RotateCcw } from 'lucide-react';
 
-const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
+const ItemCard = ({
+  item,
+  mode = 'active',
+  onEdit,
+  onArchive = () => {},
+  onRestore = () => {},
+}) => {
   const [imageError, setImageError] = useState(false);
+  const isArchived = mode === 'archived';
 
   const imageSrc = useMemo(() => {
     if (!item) return null;
@@ -32,6 +39,23 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
   }, [imageSrc]);
 
   const showImage = Boolean(imageSrc) && !imageError;
+  const badge = isArchived
+    ? {
+        label: 'Archived',
+        variant: 'outline',
+        className: 'bg-slate-100 text-slate-600 border-transparent',
+      }
+    : item.available
+      ? {
+          label: 'Available',
+          variant: 'outline',
+          className: 'bg-[#CDECC7] text-[#1E5B36] border-transparent',
+        }
+      : {
+          label: 'Unavailable',
+          variant: 'destructive',
+          className: '',
+        };
 
   return (
     <Card className="group relative h-full overflow-hidden border border-border/50 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
@@ -67,14 +91,10 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
             )}
             <div className="pointer-events-none absolute bottom-2 left-2">
               <Badge
-                variant={item.available ? 'outline' : 'destructive'}
-                className={`backdrop-blur-sm text-[11px] font-semibold uppercase tracking-wide ${
-                  item.available
-                    ? 'bg-[#CDECC7] text-[#1E5B36] border-transparent'
-                    : ''
-                }`}
+                variant={badge.variant}
+                className={`backdrop-blur-sm text-[11px] font-semibold uppercase tracking-wide ${badge.className}`}
               >
-                {item.available ? 'Available' : 'Unavailable'}
+                {badge.label}
               </Badge>
             </div>
           </div>
@@ -113,16 +133,29 @@ const ItemCard = ({ item, onEdit, onArchive = () => {} }) => {
             >
               <Edit className="h-3 w-3 mr-1" /> Edit
             </Button>
-            <Button
-              variant="destructive"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => onArchive(item.id)}
-              aria-label={`Archive ${item.name}`}
-              title={`Archive ${item.name}`}
-            >
-              <Archive className="h-4 w-4" />
-            </Button>
+            {isArchived ? (
+              <Button
+                variant="default"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onRestore(item)}
+                aria-label={`Restore ${item.name}`}
+                title={`Restore ${item.name}`}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onArchive(item.id)}
+                aria-label={`Archive ${item.name}`}
+                title={`Archive ${item.name}`}
+              >
+                <Archive className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </CardContent>
       </div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Dialog,
   DialogContent,
@@ -15,11 +16,11 @@ import {
 import menuService from '@/api/services/menuService';
 import { toast } from 'sonner';
 
-const normalizeSortOrderInput = (value) => {
+const normalizeSortOrderSelection = (value) => {
   if (value === '' || value === null || value === undefined) return '';
   const parsed = parseInt(String(value), 10);
-  if (!Number.isFinite(parsed)) return '';
-  return String(Math.max(0, parsed));
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 5) return '';
+  return String(parsed);
 };
 
 const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
@@ -32,7 +33,7 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
     return {
       name: String(category.name || '').trim(),
       description: String(category.description || '').trim(),
-      sortOrder: normalizeSortOrderInput(sortOrderRaw),
+      sortOrder: normalizeSortOrderSelection(sortOrderRaw),
     };
   }, [category]);
 
@@ -57,12 +58,12 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
     const payload = {
       name: trimmedName,
       description: (description || '').trim(),
-      sortOrder: (() => {
-        const parsed = parseInt(String(sortOrder), 10);
-        if (!Number.isFinite(parsed)) return 0;
-        return Math.max(0, parsed);
-      })(),
     };
+
+    const sortSelection = (sortOrder || '').trim();
+    if (sortSelection) {
+      payload.sortOrder = parseInt(sortSelection, 10);
+    }
 
     setSaving(true);
     try {
@@ -74,12 +75,6 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
       toast.error(error?.message || 'Failed to update category');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const blockExponentInput = (event) => {
-    if (event.key === 'e' || event.key === 'E') {
-      event.preventDefault();
     }
   };
 
@@ -126,23 +121,33 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
           </div>
 
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="edit-category-sort" className="text-right">
-              Sort Order
-            </Label>
-            <Input
-              id="edit-category-sort"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              value={sortOrder}
-              onChange={(e) => {
-                const value = Math.max(1, Number(e.target.value));
-                setSortOrder(normalizeSortOrderInput(value));
-              }}
-              onKeyDown={blockExponentInput}
-              className="col-span-3"
-              disabled={saving}
-            />
+            <Label className="text-right">Sort Order</Label>
+            <div className="col-span-3 space-y-1">
+              <ToggleGroup
+                type="single"
+                value={sortOrder}
+                onValueChange={setSortOrder}
+                variant="outline"
+                size="sm"
+                className="w-fit justify-start"
+                aria-label="Category sort order"
+                disabled={saving}
+              >
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <ToggleGroupItem
+                    key={n}
+                    value={String(n)}
+                    aria-label={`Sort order ${n}`}
+                    className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:border-primary"
+                  >
+                    {n}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                Select 1-5, or leave empty to keep the current order.
+              </p>
+            </div>
           </div>
         </div>
 

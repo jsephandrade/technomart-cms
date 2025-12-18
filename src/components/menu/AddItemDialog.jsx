@@ -113,6 +113,7 @@ const AddItemDialog = ({
               type="number"
               inputMode="decimal"
               value={newItem.price ?? ''}
+              placeholder="0.00"
               onChange={handlePriceChange}
               onKeyDown={blockExponentInput}
               className="col-span-3"
@@ -195,32 +196,28 @@ const AddItemDialog = ({
                   />
                 </label>
               </div>
-              <div className="rounded-lg border bg-muted p-2">
-                <div className="text-xs text-muted-foreground mb-1">
-                  Preview
-                </div>
-                {newItem.imageUrl || newItem.image ? (
+              {(newItem.imageUrl || newItem.image) && (
+                <div className="rounded-lg border bg-muted p-2">
+                  <div className="mb-1 text-xs text-muted-foreground">
+                    Preview
+                  </div>
                   <img
                     src={newItem.imageUrl || newItem.image}
                     alt={newItem.name || 'Preview'}
                     className="h-32 w-full rounded-md object-cover"
                   />
-                ) : (
-                  <div className="flex h-32 w-full items-center justify-center rounded-md bg-muted/60 text-sm text-muted-foreground">
-                    No image selected
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveImage}
+                    >
+                      Remove
+                    </Button>
                   </div>
-                )}
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRemoveImage}
-                  >
-                    Remove
-                  </Button>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

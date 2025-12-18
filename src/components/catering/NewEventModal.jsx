@@ -480,7 +480,7 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    When service begins for this event.
+                    Start time of the event.
                   </p>
                 )}
               </div>
@@ -508,7 +508,7 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    When service ends for this event.
+                    End time of the event.
                   </p>
                 )}
               </div>
@@ -521,9 +521,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <MapPin className="h-4 w-4" />
               <span>Location & Guests</span>
-              <Badge variant="secondary" className="text-xs">
-                Optional
-              </Badge>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -591,9 +588,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <User className="h-4 w-4" />
               <span>Contact</span>
-              <Badge variant="secondary" className="text-xs">
-                Optional
-              </Badge>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -657,9 +651,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <FileText className="h-4 w-4" />
               <span>Notes</span>
-              <Badge variant="secondary" className="text-xs">
-                Optional
-              </Badge>
             </div>
 
             <div className="space-y-2">

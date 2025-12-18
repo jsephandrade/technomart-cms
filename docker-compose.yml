@@ -7,6 +7,12 @@ services:
       - ./backend/.env
     environment:
       DJANGO_WAIT_FOR_DB: "1"   # optional; only useful if your entrypoint uses it
+      # Ensure the API container uses the dockerized MySQL service (not the host machine).
+      DJANGO_DB_HOST: mysql
+      DJANGO_DB_PORT: "3306"
+      DJANGO_DB_NAME: technomart_db
+      DJANGO_DB_USER: technomart_user
+      DJANGO_DB_PASSWORD: technomart_4
     command: >
       sh -c "
         python manage.py runserver 0.0.0.0:8000

@@ -142,13 +142,15 @@ The project exclusively targets MySQL 8. Default dev credentials are baked into 
 
 ```
 DJANGO_DB_ENGINE=mysql
-DJANGO_DB_NAME=technomart
-DJANGO_DB_USER=tm_user
-DJANGO_DB_PASSWORD=tm_password
-DJANGO_DB_HOST=mysql  # use 127.0.0.1 if running MySQL outside Docker
+DJANGO_DB_NAME=technomart_db
+DJANGO_DB_USER=technomart_user
+DJANGO_DB_PASSWORD=technomart_4
+DJANGO_DB_HOST=mysql  # in docker-compose; use 127.0.0.1 when running backend natively
 DJANGO_DB_PORT=3306
 DJANGO_DB_CONN_MAX_AGE=60
 ```
+
+When running via Docker Compose, the MySQL container is exposed on the host at `127.0.0.1:3307` (Workbench should connect to that), while containers use `mysql:3306`.
 
 Ensure the MySQL server is running with UTF8MB4 character set and that the user has full privileges on the database.
 
@@ -252,4 +254,4 @@ Backend
 ---
 
 If you need other providers (Azure AD, Facebook) or extra roles/permissions, we can extend the allauth adapter and RBAC model accordingly.
-"# frondend" 
+"# frondend"

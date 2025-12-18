@@ -2,6 +2,18 @@ import { useEffect, useState, useCallback } from 'react';
 import menuService from '@/api/services/menuService';
 import { toast } from 'sonner';
 
+const resolveMenuPollIntervalMs = () => {
+  try {
+    const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+    const raw = env?.VITE_MENU_POLL_INTERVAL_MS;
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return env?.DEV ? 5000 : 0;
+  } catch {
+    return 0;
+  }
+};
+
 const EMPTY_QUEUE = {
   orders: [],
   stations: [],
@@ -101,6 +113,28 @@ export const usePOSData = () => {
 
   useEffect(() => {
     loadMenu();
+  }, [loadMenu]);
+
+  // Poll menu periodically so external DB changes (like seed scripts) appear without a reload.
+  useEffect(() => {
+    const intervalMs = resolveMenuPollIntervalMs();
+    if (!intervalMs) return;
+    let timer = null;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        await loadMenu();
+      } catch {
+        // handled by loadMenu toast
+      } finally {
+        if (!cancelled) timer = setTimeout(tick, intervalMs);
+      }
+    };
+    timer = setTimeout(tick, intervalMs);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [loadMenu]);
 
   // Auto-refresh when menu items are created/updated/images uploaded elsewhere

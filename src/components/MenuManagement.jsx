@@ -46,10 +46,25 @@ const MenuManagement = () => {
   } = useMenuManagement({ archived: true });
   const { categories: categoryRows, refetch: refetchCategories } =
     useMenuCategories();
-  const categories = useMemo(
-    () => (categoryRows || []).map((c) => c.name),
-    [categoryRows]
-  );
+  const categories = useMemo(() => {
+    const result = [];
+    const seen = new Set();
+    const add = (value) => {
+      const name = String(value || '').trim();
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      result.push(name);
+    };
+    (categoryRows || []).forEach((c) => {
+      if (typeof c === 'string') {
+        add(c);
+      } else if (c && typeof c === 'object') {
+        add(c.name || c.label || c.title || c.slug || '');
+      }
+    });
+    (items || []).forEach((it) => add(it?.category));
+    return result;
+  }, [categoryRows, items]);
   const itemsWithImages = items;
   const archivedItemsWithImages = archivedItems;
 

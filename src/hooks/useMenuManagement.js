@@ -1,11 +1,25 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import menuService from '@/api/services/menuService';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+const resolvePollIntervalMs = () => {
+  try {
+    const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+    const raw = env?.VITE_MENU_POLL_INTERVAL_MS;
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    // Default to lightweight polling in dev so external DB changes (seeding) show up without manual refresh.
+    return env?.DEV ? 5000 : 0;
+  } catch {
+    return 0;
+  }
+};
+
 export const useMenuManagement = (params = {}) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const pollIntervalMs = resolvePollIntervalMs();
 
   const sanitizeUpdatePayload = useCallback((updates = {}) => {
     const safe = {};
@@ -161,7 +175,8 @@ export const useMenuManagement = (params = {}) => {
     staleTime: 20_000,
     gcTime: 5 * 60_000,
     keepPreviousData: true,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: pollIntervalMs ? false : true,
+    refetchInterval: pollIntervalMs || false,
     onError: () => {
       toast({
         title: 'Error Loading Menu',
@@ -411,55 +426,47 @@ export const useMenuManagement = (params = {}) => {
 };
 
 export const useMenuCategories = () => {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const pollIntervalMs = resolvePollIntervalMs();
 
-  const fetchCategories = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
+  const query = useQuery({
+    queryKey: ['menuCategories'],
+    queryFn: async () => {
       const response = await menuService.getCategories();
-
-      if (response.success) {
-        setCategories(response.data);
-      } else {
-        throw new Error('Failed to fetch categories');
-      }
-    } catch (error) {
-      setError(error.message);
+      if (!response?.success) throw new Error('Failed to fetch categories');
+      return response.data || [];
+    },
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: pollIntervalMs ? false : true,
+    refetchInterval: pollIntervalMs || false,
+    keepPreviousData: true,
+    onError: () => {
       toast({
         title: 'Error Loading Categories',
         description: 'Failed to load menu categories. Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+    },
+  });
 
-  useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
-
-  const refetch = useCallback(() => fetchCategories(), [fetchCategories]);
+  const refetch = useCallback(() => query.refetch(), [query.refetch]);
 
   useEffect(() => {
     const handler = () => {
-      fetchCategories();
+      queryClient.invalidateQueries({ queryKey: ['menuCategories'] });
     };
     window?.addEventListener?.('menu.items.updated', handler);
     return () => {
       window?.removeEventListener?.('menu.items.updated', handler);
     };
-  }, [fetchCategories]);
+  }, [queryClient]);
 
   return {
-    categories,
-    loading,
-    error,
+    categories: query.data || [],
+    loading: query.isLoading,
+    error: query.error?.message || null,
     refetch,
   };
 };

@@ -147,7 +147,7 @@ const CategoryTabs = ({
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/80 p-1 shadow-sm sm:gap-2">
+        <TabsList className="flex h-auto w-full flex-wrap items-center justify-between gap-1 sm:w-fit sm:justify-start sm:gap-2">
           <TabsTrigger value="all" className={tabTriggerClasses}>
             All Items
           </TabsTrigger>

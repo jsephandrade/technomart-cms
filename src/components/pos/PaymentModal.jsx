@@ -170,8 +170,8 @@ const PaymentModal = ({
 
   return (
     <div className="fixed inset-0 bg-background/80 flex items-center justify-center z-50">
-      <Card className="mx-4 flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden">
-        <CardHeader className="shrink-0 flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="w-full max-w-md mx-4">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
             <CardTitle>Complete Payment</CardTitle>
             <CardDescription>Enter payment amount</CardDescription>
@@ -185,7 +185,7 @@ const PaymentModal = ({
             <X className="h-4 w-4" />
           </Button>
         </CardHeader>
-        <CardContent className="flex-1 min-h-0 space-y-6 overflow-y-auto scrollbar-hide">
+        <CardContent className="space-y-6">
           <div className="text-center">
             <p className="text-3xl font-bold">
               {PHP_SYMBOL}
@@ -254,7 +254,7 @@ const PaymentModal = ({
             </div>
           </div>
         </CardContent>
-        <CardFooter className="shrink-0 flex gap-3">
+        <CardFooter className="flex gap-3">
           <Button
             className="flex-1"
             onClick={handleProcessPayment}

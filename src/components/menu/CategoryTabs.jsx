@@ -1,5 +1,11 @@
 // src/components/menu/CategoryTabs.jsx
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
@@ -26,6 +32,8 @@ import ItemGrid from './ItemGrid';
 import ItemList from './ItemList';
 import EditCategoryDialog from './EditCategoryDialog';
 
+const MAX_VISIBLE_MENU_CATEGORIES = 8;
+
 const CategoryTabs = ({
   items = [],
   categories = [],
@@ -46,6 +54,7 @@ const CategoryTabs = ({
   const [hardDeleting, setHardDeleting] = useState(false);
   const hardDeletingRef = useRef(false);
   const tabsListRef = useRef(null);
+  const [tabsListMaxWidth, setTabsListMaxWidth] = useState(null);
   const showArchived = activeTab === 'archived';
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
@@ -141,6 +150,45 @@ const CategoryTabs = ({
     event.preventDefault();
   }, []);
 
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    if ((categories || []).length <= MAX_VISIBLE_MENU_CATEGORIES) {
+      setTabsListMaxWidth(null);
+      return undefined;
+    }
+
+    const calculateMaxWidth = () => {
+      const el = tabsListRef.current;
+      if (!el) return;
+
+      // Radix tabs triggers use role="tab" (even when using asChild).
+      const tabs = Array.from(el.querySelectorAll('[role="tab"]')).filter(
+        (node) => node.offsetParent !== null && node.offsetWidth > 0
+      );
+
+      // Show "All Items" + up to MAX_VISIBLE_MENU_CATEGORIES category tabs.
+      const targetIndex = Math.min(
+        MAX_VISIBLE_MENU_CATEGORIES,
+        tabs.length - 1
+      );
+      const target = tabs[targetIndex];
+      if (!target) {
+        setTabsListMaxWidth(null);
+        return;
+      }
+
+      const styles = window.getComputedStyle(el);
+      const padRight = parseFloat(styles.paddingRight || '0') || 0;
+      const rightEdge = target.offsetLeft + target.offsetWidth + padRight;
+      setTabsListMaxWidth(Math.ceil(rightEdge));
+    };
+
+    calculateMaxWidth();
+    window.addEventListener('resize', calculateMaxWidth);
+    return () => window.removeEventListener('resize', calculateMaxWidth);
+  }, [categories]);
+
   const renderItems = (list, mode = 'active') =>
     view === 'grid' ? (
       <ItemGrid
@@ -168,6 +216,9 @@ const CategoryTabs = ({
         <TabsList
           ref={tabsListRef}
           onWheel={handleTabsListWheel}
+          style={
+            tabsListMaxWidth ? { maxWidth: `${tabsListMaxWidth}px` } : undefined
+          }
           className="flex h-auto w-full flex-1 min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overflow-y-hidden scrollbar-hide sm:gap-2"
         >
           <TabsTrigger value="all" className={tabTriggerClasses}>

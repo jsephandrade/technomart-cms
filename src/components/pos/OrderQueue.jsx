@@ -1,4 +1,10 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, {
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   Card,
   CardContent,
@@ -22,6 +28,7 @@ import { formatOrderNumber } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const LS_ORDER_QUEUE_CHECKED_ITEMS_KEY = 'pos_order_queue_checked_items';
+const CHECKLIST_AUTO_PAUSE_REASON = 'checklist_incomplete';
 
 const loadCheckedItems = () => {
   try {
@@ -212,12 +219,37 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
   const { can } = useAuth();
   const [statusUpdating, setStatusUpdating] = useState({});
   const [checkedItems, setCheckedItems] = useState(loadCheckedItems);
+  const autoFlowInFlightRef = useRef(new Set());
   const queueOrders = useMemo(() => {
     if (!orderQueue) return [];
     if (Array.isArray(orderQueue)) return orderQueue;
     const nested = orderQueue?.orders || orderQueue?.data?.orders;
     return Array.isArray(nested) ? nested : [];
   }, [orderQueue]);
+
+  const getItemKeys = useCallback((orderId, item, idx) => {
+    const stablePart = item?.id ? String(item.id) : String(idx);
+    return {
+      stable: `${orderId}-item-${stablePart}`,
+      legacy: `${orderId}-item-${idx}`,
+    };
+  }, []);
+
+  const isItemChecked = useCallback(
+    (keys) => checkedItems.has(keys.stable) || checkedItems.has(keys.legacy),
+    [checkedItems]
+  );
+
+  const areAllItemsChecked = useCallback(
+    (order) => {
+      const items = Array.isArray(order?.items) ? order.items : [];
+      if (items.length === 0) return true;
+      return items.every((item, idx) =>
+        isItemChecked(getItemKeys(order.id, item, idx))
+      );
+    },
+    [getItemKeys, isItemChecked]
+  );
 
   useEffect(() => {
     try {
@@ -232,13 +264,15 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
     } catch {}
   }, [checkedItems]);
 
-  const toggleItemChecked = useCallback((itemKey) => {
+  const toggleItemChecked = useCallback((keys) => {
     setCheckedItems((prev) => {
       const next = new Set(prev);
-      if (next.has(itemKey)) {
-        next.delete(itemKey);
+      const currentlyChecked = next.has(keys.stable) || next.has(keys.legacy);
+      if (currentlyChecked) {
+        next.delete(keys.stable);
+        next.delete(keys.legacy);
       } else {
-        next.add(itemKey);
+        next.add(keys.stable);
       }
       return next;
     });
@@ -263,6 +297,50 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
       }),
     [visibleOrders]
   );
+
+  useEffect(() => {
+    if (!updateOrderAutoFlow) return;
+    if (!can('order.status.update')) return;
+
+    const runAutoFlowAction = async (orderId, action) => {
+      if (!orderId) return;
+      const lockKey = `${orderId}:${action}`;
+      if (autoFlowInFlightRef.current.has(lockKey)) return;
+      autoFlowInFlightRef.current.add(lockKey);
+      try {
+        const payload =
+          action === 'pause'
+            ? { action, reason: CHECKLIST_AUTO_PAUSE_REASON }
+            : { action };
+        await updateOrderAutoFlow(orderId, payload);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        autoFlowInFlightRef.current.delete(lockKey);
+      }
+    };
+
+    visibleOrders.forEach((order) => {
+      const status = getOrderStatus(order);
+      if (!READY_STATUS_SET.has(status)) return;
+
+      const target = toCanonicalStatus(order?.autoAdvanceTarget);
+      if (target !== 'completed') return;
+
+      const allChecked = areAllItemsChecked(order);
+      const pauseReason = normalizeStatus(order?.autoAdvancePauseReason);
+      const pausedForChecklist = pauseReason === CHECKLIST_AUTO_PAUSE_REASON;
+
+      if (!allChecked && !order.autoAdvancePaused) {
+        runAutoFlowAction(order.id, 'pause');
+        return;
+      }
+
+      if (allChecked && order.autoAdvancePaused && pausedForChecklist) {
+        runAutoFlowAction(order.id, 'resume');
+      }
+    });
+  }, [areAllItemsChecked, can, updateOrderAutoFlow, visibleOrders]);
 
   const runStatusUpdates = useCallback(
     async (orderId, statuses) => {
@@ -470,6 +548,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                   'in_prep',
                 ].includes(status);
                 const isReady = ['ready', 'staged', 'handoff'].includes(status);
+                const allItemsChecked = areAllItemsChecked(order);
                 const disableAutoAdvance = shouldDisableReadyAutoAdvance(
                   order,
                   status
@@ -511,11 +590,11 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(
                         (item, idx) => {
-                          const itemKey = `${order.id}-item-${idx}`;
-                          const checked = checkedItems.has(itemKey);
+                          const keys = getItemKeys(order.id, item, idx);
+                          const checked = isItemChecked(keys);
                           return (
                             <label
-                              key={itemKey}
+                              key={keys.stable}
                               className="flex items-start justify-between gap-3 text-sm"
                             >
                               <span className="flex flex-1 items-center gap-2">
@@ -523,7 +602,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                                   type="checkbox"
                                   className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
                                   checked={checked}
-                                  onChange={() => toggleItemChecked(itemKey)}
+                                  onChange={() => toggleItemChecked(keys)}
                                 />
                                 <span>
                                   {item.quantity}x {item.name}
@@ -583,10 +662,23 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                             size="sm"
                             variant="default"
                             className="flex-1 bg-green-600 hover:bg-green-700"
-                            disabled={statusUpdating[order.id]}
-                            onClick={() =>
-                              handleStatusChange(order.id, 'completed')
+                            disabled={
+                              statusUpdating[order.id] || !allItemsChecked
                             }
+                            title={
+                              allItemsChecked
+                                ? undefined
+                                : 'Check all items before completing the order'
+                            }
+                            onClick={() => {
+                              if (!allItemsChecked) {
+                                toast.error(
+                                  'Please check all items before completing the order.'
+                                );
+                                return;
+                              }
+                              handleStatusChange(order.id, 'completed');
+                            }}
                           >
                             {statusUpdating[order.id] ? (
                               <>
@@ -680,6 +772,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                   'in_prep',
                 ].includes(status);
                 const isReady = ['ready', 'staged', 'handoff'].includes(status);
+                const allItemsChecked = areAllItemsChecked(order);
                 const disableAutoAdvance = shouldDisableReadyAutoAdvance(
                   order,
                   status
@@ -724,11 +817,11 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(
                         (item, idx) => {
-                          const itemKey = `${order.id}-item-${idx}`;
-                          const checked = checkedItems.has(itemKey);
+                          const keys = getItemKeys(order.id, item, idx);
+                          const checked = isItemChecked(keys);
                           return (
                             <label
-                              key={itemKey}
+                              key={keys.stable}
                               className="flex items-start justify-between gap-3 text-sm"
                             >
                               <span className="flex flex-1 items-center gap-2">
@@ -736,7 +829,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                                   type="checkbox"
                                   className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
                                   checked={checked}
-                                  onChange={() => toggleItemChecked(itemKey)}
+                                  onChange={() => toggleItemChecked(keys)}
                                 />
                                 <span>
                                   {item.quantity}x {item.name}
@@ -796,10 +889,23 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                             size="sm"
                             variant="default"
                             className="flex-1 bg-green-600 hover:bg-green-700"
-                            disabled={statusUpdating[order.id]}
-                            onClick={() =>
-                              handleStatusChange(order.id, 'completed')
+                            disabled={
+                              statusUpdating[order.id] || !allItemsChecked
                             }
+                            title={
+                              allItemsChecked
+                                ? undefined
+                                : 'Check all items before completing the order'
+                            }
+                            onClick={() => {
+                              if (!allItemsChecked) {
+                                toast.error(
+                                  'Please check all items before completing the order.'
+                                );
+                                return;
+                              }
+                              handleStatusChange(order.id, 'completed');
+                            }}
                           >
                             {statusUpdating[order.id] ? (
                               <>

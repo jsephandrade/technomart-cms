@@ -16,7 +16,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Max
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
@@ -50,6 +50,35 @@ def _resolve_category_id(category_value, category_map=None):
         return str(found) if found else None
     except Exception:
         return None
+
+
+def _get_or_create_menu_category_name(category_value):
+    name = (category_value or "").strip()
+    if not name:
+        return ""
+    try:
+        from .models import MenuCategory  # local import to avoid circulars during migrations
+
+        existing = MenuCategory.objects.filter(name__iexact=name).first()
+        if existing:
+            return existing.name or name
+
+        try:
+            next_sort = (
+                MenuCategory.objects.aggregate(max_sort=Max("sort_order")).get("max_sort")
+                or 0
+            ) + 1
+        except Exception:
+            next_sort = 0
+
+        created = MenuCategory.objects.create(
+            name=name,
+            description="",
+            sort_order=next_sort,
+        )
+        return created.name or name
+    except Exception:
+        return name
 
 
 def _safe_menu_item(mi, category_map=None):
@@ -470,6 +499,7 @@ def menu_items(request):
         available = bool(payload.get("available", True))
         image_url = None
         with transaction.atomic():
+            category = _get_or_create_menu_category_name(category)
             mi = MenuItem.objects.create(
                 name=name,
                 description=description,
@@ -591,6 +621,8 @@ def menu_item_detail(request, item_id):
                     if k == "description" and val == "":
                         fields[k] = None
                     else:
+                        if k == "category" and val:
+                            val = _get_or_create_menu_category_name(val)
                         fields[k] = val
             if "price" in payload:
                 raw_price = payload.get("price")

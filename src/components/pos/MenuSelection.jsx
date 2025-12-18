@@ -274,54 +274,61 @@ const MenuSelection = ({
             defaultValue={categories[0]?.id || ''}
             value={activeCategory}
             onValueChange={setActiveCategory}
-            className="flex-1 flex-col"
+            className="flex flex-1 flex-col"
           >
-            <div className="border-b">
-              <TabsList className="h-auto w-full justify-start overflow-auto p-0">
-                {categories.map((category) => (
-                  <TabsTrigger
-                    key={category.id}
-                    value={category.id}
-                    className="px-4 py-2 transition-colors data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    {category.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
+            <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+              <div className="border-b md:w-52 md:flex-shrink-0 md:border-b-0 md:border-r">
+                <TabsList className="!h-auto !w-full !justify-start overflow-x-auto overflow-y-hidden !p-0 md:!h-full md:flex-col md:!items-stretch md:overflow-y-auto md:overflow-x-hidden md:!p-1">
+                  {categories.map((category) => (
+                    <TabsTrigger
+                      key={category.id}
+                      value={category.id}
+                      className="!px-4 !py-2 md:w-full md:!justify-start md:!px-3 md:!py-2 transition-colors data-[state=active]:!bg-primary data-[state=active]:!text-primary-foreground"
+                    >
+                      <span className="block w-full truncate">
+                        {category.name}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
 
-            {categories.map((category) => {
-              const categoryItems = Array.isArray(category.items)
-                ? category.items
-                : [];
-              const showBadge = category.id === 'all' || category.id === 'All';
-              return (
-                <TabsContent
-                  key={category.id}
-                  value={category.id}
-                  className="flex-1 overflow-y-auto p-0"
-                >
-                  <div className="grid grid-cols-1 justify-center gap-4 p-3 sm:grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
-                    {categoryItems.length > 0 ? (
-                      categoryItems.map((item) => (
-                        <ItemCard
-                          key={item.id}
-                          item={item}
-                          showCategoryBadge={showBadge}
-                        />
-                      ))
-                    ) : (
-                      <div className="col-span-full py-12 text-center">
-                        <AlertCircle className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
-                        <p className="text-muted-foreground">
-                          No items in this category
-                        </p>
+              <div className="flex flex-1 flex-col overflow-hidden">
+                {categories.map((category) => {
+                  const categoryItems = Array.isArray(category.items)
+                    ? category.items
+                    : [];
+                  const showBadge =
+                    category.id === 'all' || category.id === 'All';
+                  return (
+                    <TabsContent
+                      key={category.id}
+                      value={category.id}
+                      className="!mt-0 flex-1 overflow-y-auto p-0"
+                    >
+                      <div className="grid grid-cols-1 justify-center gap-4 p-3 sm:grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
+                        {categoryItems.length > 0 ? (
+                          categoryItems.map((item) => (
+                            <ItemCard
+                              key={item.id}
+                              item={item}
+                              showCategoryBadge={showBadge}
+                            />
+                          ))
+                        ) : (
+                          <div className="col-span-full py-12 text-center">
+                            <AlertCircle className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
+                            <p className="text-muted-foreground">
+                              No items in this category
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </TabsContent>
-              );
-            })}
+                    </TabsContent>
+                  );
+                })}
+              </div>
+            </div>
           </Tabs>
         )}
       </FeaturePanelCard>

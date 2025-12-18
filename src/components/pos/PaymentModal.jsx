@@ -19,24 +19,7 @@ const NUMBER_PAD_LAYOUT = [
   ['C', '0', '.'],
 ];
 
-const CASH_DENOMINATIONS = [20, 50, 100, 200, 500, 1000];
 const PHP_SYMBOL = '\u20b1';
-
-const formatMoneyInput = (value) => {
-  const numeric = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numeric)) return '';
-  const fixed = numeric.toFixed(2);
-  return fixed.replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
-};
-
-const roundUp = (value, step) => {
-  const numeric = Number(value);
-  const size = Number(step);
-  if (!Number.isFinite(numeric) || !Number.isFinite(size) || size <= 0) {
-    return numeric;
-  }
-  return Math.ceil(numeric / size) * size;
-};
 
 const PaymentModal = ({
   isOpen,
@@ -56,33 +39,6 @@ const PaymentModal = ({
     () => calculateTotal(),
     [calculateTotal, _currentOrder, _discount]
   );
-  const suggestedAmounts = useMemo(() => {
-    const total = Number(totalAmount) || 0;
-    if (total <= 0) return [];
-
-    const candidates = [
-      { label: 'Exact', value: total },
-      { label: 'Next 10', value: roundUp(total, 10) },
-      { label: 'Next 50', value: roundUp(total, 50) },
-      { label: 'Next 100', value: roundUp(total, 100) },
-      { label: 'Next 500', value: roundUp(total, 500) },
-    ];
-
-    const seen = new Set();
-    const out = [];
-    candidates.forEach((candidate) => {
-      const valueRaw = Number.isFinite(candidate.value)
-        ? candidate.value
-        : total;
-      const value = Math.round(valueRaw * 100) / 100;
-      if (value < total) return;
-      const key = String(value);
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push({ ...candidate, value });
-    });
-    return out;
-  }, [totalAmount]);
   const paymentValue = useMemo(
     () => parseFloat(paymentAmount) || 0,
     [paymentAmount]
@@ -103,19 +59,6 @@ const PaymentModal = ({
       setPaymentAmount(value);
     }
   };
-
-  const setPaymentAmountFromNumber = useCallback((value) => {
-    setPaymentAmount(formatMoneyInput(value));
-  }, []);
-
-  const handleAddDenomination = useCallback((amount) => {
-    const delta = Number(amount || 0);
-    setPaymentAmount((prev) => {
-      const current = parseFloat(prev);
-      const base = Number.isFinite(current) ? current : 0;
-      return formatMoneyInput(base + delta);
-    });
-  }, []);
 
   const handleNumberClick = useCallback((number) => {
     setPaymentAmount((prev) => {
@@ -269,49 +212,6 @@ const PaymentModal = ({
                 className="text-lg text-center"
                 autoFocus
               />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Quick cash
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {suggestedAmounts.map((suggestion) => (
-                  <Button
-                    key={suggestion.label}
-                    type="button"
-                    variant="outline"
-                    className="h-10 shrink-0 text-sm font-semibold"
-                    disabled={isProcessing}
-                    onClick={() => setPaymentAmountFromNumber(suggestion.value)}
-                    title={`${suggestion.label} (${PHP_SYMBOL}${formatMoneyInput(suggestion.value)})`}
-                  >
-                    {suggestion.label === 'Exact'
-                      ? 'Exact'
-                      : `${PHP_SYMBOL}${formatMoneyInput(suggestion.value)}`}
-                  </Button>
-                ))}
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {CASH_DENOMINATIONS.map((value) => (
-                  <Button
-                    key={value}
-                    type="button"
-                    variant="outline"
-                    className="h-10 shrink-0 text-sm font-semibold"
-                    disabled={isProcessing}
-                    onClick={() => handleAddDenomination(value)}
-                    title={`Add ${PHP_SYMBOL}${formatMoneyInput(value)}`}
-                  >
-                    {PHP_SYMBOL}
-                    {formatMoneyInput(value)}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Tip: Press <span className="font-medium">Enter</span> to process
-                and <span className="font-medium">Esc</span> to close.
-              </p>
             </div>
 
             {/* Number Keyboard */}

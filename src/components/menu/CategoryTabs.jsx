@@ -49,7 +49,7 @@ const CategoryTabs = ({
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
   const tabTriggerClasses =
-    'min-w-fit whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
+    'min-w-fit cursor-pointer select-none whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm';
 
   const unavailableItems = useMemo(
     () => (items || []).filter((item) => item?.available === false),

@@ -114,7 +114,7 @@ const AddItemDialog = ({
           <PlusCircle className="h-4 w-4" /> Add Item
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[650px]">
+      <DialogContent className="scrollbar-hide max-h-[90vh] overflow-y-auto sm:max-w-[650px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Utensils className="h-5 w-5" />
@@ -225,8 +225,6 @@ const AddItemDialog = ({
             </div>
           </div>
 
-          <Separator />
-
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <CircleDollarSign className="h-4 w-4" />
@@ -295,16 +293,11 @@ const AddItemDialog = ({
                   setNewItem({ ...newItem, description: e.target.value })
                 }
                 placeholder="e.g., Slow-cooked chicken in soy sauce and vinegar"
-                className="min-h-[90px]"
+                className="min-h-[40px]"
                 disabled={loading}
               />
-              <p className="text-xs text-muted-foreground">
-                Keep it short — this may appear in customer-facing screens.
-              </p>
             </div>
           </div>
-
-          <Separator />
 
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">

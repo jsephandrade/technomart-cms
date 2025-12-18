@@ -22,6 +22,8 @@ import {
 import {
   Archive,
   CircleSlash,
+  ChevronLeft,
+  ChevronRight,
   LayoutGrid,
   List,
   Loader2,
@@ -55,6 +57,9 @@ const CategoryTabs = ({
   const hardDeletingRef = useRef(false);
   const tabsListRef = useRef(null);
   const [tabsListMaxWidth, setTabsListMaxWidth] = useState(null);
+  const [tabsHasOverflow, setTabsHasOverflow] = useState(false);
+  const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false);
+  const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false);
   const showArchived = activeTab === 'archived';
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
@@ -150,6 +155,30 @@ const CategoryTabs = ({
     event.preventDefault();
   }, []);
 
+  const updateTabsScrollButtons = useCallback(() => {
+    const el = tabsListRef.current;
+    if (!el) return;
+    const overflow = el.scrollWidth > el.clientWidth + 1;
+    const maxScrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    const left = overflow && el.scrollLeft > 0;
+    const right = overflow && el.scrollLeft < maxScrollLeft - 1;
+    setTabsHasOverflow(overflow);
+    setTabsCanScrollLeft(left);
+    setTabsCanScrollRight(right);
+  }, []);
+
+  const scrollTabsList = useCallback((direction) => {
+    const el = tabsListRef.current;
+    if (!el) return;
+    const step = Math.max(120, Math.floor(el.clientWidth * 0.7));
+    const left = direction === 'left' ? -step : step;
+    try {
+      el.scrollBy({ left, behavior: 'smooth' });
+    } catch {
+      el.scrollLeft += left;
+    }
+  }, []);
+
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return undefined;
 
@@ -189,6 +218,22 @@ const CategoryTabs = ({
     return () => window.removeEventListener('resize', calculateMaxWidth);
   }, [categories]);
 
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const el = tabsListRef.current;
+    if (!el) return undefined;
+
+    const handle = () => updateTabsScrollButtons();
+    updateTabsScrollButtons();
+
+    el.addEventListener('scroll', handle, { passive: true });
+    window.addEventListener('resize', handle);
+    return () => {
+      el.removeEventListener('scroll', handle);
+      window.removeEventListener('resize', handle);
+    };
+  }, [categories, tabsListMaxWidth, updateTabsScrollButtons]);
+
   const renderItems = (list, mode = 'active') =>
     view === 'grid' ? (
       <ItemGrid
@@ -213,57 +258,92 @@ const CategoryTabs = ({
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <TabsList
-          ref={tabsListRef}
-          onWheel={handleTabsListWheel}
+        <div
+          className="relative w-full flex-1 min-w-0"
           style={
             tabsListMaxWidth ? { maxWidth: `${tabsListMaxWidth}px` } : undefined
           }
-          className="flex h-auto w-full flex-1 min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overflow-y-hidden scrollbar-hide sm:gap-2"
         >
-          <TabsTrigger value="all" className={tabTriggerClasses}>
-            All Items
-          </TabsTrigger>
-          {categories.map((category) => (
-            <TabsTrigger
-              key={category}
-              value={category}
-              className={`${tabTriggerClasses} justify-between gap-2 pr-1`}
-              asChild
-            >
-              <div>
-                <span className="truncate">{category}</span>
-                {categoryMetaByName.has(
-                  String(category || '')
-                    .trim()
-                    .toLowerCase()
-                ) && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 p-0 border"
-                    aria-label={`Edit ${category} category`}
-                    title={`Edit ${category}`}
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onClick={(event) => openEditCategory(event, category)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+          <TabsList
+            ref={tabsListRef}
+            onWheel={handleTabsListWheel}
+            className={`flex h-auto w-full flex-nowrap items-center justify-start gap-1 overflow-x-auto overflow-y-hidden scrollbar-hide sm:gap-2 ${
+              tabsHasOverflow ? 'pl-9 pr-9' : ''
+            }`}
+          >
+            <TabsTrigger value="all" className={tabTriggerClasses}>
+              All Items
             </TabsTrigger>
-          ))}
-          <TabsTrigger value="archived" className="hidden">
-            Archived
-          </TabsTrigger>
-          <TabsTrigger value="unavailable" className="hidden">
-            Unavailable
-          </TabsTrigger>
-        </TabsList>
+            {categories.map((category) => (
+              <TabsTrigger
+                key={category}
+                value={category}
+                className={`${tabTriggerClasses} justify-between gap-2 pr-1`}
+                asChild
+              >
+                <div>
+                  <span className="truncate">{category}</span>
+                  {categoryMetaByName.has(
+                    String(category || '')
+                      .trim()
+                      .toLowerCase()
+                  ) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 p-0 border"
+                      aria-label={`Edit ${category} category`}
+                      title={`Edit ${category}`}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => openEditCategory(event, category)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </TabsTrigger>
+            ))}
+            <TabsTrigger value="archived" className="hidden">
+              Archived
+            </TabsTrigger>
+            <TabsTrigger value="unavailable" className="hidden">
+              Unavailable
+            </TabsTrigger>
+          </TabsList>
+
+          {tabsHasOverflow ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute left-1 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full border border-border/60 bg-background/80 backdrop-blur hover:bg-muted"
+                onClick={() => scrollTabsList('left')}
+                disabled={!tabsCanScrollLeft}
+                aria-label="Scroll categories left"
+                title="Scroll left"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full border border-border/60 bg-background/80 backdrop-blur hover:bg-muted"
+                onClick={() => scrollTabsList('right')}
+                disabled={!tabsCanScrollRight}
+                aria-label="Scroll categories right"
+                title="Scroll right"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2 self-end md:self-auto">
           <ToggleGroup
             type="single"

@@ -1,9 +1,4 @@
-import React, {
-  useMemo,
-  useState,
-  useEffect,
-  useCallback,
-} from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -25,6 +20,20 @@ import {
 import { useAuth } from '@/components/AuthContext';
 import { formatOrderNumber } from '@/lib/utils';
 import { toast } from 'sonner';
+
+const LS_ORDER_QUEUE_CHECKED_ITEMS_KEY = 'pos_order_queue_checked_items';
+
+const loadCheckedItems = () => {
+  try {
+    const raw = localStorage.getItem(LS_ORDER_QUEUE_CHECKED_ITEMS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value) => typeof value === 'string'));
+  } catch {
+    return new Set();
+  }
+};
 
 const truthyValues = new Set([true, 'true', 1, '1']);
 const falsyValues = new Set([false, 'false', 0, '0']);
@@ -202,12 +211,38 @@ const formatCountdown = (seconds) => {
 const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
   const { can } = useAuth();
   const [statusUpdating, setStatusUpdating] = useState({});
+  const [checkedItems, setCheckedItems] = useState(loadCheckedItems);
   const queueOrders = useMemo(() => {
     if (!orderQueue) return [];
     if (Array.isArray(orderQueue)) return orderQueue;
     const nested = orderQueue?.orders || orderQueue?.data?.orders;
     return Array.isArray(nested) ? nested : [];
   }, [orderQueue]);
+
+  useEffect(() => {
+    try {
+      if (!checkedItems.size) {
+        localStorage.removeItem(LS_ORDER_QUEUE_CHECKED_ITEMS_KEY);
+        return;
+      }
+      localStorage.setItem(
+        LS_ORDER_QUEUE_CHECKED_ITEMS_KEY,
+        JSON.stringify(Array.from(checkedItems))
+      );
+    } catch {}
+  }, [checkedItems]);
+
+  const toggleItemChecked = useCallback((itemKey) => {
+    setCheckedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemKey)) {
+        next.delete(itemKey);
+      } else {
+        next.add(itemKey);
+      }
+      return next;
+    });
+  }, []);
 
   const visibleOrders = useMemo(() => {
     return queueOrders
@@ -474,16 +509,33 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     </div>
 
                     <div className="bg-muted/50 p-3 rounded-md">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-sm">
-                          <span>
-                            {item.quantity}x {item.name}
-                          </span>
-                          <span>
-                            ₱{(item.price * item.quantity).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
+                      {(Array.isArray(order.items) ? order.items : []).map(
+                        (item, idx) => {
+                          const itemKey = `${order.id}-item-${idx}`;
+                          const checked = checkedItems.has(itemKey);
+                          return (
+                            <label
+                              key={itemKey}
+                              className="flex items-start justify-between gap-3 text-sm"
+                            >
+                              <span className="flex flex-1 items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
+                                  checked={checked}
+                                  onChange={() => toggleItemChecked(itemKey)}
+                                />
+                                <span>
+                                  {item.quantity}x {item.name}
+                                </span>
+                              </span>
+                              <span>
+                                ₱{(item.price * item.quantity).toFixed(2)}
+                              </span>
+                            </label>
+                          );
+                        }
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -493,9 +545,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                             size="sm"
                             className="flex-1"
                             disabled={statusUpdating[order.id]}
-                            onClick={() =>
-                              handleStartPreparing(order)
-                            }
+                            onClick={() => handleStartPreparing(order)}
                           >
                             {statusUpdating[order.id] ? (
                               <>
@@ -672,16 +722,33 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     </div>
 
                     <div className="bg-muted/50 p-3 rounded-md">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-sm">
-                          <span>
-                            {item.quantity}x {item.name}
-                          </span>
-                          <span>
-                            ₱{(item.price * item.quantity).toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
+                      {(Array.isArray(order.items) ? order.items : []).map(
+                        (item, idx) => {
+                          const itemKey = `${order.id}-item-${idx}`;
+                          const checked = checkedItems.has(itemKey);
+                          return (
+                            <label
+                              key={itemKey}
+                              className="flex items-start justify-between gap-3 text-sm"
+                            >
+                              <span className="flex flex-1 items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
+                                  checked={checked}
+                                  onChange={() => toggleItemChecked(itemKey)}
+                                />
+                                <span>
+                                  {item.quantity}x {item.name}
+                                </span>
+                              </span>
+                              <span>
+                                ₱{(item.price * item.quantity).toFixed(2)}
+                              </span>
+                            </label>
+                          );
+                        }
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -691,9 +758,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                             size="sm"
                             className="flex-1"
                             disabled={statusUpdating[order.id]}
-                            onClick={() =>
-                              handleStartPreparing(order)
-                            }
+                            onClick={() => handleStartPreparing(order)}
                           >
                             {statusUpdating[order.id] ? (
                               <>

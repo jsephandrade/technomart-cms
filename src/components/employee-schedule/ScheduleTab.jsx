@@ -6,6 +6,7 @@ import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCar
 const ScheduleTab = ({
   daysOfWeek,
   displayEmployees,
+  employeeDirectory,
   schedule,
   canManage,
   setEditingSchedule,
@@ -24,6 +25,7 @@ const ScheduleTab = ({
       <WeeklyScheduleCard
         daysOfWeek={daysOfWeek}
         employeeList={displayEmployees}
+        employeeDirectory={employeeDirectory}
         schedule={schedule}
         onEditSchedule={canManage ? setEditingSchedule : undefined}
         onDeleteSchedule={handleDeleteSchedule}

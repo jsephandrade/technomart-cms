@@ -508,6 +508,7 @@ const EmployeeSchedule = () => {
     <ScheduleTab
       daysOfWeek={DAYS_OF_WEEK}
       displayEmployees={displayEmployees}
+      employeeDirectory={employees}
       schedule={schedule}
       canManage={canManage}
       setEditingSchedule={setEditingSchedule}

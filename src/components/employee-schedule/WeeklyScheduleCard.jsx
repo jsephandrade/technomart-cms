@@ -150,6 +150,7 @@ const buildDraftShift = (daysOfWeek, employeeList, preset = {}) => {
 const WeeklyScheduleCard = ({
   daysOfWeek = [],
   employeeList = [],
+  employeeDirectory,
   schedule = [],
   overview,
   overviewLoading = false,
@@ -194,14 +195,19 @@ const WeeklyScheduleCard = ({
     else setInternalFilters(next);
   };
 
+  const directoryList =
+    Array.isArray(employeeDirectory) && employeeDirectory.length
+      ? employeeDirectory
+      : employeeList;
+
   const employeeMap = useMemo(() => {
     const map = new Map();
-    employeeList.forEach((employee) => {
+    directoryList.forEach((employee) => {
       if (!employee?.id) return;
       map.set(String(employee.id), employee);
     });
     return map;
-  }, [employeeList]);
+  }, [directoryList]);
 
   const resolvedOverview = useMemo(() => {
     if (overview && overview.totals) return overview;

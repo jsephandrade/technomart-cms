@@ -27,7 +27,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { useEmployees, useSchedule } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/useEmployees';
+import { useScheduleAnalytics } from '@/hooks/useScheduleAnalytics';
 import {
   CHART_STYLES,
   CHART_COLORS,
@@ -79,10 +80,10 @@ export default function AttendancePanel() {
     error: employeesError,
   } = useEmployees();
   const {
-    schedule,
+    schedule: analyticsSchedule,
     loading: scheduleLoading,
     error: scheduleError,
-  } = useSchedule();
+  } = useScheduleAnalytics();
 
   const loading = employeesLoading || scheduleLoading;
   const error = employeesError || scheduleError;
@@ -93,11 +94,11 @@ export default function AttendancePanel() {
   );
 
   const hoursByStaff = useMemo(() => {
-    if (!schedule.length) return [];
+    if (!analyticsSchedule.length) return [];
 
     const aggregated = new Map();
 
-    schedule.forEach((shift) => {
+    analyticsSchedule.forEach((shift) => {
       const hoursWorked = toHours(shift.startTime, shift.endTime);
       if (hoursWorked <= 0) return;
 
@@ -125,15 +126,15 @@ export default function AttendancePanel() {
       ...entry,
       hours: roundHours(entry.hours),
     }));
-  }, [employeeLookup, schedule]);
+  }, [employeeLookup, analyticsSchedule]);
 
   const summary = useMemo(() => {
     const totalEmployees = employees.length;
     const totalHours = hoursByStaff.reduce((sum, item) => sum + item.hours, 0);
-    const totalShifts = schedule.length;
+    const totalShifts = analyticsSchedule.length;
     const averageShift = totalShifts ? roundHours(totalHours / totalShifts) : 0;
     const coverageDays = new Set(
-      schedule
+      analyticsSchedule
         .map((shift) => shift.day)
         .filter((day) => typeof day === 'string' && day.trim().length)
         .map((day) => day.toLowerCase())
@@ -142,7 +143,7 @@ export default function AttendancePanel() {
     const todayName = new Intl.DateTimeFormat('en-US', {
       weekday: 'long',
     }).format(new Date());
-    const todaysShifts = schedule.filter(
+    const todaysShifts = analyticsSchedule.filter(
       (shift) =>
         typeof shift.day === 'string' &&
         shift.day.toLowerCase() === todayName.toLowerCase()
@@ -173,7 +174,7 @@ export default function AttendancePanel() {
       topContributor,
       topContributorShare,
     };
-  }, [employees, hoursByStaff, schedule]);
+  }, [employees, hoursByStaff, analyticsSchedule]);
 
   const chartData = useMemo(() => {
     if (!hoursByStaff.length) return [];

@@ -402,6 +402,27 @@ def schedule(request):
         return JsonResponse({"success": False, "message": "Server error"}, status=500)
 
 
+@require_http_methods(["GET"])
+def schedule_analytics(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = (getattr(actor, "role", "") or "").lower()
+    if role_l not in {"admin", "manager", "staff"}:
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+    try:
+        from .models import ScheduleEntry
+        entries = (
+            ScheduleEntry.objects.select_related("employee")
+            .order_by("employee__name", "day", "start_time")
+            .all()
+        )
+        data = [_safe_sched(entry) for entry in entries]
+        return JsonResponse({"success": True, "data": data})
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
 @require_http_methods(["PUT", "DELETE"]) 
 def schedule_detail(request, sid):
     actor, err = _actor_from_request(request)

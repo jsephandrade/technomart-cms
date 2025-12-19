@@ -162,6 +162,31 @@ class EmployeeService {
     }));
   }
 
+  async getScheduleAnalytics(params = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
+    });
+    const query = qs.toString();
+    const res = await apiClient.get(
+      `/schedule/analytics${query ? `?${query}` : ''}`,
+      {
+        retry: { retries: 2 },
+      }
+    );
+    const list = Array.isArray(res) ? res : res?.data || [];
+    return list.map((s) => ({
+      id: s.id,
+      employeeId: s.employeeId,
+      employeeName: s.employeeName || '',
+      day: s.day,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      employeePosition:
+        s.employeePosition || s.employee?.position || s.position || '',
+    }));
+  }
+
   async createSchedule(entry) {
     const payload = {
       employeeId: entry?.employeeId,

@@ -371,20 +371,6 @@ const Notifications = () => {
               )}
             </FeaturePanelCard>
           </div>
-
-          <div className="space-y-4">
-            <FeaturePanelCard
-              title="Notification Settings"
-              titleStyle="accent"
-              titleIcon={Settings}
-              titleAccentClassName="px-3 py-1 text-xs md:text-sm"
-              titleClassName="text-xs md:text-sm"
-              description="Configure alert preferences"
-              contentClassName="space-y-4"
-            >
-              {renderSettingsControls()}
-            </FeaturePanelCard>
-          </div>
         </div>
       </TabsContent>
 

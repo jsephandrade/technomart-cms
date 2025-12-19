@@ -180,9 +180,7 @@ const ActivityLogsCard = ({
                         </div>
                       </td>
                       <td className="p-4 align-middle whitespace-nowrap">
-                        <span className="font-mono">
-                          {log.userId ? String(log.userId).slice(0, 6) : '--'}
-                        </span>
+                        <span className="font-mono">{log.userId || '--'}</span>
                       </td>
                       <td className="p-4 align-middle whitespace-nowrap">
                         <div className="flex items-center gap-1">

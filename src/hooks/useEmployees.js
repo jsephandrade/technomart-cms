@@ -23,6 +23,21 @@ export const useEmployees = () => {
     }
   }, []);
 
+  const addEmployee = async (employee) => {
+    try {
+      const newEmployee = await employeeService.createEmployee(employee);
+      setEmployees((prev) => [...prev, newEmployee]);
+      toast.success('Employee added successfully');
+      await fetchEmployees();
+      return newEmployee;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to add employee';
+      toast.error(errorMessage);
+      throw err;
+    }
+  };
+
   const updateEmployee = async (id, updates) => {
     try {
       const updatedEmployee = await employeeService.updateEmployee(id, updates);
@@ -62,6 +77,7 @@ export const useEmployees = () => {
     employees,
     loading,
     error,
+    addEmployee,
     updateEmployee,
     deleteEmployee,
     refetch: fetchEmployees,

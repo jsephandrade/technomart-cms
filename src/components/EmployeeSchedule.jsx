@@ -12,8 +12,9 @@ import ScheduleCalendar from '@/components/schedule/ScheduleCalendar';
 import AttendanceAdmin from '@/components/AttendanceAdmin';
 import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
+import AddEmployeeWizard from '@/components/employee-schedule/AddEmployeeWizard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, ClipboardList, Plane } from 'lucide-react';
+import { CalendarDays, ClipboardList, Plane, UserPlus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -58,6 +59,7 @@ const EmployeeSchedule = () => {
 
   const {
     employees = [],
+    addEmployee,
     updateEmployee,
     deleteEmployee,
     loading: employeesLoading,
@@ -465,7 +467,7 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-3 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
+          <TabsList className="grid w-full grid-cols-4 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
             <TabsTrigger
               value="schedule"
               aria-label="Weekly Schedule"
@@ -473,6 +475,14 @@ const EmployeeSchedule = () => {
             >
               <CalendarDays className="h-4 w-4 sm:hidden" aria-hidden="true" />
               <span className="hidden sm:inline">Weekly Schedule</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="add-employee"
+              aria-label="Add Employee"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+            >
+              <UserPlus className="h-4 w-4 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Add Employee</span>
             </TabsTrigger>
             <TabsTrigger
               value="attendance"
@@ -493,6 +503,17 @@ const EmployeeSchedule = () => {
           </TabsList>
           <TabsContent value="schedule" className="space-y-6">
             {activeTab === 'schedule' ? scheduleContent : null}
+          </TabsContent>
+          <TabsContent value="add-employee" className="space-y-6">
+            {activeTab === 'add-employee' ? (
+              <AddEmployeeWizard
+                onCreate={async (payload) => {
+                  await addEmployee(payload);
+                  setActiveTab('schedule');
+                }}
+                loading={employeesLoading}
+              />
+            ) : null}
           </TabsContent>
           <TabsContent value="attendance" className="space-y-6">
             {activeTab === 'attendance' ? <AttendanceAdmin /> : null}

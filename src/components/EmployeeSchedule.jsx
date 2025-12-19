@@ -502,22 +502,30 @@ const EmployeeSchedule = () => {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs uppercase tracking-wide">Day</Label>
-                  <select
-                    className={cn(
-                      'border-input bg-transparent text-sm rounded-md px-3 py-2',
-                      'focus:outline-none focus:ring-2 focus:ring-primary/40'
-                    )}
-                    value={quickAdd.day}
-                    onChange={(e) =>
-                      setQuickAdd((prev) => ({ ...prev, day: e.target.value }))
-                    }
-                  >
-                    {DAYS_OF_WEEK.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      className={cn(
+                        'w-full appearance-none rounded-md border-input bg-background text-sm px-3 py-2',
+                        'focus:outline-none focus:ring-2 focus:ring-primary/40'
+                      )}
+                      value={quickAdd.day}
+                      onChange={(e) =>
+                        setQuickAdd((prev) => ({
+                          ...prev,
+                          day: e.target.value,
+                        }))
+                      }
+                    >
+                      {DAYS_OF_WEEK.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground/70 text-xs">
+                      ▼
+                    </span>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs uppercase tracking-wide">

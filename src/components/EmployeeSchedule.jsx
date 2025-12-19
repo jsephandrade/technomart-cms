@@ -625,39 +625,39 @@ const EmployeeSchedule = () => {
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="space-y-6"
+          className="w-full space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-4 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
+          <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger
               value="add"
               aria-label="Add Employee"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
             >
-              <ShieldPlus className="h-4 w-4 sm:hidden" aria-hidden="true" />
-              <span className="hidden sm:inline">Add Employee</span>
+              <ShieldPlus className="h-4 w-4" aria-hidden="true" />
+              <span>Add Employee</span>
             </TabsTrigger>
             <TabsTrigger
               value="schedule"
               aria-label="Weekly Schedule"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
             >
-              <CalendarDays className="h-4 w-4 sm:hidden" aria-hidden="true" />
-              <span className="hidden sm:inline">Weekly Schedule</span>
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              <span>Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
               value="attendance"
               aria-label="Attendance Records"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
             >
-              <ClipboardList className="h-4 w-4 sm:hidden" aria-hidden="true" />
-              <span className="hidden sm:inline">Attendance Records</span>
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              <span>Attendance Records</span>
             </TabsTrigger>
             <TabsTrigger
               value="leave"
               aria-label="Leave Records"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
             >
-              <span className="hidden sm:inline">Leave Records</span>
+              <span>Leave Records</span>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="add" className="space-y-6">

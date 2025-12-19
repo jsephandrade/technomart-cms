@@ -7,12 +7,20 @@ export const useUsers = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const normalizeUserList = (payload) => {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.data?.data)) return payload.data.data;
+    return [];
+  };
+
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await userService.getUsers();
-      setUsers(data);
+      const response = await userService.getUsers();
+      setUsers(normalizeUserList(response));
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to fetch users';
@@ -25,7 +33,8 @@ export const useUsers = () => {
 
   const addUser = async (user) => {
     try {
-      const newUser = await userService.createUser(user);
+      const payload = await userService.createUser(user);
+      const newUser = payload?.data || payload;
       setUsers((prev) => [...prev, newUser]);
       toast.success('User added successfully');
       return newUser;
@@ -39,7 +48,8 @@ export const useUsers = () => {
 
   const updateUser = async (id, updates) => {
     try {
-      const updatedUser = await userService.updateUser(id, updates);
+      const payload = await userService.updateUser(id, updates);
+      const updatedUser = payload?.data || payload;
       setUsers((prev) =>
         prev.map((user) => (user.id === id ? updatedUser : user))
       );

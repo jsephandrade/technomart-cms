@@ -10,6 +10,7 @@ import WeeklyScheduleCard from '@/components/employee-schedule/WeeklyScheduleCar
 import EditScheduleDialog from '@/components/employee-schedule/EditScheduleDialog';
 import ScheduleCalendar from '@/components/schedule/ScheduleCalendar';
 import AttendanceAdmin from '@/components/AttendanceAdmin';
+import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CalendarDays, ClipboardList, ShieldPlus } from 'lucide-react';
@@ -626,7 +627,7 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-3 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
+          <TabsList className="grid w-full grid-cols-4 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
             <TabsTrigger
               value="add"
               aria-label="Add Employee"
@@ -651,6 +652,13 @@ const EmployeeSchedule = () => {
               <ClipboardList className="h-4 w-4 sm:hidden" aria-hidden="true" />
               <span className="hidden sm:inline">Attendance Records</span>
             </TabsTrigger>
+            <TabsTrigger
+              value="leave"
+              aria-label="Leave Records"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+            >
+              <span className="hidden sm:inline">Leave Records</span>
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="add" className="space-y-6">
             {activeTab === 'add' ? addEmployeeContent : null}
@@ -660,6 +668,9 @@ const EmployeeSchedule = () => {
           </TabsContent>
           <TabsContent value="attendance" className="space-y-6">
             {activeTab === 'attendance' ? <AttendanceAdmin /> : null}
+          </TabsContent>
+          <TabsContent value="leave" className="space-y-6">
+            {activeTab === 'leave' ? <LeaveManagement /> : null}
           </TabsContent>
         </Tabs>
       ) : (

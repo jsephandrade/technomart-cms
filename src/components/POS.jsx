@@ -11,7 +11,6 @@ import { usePOSData, EMPTY_QUEUE_STATE } from '@/hooks/usePOSData';
 import { usePOSLogic } from '@/hooks/usePOSLogic';
 import { useOrderHistory } from '@/hooks/useOrderManagement';
 import { orderService } from '@/api/services/orderService';
-import { paymentsService } from '@/api/services/paymentsService';
 import {
   Sheet,
   SheetContent,
@@ -28,14 +27,8 @@ const POS = () => {
   const [discountInput, setDiscountInput] = useState('');
   const [discountType, setDiscountType] = useState('percentage');
   const [activeCategory, setActiveCategory] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('pos');
-  const [paymentConfig, setPaymentConfig] = useState({
-    cash: true,
-    card: true,
-    mobile: true,
-  });
   const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
 
   // Get data and business logic from custom hooks
@@ -68,21 +61,8 @@ const POS = () => {
   } = usePOSLogic();
 
   const hasOrderItems = Array.isArray(currentOrder) && currentOrder.length > 0;
-  const normalizedPaymentConfig = {
-    cash: paymentConfig.cash !== false,
-    card: paymentConfig.card !== false,
-    mobile: paymentConfig.mobile !== false,
-  };
-  const paymentMethodLabels = {
-    cash: 'Cash',
-    card: 'Card',
-    mobile: 'Mobile wallet',
-  };
-  const isSelectedPaymentEnabled =
-    normalizedPaymentConfig[paymentMethod] ?? true;
-  const paymentDisabledMessage = isSelectedPaymentEnabled
-    ? null
-    : `${paymentMethodLabels[paymentMethod] || 'Selected'} payments are disabled`;
+  const isSelectedPaymentEnabled = true;
+  const paymentDisabledMessage = null;
   const orderCount = Array.isArray(currentOrder) ? currentOrder.length : 0;
   const orderLabel = orderNumber
     ? formatOrderNumber(orderNumber)
@@ -115,7 +95,7 @@ const POS = () => {
   }, [setOrderQueue]);
 
   const handleProcessPayment = async (paymentDetails) => {
-    const info = await processPayment(paymentMethod, paymentDetails);
+    const info = await processPayment(paymentDetails);
     if (info?.id) {
       setIsPaymentModalOpen(false);
       setActiveTab('queue');
@@ -143,26 +123,6 @@ const POS = () => {
   useEffect(() => {
     if (isOrderHistoryModalOpen) refetchHistory();
   }, [isOrderHistoryModalOpen, refetchHistory]);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const cfg = await paymentsService.getConfig();
-        if (!active) return;
-        setPaymentConfig({
-          cash: cfg?.cash !== false,
-          card: cfg?.card !== false,
-          mobile: cfg?.mobile !== false,
-        });
-      } catch (error) {
-        console.error('Failed to load payment configuration', error);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
@@ -339,8 +299,6 @@ const POS = () => {
         onClose={() => setIsPaymentModalOpen(false)}
         currentOrder={currentOrder}
         discount={discount}
-        paymentMethod={paymentMethod}
-        setPaymentMethod={setPaymentMethod}
         onProcessPayment={handleProcessPayment}
         calculateSubtotal={calculateSubtotal}
         calculateDiscountAmount={calculateDiscountAmount}

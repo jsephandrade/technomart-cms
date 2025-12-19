@@ -1,30 +1,37 @@
-"""Payment endpoints: process payment for order, list, refund.
-
-Permissions:
-- payment.process to process payments
-- payment.records.view to list transactions
-- payment.refund to refund
-"""
+"""Simplified POS payment flow with clear, beginner-friendly steps."""
 
 from __future__ import annotations
 
 import json
 import logging
 from uuid import UUID
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django.utils import timezone as dj_timezone
-from django.db.utils import OperationalError, ProgrammingError
-from django.db.models import F
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
-from .views_common import _actor_from_request, _has_permission, _client_meta, _require_admin_or_manager, rate_limit
+from django.db.models import F, Q
+from django.db.utils import OperationalError, ProgrammingError
+from django.http import JsonResponse
+from django.utils import timezone as dj_timezone
+from django.views.decorators.http import require_http_methods
+
+from .views_common import (
+    _actor_from_request,
+    _has_permission,
+    _client_meta,
+    _require_admin_or_manager,
+    rate_limit,
+)
+from .views_orders import _start_auto_flow, canonical_status
+from .models import PaymentTransaction, PaymentMethodConfig, Order, AppUser
 
 
 logger = logging.getLogger(__name__)
 
-
 LOYALTY_EARN_PER_PURCHASE = Decimal("0.01")
+MONEY_PLACES = Decimal("0.01")
+
+
+def _to_amount(value) -> Decimal:
+    return Decimal(str(value)).quantize(MONEY_PLACES)
 
 
 def _derive_catering_order_number(order_id: str) -> str:
@@ -37,36 +44,34 @@ def _derive_catering_order_number(order_id: str) -> str:
     return f"C-{number:06d}"
 
 
-def _lookup_order_number(order_id, order_numbers=None):
-    if not order_id:
-        return ""
-    key = str(order_id)
-    if order_numbers and key in order_numbers:
-        return order_numbers[key] or ""
+def _order_numbers_for(payments) -> dict:
+    ids = {str(p.order_id) for p in payments if getattr(p, "order_id", None)}
+    if not ids:
+        return {}
     try:
-        from .models import Order
-
-        return (
-            Order.objects.filter(id=key)
-            .values_list("order_number", flat=True)
-            .first()
-            or ""
-        )
+        return {
+            str(o.id): o.order_number or ""
+            for o in Order.objects.filter(id__in=ids)
+        }
     except Exception:
-        return ""
+        return {}
 
 
-def _serialize_db(p, order_numbers=None):
+def _serialize_payment(p, order=None, order_numbers=None):
     order_id = str(p.order_id)
-    order_number = _lookup_order_number(order_id, order_numbers)
+    order_number = ""
+    if order is not None:
+        order_number = getattr(order, "order_number", "") or ""
+    elif order_numbers:
+        order_number = order_numbers.get(order_id, "") or ""
     if not order_number:
         meta = getattr(p, "meta", {}) or {}
-        if isinstance(meta, dict):
-            order_number = meta.get("order_number") or meta.get("orderNumber") or ""
-            if not order_number and (
-                meta.get("source") == "catering" or "event_name" in meta
-            ):
-                order_number = _derive_catering_order_number(order_id)
+        order_number = (
+            meta.get("order_number")
+            or meta.get("orderNumber")
+            or _derive_catering_order_number(order_id)
+        )
+    meta = getattr(p, "meta", {}) or {}
     return {
         "id": str(p.id),
         "orderId": order_id,
@@ -76,9 +81,142 @@ def _serialize_db(p, order_numbers=None):
         "status": p.status,
         "reference": p.reference or "",
         "customer": p.customer or "",
+        "tenderedAmount": meta.get("tenderedAmount"),
+        "changeDue": meta.get("changeDue"),
         "processedBy": (p.processed_by.email if getattr(p, "processed_by", None) else ""),
         "date": (p.created_at or dj_timezone.now()).isoformat(),
     }
+
+
+def _parse_payment_payload(request):
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        data = {}
+    if "amount" not in data:
+        return None, JsonResponse({"success": False, "message": "Amount is required"}, status=400)
+    try:
+        amount = _to_amount(data.get("amount"))
+    except (InvalidOperation, TypeError, ValueError):
+        return None, JsonResponse({"success": False, "message": "Invalid amount"}, status=400)
+
+    method = str(data.get("method") or "cash").lower().strip()
+    allowed_methods = {choice[0] for choice in PaymentTransaction.METHOD_CHOICES}
+    if method not in allowed_methods:
+        return None, JsonResponse({"success": False, "message": "Unsupported payment method"}, status=400)
+
+    tendered_raw = data.get("tenderedAmount") or data.get("tendered_amount")
+    tendered_amount = amount
+    if tendered_raw is not None:
+        try:
+            tendered_amount = _to_amount(tendered_raw)
+        except (InvalidOperation, TypeError, ValueError):
+            return None, JsonResponse({"success": False, "message": "Invalid tendered amount"}, status=400)
+
+    change_due = max(tendered_amount - amount, Decimal("0.00")).quantize(MONEY_PLACES)
+    payload = {
+        "amount": amount,
+        "method": method,
+        "customer": (data.get("customer") or "").strip(),
+        "reference": (data.get("reference") or data.get("txn_ref") or "").strip(),
+        "tendered_amount": tendered_amount,
+        "change_due": change_due,
+        "idempotency_key": (request.META.get("HTTP_IDEMPOTENCY_KEY") or "").strip(),
+    }
+    return payload, None
+
+
+def _method_enabled(method: str) -> bool:
+    try:
+        cfg = PaymentMethodConfig.objects.first()
+    except Exception:
+        return True
+    if not cfg:
+        return True
+    allowed = {
+        "cash": bool(getattr(cfg, "cash_enabled", True)),
+        "card": bool(getattr(cfg, "card_enabled", True)),
+        "mobile": bool(getattr(cfg, "mobile_enabled", True)),
+    }
+    return allowed.get(method, True)
+
+
+def _existing_payment(order_id: str, payload) -> PaymentTransaction | None:
+    if not payload.get("idempotency_key"):
+        return None
+    try:
+        return PaymentTransaction.objects.filter(
+            order_id=str(order_id),
+            meta__idempotencyKey=payload["idempotency_key"],
+        ).first()
+    except Exception:
+        return None
+
+
+def _payment_meta(payload) -> dict:
+    meta = {
+        "source": "pos",
+        "tenderedAmount": float(payload.get("tendered_amount", 0)),
+        "changeDue": float(payload.get("change_due", 0)),
+    }
+    if payload.get("idempotency_key"):
+        meta["idempotencyKey"] = payload["idempotency_key"]
+    return meta
+
+
+def _update_order_after_payment(order, method: str):
+    order.payment_method = method
+    update_fields = ["payment_method", "updated_at"]
+    if canonical_status(order.status) in {"new", "pending"}:
+        order.status = Order.STATUS_ACCEPTED
+        update_fields.append("status")
+    try:
+        auto_fields = _start_auto_flow(order)
+    except Exception:
+        auto_fields = []
+    for field in auto_fields:
+        if field not in update_fields:
+            update_fields.append(field)
+    try:
+        order.save(update_fields=update_fields)
+    except Exception:
+        order.save()
+
+
+def _reward_loyalty_points(user_id):
+    if not user_id:
+        return
+    try:
+        AppUser.objects.filter(id=user_id).update(
+            credit_points=F("credit_points") + LOYALTY_EARN_PER_PURCHASE
+        )
+    except Exception:
+        logger.exception("Failed to award credit points for purchase")
+
+
+def _audit_payment(request, actor, payment):
+    try:
+        from .utils_audit import record_audit
+
+        ua, ip = _client_meta(request)
+        record_audit(
+            request,
+            user=actor if hasattr(actor, "id") else None,
+            type="action",
+            action="Payment processed",
+            details=f"order={payment.order_id} amount={payment.amount} method={payment.method}",
+            severity="info",
+            meta={
+                "orderId": str(payment.order_id),
+                "amount": float(payment.amount),
+                "method": payment.method,
+                "paymentId": str(payment.id),
+                "userAgent": ua,
+                "ip": ip,
+            },
+        )
+    except Exception:
+        pass
 
 
 @require_http_methods(["POST"])  # /orders/<order_id>/payment
@@ -87,143 +225,54 @@ def order_payment(request, order_id: str):
     actor, err = _actor_from_request(request)
     if not actor:
         return err
-    try:
-        if not _has_permission(actor, "payment.process"):
-            return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
-    except Exception:
+    if not _has_permission(actor, "payment.process"):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
-    try:
-        data = json.loads(request.body.decode("utf-8") or "{}")
-    except Exception:
-        data = {}
-    amount = data.get("amount")
-    method = (data.get("method") or "").lower()
-    customer = (data.get("customer") or "").strip()
-    reference = (data.get("reference") or "").strip()
-    idempo = (request.META.get("HTTP_IDEMPOTENCY_KEY") or "").strip()
-    if not amount or not method:
-        return JsonResponse({"success": False, "message": "Missing amount or method"}, status=400)
-    try:
-        amt = Decimal(str(amount))
-    except Exception:
-        return JsonResponse({"success": False, "message": "Invalid amount"}, status=400)
+    payload, parse_err = _parse_payment_payload(request)
+    if parse_err:
+        return parse_err
+    # POS-only: enforce cash to keep the flow fast and predictable
+    payload["method"] = PaymentTransaction.METHOD_CASH
+    if not _method_enabled(payload["method"]):
+        return JsonResponse({"success": False, "message": f"Payment method '{payload['method']}' is disabled"}, status=400)
 
-    reward_user_id = None
+    order = Order.objects.filter(id=order_id).select_related("placed_by").first()
+    if not order:
+        return JsonResponse({"success": False, "message": "Order not found"}, status=404)
 
-    try:
-        from .models import PaymentTransaction, PaymentMethodConfig, Order
-        # Enforce allowed payment methods
-        cfg = None
-        try:
-            cfg = PaymentMethodConfig.objects.first()
-        except Exception:
-            cfg = None
-        if cfg:
-            allowed = {
-                "cash": bool(getattr(cfg, "cash_enabled", True)),
-                "card": bool(getattr(cfg, "card_enabled", True)),
-                "mobile": bool(getattr(cfg, "mobile_enabled", True)),
-            }
-            if not allowed.get(method, True):
-                return JsonResponse({"success": False, "message": f"Payment method '{method}' is disabled"}, status=400)
+    if order.total_amount and abs(order.total_amount - payload["amount"]) > Decimal("0.01"):
+        payload["amount"] = Decimal(order.total_amount).quantize(MONEY_PLACES)
 
-        # Idempotency: if an Idempotency-Key header is provided and matches an existing txn for this order, return it
-        if idempo:
-            existing = PaymentTransaction.objects.filter(order_id=str(order_id), meta__idempotencyKey=idempo).first()
-            if existing:
-                return JsonResponse({"success": True, "data": _serialize_db(existing)})
+    existing = _existing_payment(order_id, payload)
+    if existing:
+        return JsonResponse({"success": True, "data": _serialize_payment(existing, order)})
 
-        # External provider for card/mobile payments (expects tokenized input)
-        if method in {PaymentTransaction.METHOD_CARD, PaymentTransaction.METHOD_MOBILE}:
-            token = (data.get("token") or data.get("paymentToken") or "").strip()
-            if not token:
-                return JsonResponse({"success": False, "message": "Missing payment token"}, status=400)
-            try:
-                from .payment_providers import get_gateway
-                gw = get_gateway()
-                res = gw.charge(order_id=str(order_id), amount=float(amt), token=token, method=method)
-                if not res.ok:
-                    return JsonResponse({"success": False, "message": res.error or "Gateway error"}, status=400)
-                reference = reference or res.reference
-            except Exception:
-                return JsonResponse({"success": False, "message": "Payment provider unavailable"}, status=502)
-
-        p = PaymentTransaction.objects.create(
-            order_id=str(order_id),
-            amount=amt,
-            method=method,
-            status=PaymentTransaction.STATUS_COMPLETED,
-            reference=reference,
-            customer=customer,
-            processed_by=actor if hasattr(actor, "id") else None,
-            meta=({"idempotencyKey": idempo} if idempo else {}),
+    already_paid = (
+        PaymentTransaction.objects.filter(
+            order_id=str(order_id), status=PaymentTransaction.STATUS_COMPLETED
         )
-        # Update the order's payment method for consistency
-        order_number = ""
-        try:
-            o = Order.objects.filter(id=order_id).select_related("placed_by").first()
-            if o:
-                if getattr(o, "payment_method", None) != method:
-                    o.payment_method = method
-                    try:
-                        o.save(update_fields=["payment_method", "updated_at"])
-                    except Exception:
-                        o.save(update_fields=["payment_method"])  # fallback if updated_at missing
-                try:
-                    from .views_orders import _start_auto_flow
+        .order_by("-created_at")
+        .first()
+    )
+    if already_paid and not payload.get("idempotency_key"):
+        return JsonResponse({"success": True, "data": _serialize_payment(already_paid, order)})
 
-                    needs_start = (
-                        not getattr(o, "auto_advance_at", None)
-                        or getattr(o, "phase_started_at", None) is None
-                        or getattr(o, "auto_advance_paused", False)
-                    )
-                    if needs_start:
-                        auto_fields = _start_auto_flow(o)
-                        if auto_fields:
-                            if "updated_at" not in auto_fields:
-                                auto_fields.append("updated_at")
-                            o.save(update_fields=auto_fields)
-                except Exception:
-                    logger.exception("Failed to initialize auto advance for order payment")
-                if getattr(o, "order_number", None):
-                    order_number = o.order_number or ""
-                if getattr(o, "placed_by_id", None):
-                    reward_user_id = o.placed_by_id
-        except Exception:
-            pass
-        if not reward_user_id and hasattr(actor, "id"):
-            reward_user_id = getattr(actor, "id", None)
-        if reward_user_id:
-            try:
-                from .models import AppUser
-                AppUser.objects.filter(id=reward_user_id).update(
-                    credit_points=F("credit_points") + LOYALTY_EARN_PER_PURCHASE
-                )
-            except Exception:
-                logger.exception("Failed to award credit points for purchase")
+    payment = PaymentTransaction.objects.create(
+        order_id=str(order_id),
+        amount=payload["amount"],
+        method=payload["method"],
+        status=PaymentTransaction.STATUS_COMPLETED,
+        reference=payload["reference"],
+        customer=payload["customer"],
+        processed_by=actor if hasattr(actor, "id") else None,
+        meta=_payment_meta(payload),
+    )
 
-        # Audit log
-        try:
-            from .utils_audit import record_audit
-            ua, ip = _client_meta(request)
-            record_audit(
-                request,
-                user=actor if hasattr(actor, "id") else None,
-                type="action",
-                action="Payment processed",
-                details=f"order={order_id} amount={amt} method={method}",
-                severity="info",
-                meta={"orderId": str(order_id), "amount": float(amt), "method": method, "paymentId": str(p.id)},
-            )
-        except Exception:
-            pass
-        mapping = None
-        if order_number:
-            mapping = {str(order_id): order_number}
-        return JsonResponse({"success": True, "data": _serialize_db(p, mapping)})
-    except Exception:
-        return JsonResponse({"success": False, "message": "Processing failed"}, status=500)
+    _update_order_after_payment(order, payload["method"])
+    _reward_loyalty_points(order.placed_by_id or getattr(actor, "id", None))
+    _audit_payment(request, actor, payment)
+
+    return JsonResponse({"success": True, "data": _serialize_payment(payment, order)})
 
 
 @require_http_methods(["GET"])  # /payments
@@ -231,39 +280,32 @@ def payments_list(request):
     actor, err = _actor_from_request(request)
     if not actor:
         return err
-    try:
-        if not _has_permission(actor, "payment.records.view"):
-            return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
-    except Exception:
+    if not _has_permission(actor, "payment.records.view"):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
     search = (request.GET.get("search") or "").strip().lower()
     status = (request.GET.get("status") or "").strip().lower()
     method = (request.GET.get("method") or "").strip().lower()
     date_range = (request.GET.get("timeRange") or request.GET.get("dateRange") or "").strip().lower()
-    page = int(request.GET.get("page") or 1)
-    limit = int(request.GET.get("limit") or 50)
     try:
-        from .models import PaymentTransaction
+        page = max(1, int(request.GET.get("page") or 1))
+    except Exception:
+        page = 1
+    try:
+        limit = max(1, min(200, int(request.GET.get("limit") or 50)))
+    except Exception:
+        limit = 50
+
+    try:
         qs = PaymentTransaction.objects.all()
         if status:
             qs = qs.filter(status=status)
         if method:
             qs = qs.filter(method=method)
         if search:
-            from django.db.models import Q
-
-            order_ids_from_number = []
-            try:
-                from .models import Order
-
-                order_ids_from_number = list(
-                    Order.objects.filter(order_number__icontains=search).values_list(
-                        "id", flat=True
-                    )
-                )
-            except Exception:
-                order_ids_from_number = []
+            order_ids_from_number = list(
+                Order.objects.filter(order_number__icontains=search).values_list("id", flat=True)
+            )
             id_values = [str(x) for x in order_ids_from_number if x]
             query = (
                 Q(order_id__icontains=search)
@@ -275,6 +317,7 @@ def payments_list(request):
             qs = qs.filter(query)
         if date_range in {"24h", "7d", "30d"}:
             from datetime import timedelta
+
             start = dj_timezone.now() - (
                 timedelta(hours=24)
                 if date_range == "24h"
@@ -285,23 +328,11 @@ def payments_list(request):
             qs = qs.filter(created_at__gte=start)
         qs = qs.order_by("-created_at")
         total = qs.count()
-        start_i = max(0, (page - 1) * max(1, limit))
-        end_i = start_i + max(1, limit)
+        start_i = (page - 1) * limit
+        end_i = start_i + limit
         slice_items = list(qs[start_i:end_i])
-        order_numbers = {}
-        if slice_items:
-            order_ids = {str(x.order_id) for x in slice_items if x.order_id}
-            if order_ids:
-                try:
-                    from .models import Order
-
-                    order_numbers = {
-                        str(o.id): o.order_number or ""
-                        for o in Order.objects.filter(id__in=order_ids)
-                    }
-                except Exception:
-                    order_numbers = {}
-        items = [_serialize_db(x, order_numbers) for x in slice_items]
+        order_numbers = _order_numbers_for(slice_items)
+        items = [_serialize_payment(x, order_numbers=order_numbers) for x in slice_items]
         return JsonResponse(
             {
                 "success": True,
@@ -329,24 +360,21 @@ def payment_refund(request, pid: str):
     actor, err = _actor_from_request(request)
     if not actor:
         return err
-    try:
-        if not _has_permission(actor, "payment.refund"):
-            return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
-    except Exception:
+    if not _has_permission(actor, "payment.refund"):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
     try:
-        from .models import PaymentTransaction
         p = PaymentTransaction.objects.filter(id=pid).first()
         if not p:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
         if p.status == PaymentTransaction.STATUS_REFUNDED:
-            return JsonResponse({"success": True, "data": _serialize_db(p)})
+            return JsonResponse({"success": True, "data": _serialize_payment(p)})
         p.status = PaymentTransaction.STATUS_REFUNDED
         p.refunded_at = dj_timezone.now()
         p.refunded_by = getattr(actor, "email", "") or ""
         p.save(update_fields=["status", "refunded_at", "refunded_by", "updated_at"])
         try:
             from .utils_audit import record_audit
+
             record_audit(
                 request,
                 user=actor if hasattr(actor, "id") else None,
@@ -358,12 +386,12 @@ def payment_refund(request, pid: str):
             )
         except Exception:
             pass
-        return JsonResponse({"success": True, "data": _serialize_db(p)})
+        return JsonResponse({"success": True, "data": _serialize_payment(p)})
     except Exception:
         return JsonResponse({"success": False, "message": "Refund failed"}, status=500)
 
 
-__all__ = ["order_payment", "payments_list", "payment_refund"]
+__all__ = ["order_payment", "payments_list", "payment_refund", "payments_config", "payment_invoice"]
 
 
 @require_http_methods(["GET", "PUT"])  # /payments/config
@@ -372,24 +400,25 @@ def payments_config(request):
     if not actor:
         return err
     try:
-        from .models import PaymentMethodConfig
         cfg, _ = PaymentMethodConfig.objects.get_or_create(id=1)
         if request.method == "GET":
-            return JsonResponse({
-                "success": True,
-                "data": {
-                    "cash": bool(cfg.cash_enabled),
-                    "card": bool(cfg.card_enabled),
-                    "mobile": bool(cfg.mobile_enabled),
-                },
-            })
-        # PUT update -> admin/manager only
+            return JsonResponse(
+                {
+                    "success": True,
+                    "data": {
+                        "cash": bool(cfg.cash_enabled),
+                        "card": bool(cfg.card_enabled),
+                        "mobile": bool(cfg.mobile_enabled),
+                    },
+                }
+            )
         if not _require_admin_or_manager(actor):
             return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
         try:
             data = json.loads(request.body.decode("utf-8") or "{}")
         except Exception:
             data = {}
+
         def _getb(v, curr):
             if isinstance(v, bool):
                 return v
@@ -400,6 +429,7 @@ def payments_config(request):
                 if s in {"0", "false", "no", "off"}:
                     return False
             return curr
+
         cfg.cash_enabled = _getb(data.get("cash"), cfg.cash_enabled)
         cfg.card_enabled = _getb(data.get("card"), cfg.card_enabled)
         cfg.mobile_enabled = _getb(data.get("mobile"), cfg.mobile_enabled)
@@ -408,7 +438,6 @@ def payments_config(request):
         return JsonResponse({"success": True})
     except (OperationalError, ProgrammingError):
         pass
-    # Fallback: static allow all when DB unavailable
     if request.method == "GET":
         return JsonResponse({"success": True, "data": {"cash": True, "card": True, "mobile": True}})
     return JsonResponse({"success": True})
@@ -420,15 +449,14 @@ def payment_invoice(request, pid: str):
     if not actor:
         return err
     try:
-        from .models import PaymentTransaction
         p = PaymentTransaction.objects.filter(id=pid).first()
         if not p:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
-        # Build PDF
         try:
             import io
             from reportlab.pdfgen import canvas  # type: ignore
             from reportlab.lib.pagesizes import letter  # type: ignore
+
             buf = io.BytesIO()
             c = canvas.Canvas(buf, pagesize=letter)
             width, height = letter
@@ -446,7 +474,7 @@ def payment_invoice(request, pid: str):
                 ("Status", p.status),
                 ("Reference", p.reference or ""),
                 ("Customer", p.customer or ""),
-                ("Processed By", (p.processed_by.email if getattr(p, 'processed_by', None) else '')),
+                ("Processed By", (p.processed_by.email if getattr(p, "processed_by", None) else "")),
             ]
             for label, val in fields:
                 y -= 16
@@ -455,8 +483,9 @@ def payment_invoice(request, pid: str):
             c.save()
             pdf = buf.getvalue()
             from django.http import HttpResponse
-            resp = HttpResponse(pdf, content_type='application/pdf')
-            resp['Content-Disposition'] = f'inline; filename="invoice-{p.id}.pdf"'
+
+            resp = HttpResponse(pdf, content_type="application/pdf")
+            resp["Content-Disposition"] = f'inline; filename="invoice-{p.id}.pdf"'
             return resp
         except Exception:
             return JsonResponse({"success": False, "message": "Invoice generation not available"}, status=501)

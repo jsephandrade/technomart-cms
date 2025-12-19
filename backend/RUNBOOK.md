@@ -14,9 +14,11 @@ Orders and Queue
 
 Payments
 
-- Cash/Card/Mobile via POST /api/orders/:id/payment. For card/mobile, pass token (nonce) from provider; backend never stores PAN/CVV.
-- Idempotency: pass Idempotency-Key header to prevent duplicate charges.
+- POS charge: POST /api/orders/:id/payment (cash only in POS) with amount and optional tenderedAmount/change; honors PaymentMethodConfig toggles.
+- Idempotency: pass Idempotency-Key header to safely retry without double-charging.
+- Loyalty: each completed payment grants 0.01 credit points to the order placer (or the actor if unset).
 - Refunds: POST /api/payments/:id/refund (role-gated).
+- Config & receipts: GET/PUT /api/payments/config to toggle methods; GET /api/payments/:id/invoice for a simple PDF slip.
 
 Inventory
 

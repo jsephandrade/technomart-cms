@@ -196,7 +196,8 @@ export const usePOSLogic = () => {
     setDiscount({ type: 'percentage', value: 0 });
   };
 
-  const processPayment = async (paymentMethod, paymentDetails = {}) => {
+  const processPayment = async (paymentDetails = {}) => {
+    const paymentMethod = 'cash';
     const total = calculateTotal();
     if (!currentOrder.length) {
       toast.error('No items in order.');

@@ -1,7 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bell, CheckCircle, XCircle, RefreshCw, Settings } from 'lucide-react';
+import {
+  Bell,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  Settings,
+  ShieldAlert,
+  Shield,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -282,6 +290,30 @@ const Notifications = () => {
             badgeClassName="text-[10px] md:text-xs"
             headerActions={
               <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Quick action placeholder: escalate unknown user breach
+                    // Wire to real endpoint when available
+                  }}
+                >
+                  <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+                  Unknown user breach
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={() => {
+                    // Quick action placeholder: view security settings
+                    // Wire to navigation when available
+                  }}
+                >
+                  <Shield className="h-4 w-4" aria-hidden="true" />
+                  Security center
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

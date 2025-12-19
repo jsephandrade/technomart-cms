@@ -94,7 +94,7 @@ const EmployeeSchedule = () => {
   const [quickAdd, setQuickAdd] = useState({
     name: '',
     position: '',
-    day: 'Monday',
+    repeatDays: ['Monday'],
     startTime: '08:00',
     endTime: '16:00',
   });
@@ -108,16 +108,23 @@ const EmployeeSchedule = () => {
       toast.error('Name is required');
       return;
     }
+    const repeatDays =
+      Array.isArray(quickAdd.repeatDays) && quickAdd.repeatDays.length
+        ? Array.from(new Set(quickAdd.repeatDays))
+        : [];
+    if (repeatDays.length === 0) {
+      toast.error('Select at least one day');
+      return;
+    }
+    const scheduleEntries = repeatDays.map((day) => ({
+      day,
+      startTime: quickAdd.startTime,
+      endTime: quickAdd.endTime,
+    }));
     const payload = {
       name: quickAdd.name,
       position: quickAdd.position,
-      schedule: [
-        {
-          day: quickAdd.day,
-          startTime: quickAdd.startTime,
-          endTime: quickAdd.endTime,
-        },
-      ],
+      schedule: scheduleEntries,
     };
     try {
       await addEmployeeWithSchedule(payload);
@@ -125,7 +132,7 @@ const EmployeeSchedule = () => {
       setQuickAdd({
         name: '',
         position: '',
-        day: 'Monday',
+        repeatDays: ['Monday'],
         startTime: '08:00',
         endTime: '16:00',
       });

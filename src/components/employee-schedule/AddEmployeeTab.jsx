@@ -68,30 +68,38 @@ const AddEmployeeTab = ({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">Day</Label>
-              <div className="relative">
-                <select
-                  className={cn(
-                    'w-full appearance-none rounded-md border-input bg-background px-3 py-2 text-sm',
-                    'focus:outline-none focus:ring-2 focus:ring-primary/40'
-                  )}
-                  value={quickAdd.day}
-                  onChange={(e) =>
-                    setQuickAdd((prev) => ({
-                      ...prev,
-                      day: e.target.value,
-                    }))
-                  }
-                >
-                  {daysOfWeek.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground/70">
-                  v
-                </span>
+              <Label className="text-xs uppercase tracking-wide">Days</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {(daysOfWeek || []).map((day) => {
+                  const selected =
+                    Array.isArray(quickAdd.repeatDays) &&
+                    quickAdd.repeatDays.includes(day);
+                  return (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={selected ? 'default' : 'outline'}
+                      className="rounded-full px-3 text-[11px] uppercase"
+                      key={day}
+                      onClick={() => {
+                        setQuickAdd((prev) => {
+                          const nextDays = new Set(prev.repeatDays || []);
+                          if (nextDays.has(day)) {
+                            nextDays.delete(day);
+                          } else {
+                            nextDays.add(day);
+                          }
+                          return {
+                            ...prev,
+                            repeatDays: Array.from(nextDays),
+                          };
+                        });
+                      }}
+                    >
+                      {day.slice(0, 3)}
+                    </Button>
+                  );
+                })}
               </div>
             </div>
             <div className="space-y-1">

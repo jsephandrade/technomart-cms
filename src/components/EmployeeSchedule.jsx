@@ -24,6 +24,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const DAYS_OF_WEEK = [
@@ -449,69 +451,91 @@ const EmployeeSchedule = () => {
     <>
       <div className="mt-2 space-y-6">
         {canManage ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldPlus className="h-4 w-4" aria-hidden="true" />
-                Quick add employee + shift
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-5">
-              <div className="space-y-1">
-                <Label>Name *</Label>
-                <Input
-                  value={quickAdd.name}
-                  onChange={(e) =>
-                    setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  placeholder="Jane Smith"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Role</Label>
-                <Input
-                  value={quickAdd.position}
-                  onChange={(e) =>
-                    setQuickAdd((prev) => ({
-                      ...prev,
-                      position: e.target.value,
-                    }))
-                  }
-                  placeholder="Barista"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Day</Label>
-                <select
-                  className="border-input bg-transparent text-sm rounded-md px-3 py-2"
-                  value={quickAdd.day}
-                  onChange={(e) =>
-                    setQuickAdd((prev) => ({ ...prev, day: e.target.value }))
-                  }
-                >
-                  {DAYS_OF_WEEK.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>Start</Label>
-                <Input
-                  type="time"
-                  value={quickAdd.startTime}
-                  onChange={(e) =>
-                    setQuickAdd((prev) => ({
-                      ...prev,
-                      startTime: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>End</Label>
+          <Card className="border-dashed border-primary/30 bg-muted/30">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="border-primary/50 text-primary bg-primary/10"
+                  >
+                    <ShieldPlus className="h-4 w-4 mr-1" aria-hidden="true" />
+                    Inline Add
+                  </Badge>
+                  <CardTitle className="text-base font-semibold">
+                    Add employee & shift (fast path)
+                  </CardTitle>
+                </div>
+                <span className="text-xs text-muted-foreground hidden md:inline">
+                  Aligned with Weekly Shift Planner styling
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_0.8fr_auto] items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wide">
+                    Name *
+                  </Label>
+                  <Input
+                    value={quickAdd.name}
+                    onChange={(e) =>
+                      setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    placeholder="Jane Smith"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wide">
+                    Role
+                  </Label>
+                  <Input
+                    value={quickAdd.position}
+                    onChange={(e) =>
+                      setQuickAdd((prev) => ({
+                        ...prev,
+                        position: e.target.value,
+                      }))
+                    }
+                    placeholder="Barista"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wide">Day</Label>
+                  <select
+                    className={cn(
+                      'border-input bg-transparent text-sm rounded-md px-3 py-2',
+                      'focus:outline-none focus:ring-2 focus:ring-primary/40'
+                    )}
+                    value={quickAdd.day}
+                    onChange={(e) =>
+                      setQuickAdd((prev) => ({ ...prev, day: e.target.value }))
+                    }
+                  >
+                    {DAYS_OF_WEEK.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wide">
+                    Start
+                  </Label>
+                  <Input
+                    type="time"
+                    value={quickAdd.startTime}
+                    onChange={(e) =>
+                      setQuickAdd((prev) => ({
+                        ...prev,
+                        startTime: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs uppercase tracking-wide">End</Label>
                   <Input
                     type="time"
                     value={quickAdd.endTime}
@@ -522,8 +546,9 @@ const EmployeeSchedule = () => {
                       }))
                     }
                   />
+                </div>
+                <div className="flex items-center justify-end">
                   <Button
-                    variant="secondary"
                     size="sm"
                     className="whitespace-nowrap"
                     onClick={handleQuickAdd}

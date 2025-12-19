@@ -9,7 +9,6 @@ import { Separator } from '@/components/ui/separator';
 import { createRealtime } from '@/lib/realtime';
 import { notificationsService } from '@/api/services/notificationsService';
 import { subscribePush, unsubscribePush } from '@/lib/push';
-import NotificationTester from '@/components/NotificationTester';
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [settings, setSettings] = useState({
@@ -268,7 +267,6 @@ const Notifications = () => {
       <TabsList>
         <TabsTrigger value="notifications">Notifications</TabsTrigger>
         <TabsTrigger value="settings">Settings</TabsTrigger>
-        <TabsTrigger value="test">Test Triggers</TabsTrigger>
       </TabsList>
 
       <TabsContent value="notifications" className="mt-6">
@@ -300,7 +298,6 @@ const Notifications = () => {
                     onClick={refreshList}
                   >
                     <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                    <span>Refresh</span>
                   </Button>
                 </div>
               }
@@ -403,10 +400,6 @@ const Notifications = () => {
         >
           {renderSettingsControls()}
         </FeaturePanelCard>
-      </TabsContent>
-
-      <TabsContent value="test" className="mt-6">
-        <NotificationTester />
       </TabsContent>
     </Tabs>
   );

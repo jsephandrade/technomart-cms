@@ -23,21 +23,6 @@ export const useEmployees = () => {
     }
   }, []);
 
-  const addEmployee = async (employee) => {
-    try {
-      const newEmployee = await employeeService.createEmployee(employee);
-      setEmployees((prev) => [...prev, newEmployee]);
-      toast.success('Employee added successfully');
-      await fetchEmployees();
-      return newEmployee;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to add employee';
-      toast.error(errorMessage);
-      throw err;
-    }
-  };
-
   const updateEmployee = async (id, updates) => {
     try {
       const updatedEmployee = await employeeService.updateEmployee(id, updates);
@@ -77,7 +62,6 @@ export const useEmployees = () => {
     employees,
     loading,
     error,
-    addEmployee,
     updateEmployee,
     deleteEmployee,
     refetch: fetchEmployees,
@@ -91,21 +75,24 @@ export const useSchedule = (initialParams = {}, options = {}) => {
   const [error, setError] = useState(null);
   const [params, setParams] = useState(initialParams || {});
 
-  const fetchSchedule = useCallback(async (override = null) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await employeeService.getSchedule(override || params);
-      setSchedule(data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to fetch schedule';
-      setError(errorMessage);
-      if (!suppressErrorToast) toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [params, suppressErrorToast]);
+  const fetchSchedule = useCallback(
+    async (override = null) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await employeeService.getSchedule(override || params);
+        setSchedule(data);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to fetch schedule';
+        setError(errorMessage);
+        if (!suppressErrorToast) toast.error(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [params, suppressErrorToast]
+  );
 
   const updateScheduleEntry = async (id, updates) => {
     try {

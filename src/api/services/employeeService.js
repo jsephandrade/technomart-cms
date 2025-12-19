@@ -6,9 +6,7 @@ class EmployeeService {
       id: e.id,
       name: e.name || '',
       position: e.position || '',
-      hourlyRate: Number(
-        e.hourlyRate ?? e.hourly_rate ?? e.rate ?? 0
-      ),
+      hourlyRate: Number(e.hourlyRate ?? e.hourly_rate ?? e.rate ?? 0),
       contact: e.contact || '',
       status: (e.status || 'active').toLowerCase(),
       avatar: e.avatar || '/placeholder.svg',
@@ -78,7 +76,8 @@ class EmployeeService {
     const limitValue = Number(
       params.limit === undefined || params.limit === null ? 0 : params.limit
     );
-    const limit = Number.isFinite(limitValue) && limitValue > 0 ? limitValue : 200;
+    const limit =
+      Number.isFinite(limitValue) && limitValue > 0 ? limitValue : 200;
     const merged = { ...params, limit };
     let page = Number(merged.page ?? 1);
     const aggregated = [];
@@ -100,18 +99,7 @@ class EmployeeService {
   }
 
   async createEmployee(employee) {
-    const payload = {
-      name: employee?.name || '',
-      position: employee?.position || '',
-      hourlyRate: Number(employee?.hourlyRate ?? 0),
-      contact: employee?.contact || '',
-      status: (employee?.status || 'active').toLowerCase(),
-    };
-    const res = await apiClient.post('/employees', payload, {
-      retry: { retries: 1 },
-    });
-    const e = res?.data || res;
-    return this._normalizeEmployee(e);
+    throw new Error('Employee creation is disabled');
   }
 
   async updateEmployee(id, updates) {

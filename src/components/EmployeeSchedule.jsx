@@ -8,13 +8,12 @@ import ManageEmployeesDialog from '@/components/employee-schedule/ManageEmployee
 import AddScheduleDialog from '@/components/employee-schedule/AddScheduleDialog';
 import WeeklyScheduleCard from '@/components/employee-schedule/WeeklyScheduleCard';
 import EditScheduleDialog from '@/components/employee-schedule/EditScheduleDialog';
-import AddEmployeePanel from '@/components/employee-schedule/AddEmployeePanel';
 import ScheduleCalendar from '@/components/schedule/ScheduleCalendar';
 import AttendanceAdmin from '@/components/AttendanceAdmin';
 import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, ClipboardList, Plane, UserPlus } from 'lucide-react';
+import { CalendarDays, ClipboardList, Plane } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -59,7 +58,6 @@ const EmployeeSchedule = () => {
 
   const {
     employees = [],
-    addEmployee,
     updateEmployee,
     deleteEmployee,
     loading: employeesLoading,
@@ -477,14 +475,6 @@ const EmployeeSchedule = () => {
               <span className="hidden sm:inline">Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
-              value="manage-employees"
-              aria-label="Add Employee"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
-            >
-              <UserPlus className="h-4 w-4 sm:hidden" aria-hidden="true" />
-              <span className="hidden sm:inline">Add Employee</span>
-            </TabsTrigger>
-            <TabsTrigger
               value="attendance"
               aria-label="Attendance Records"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
@@ -503,16 +493,6 @@ const EmployeeSchedule = () => {
           </TabsList>
           <TabsContent value="schedule" className="space-y-6">
             {activeTab === 'schedule' ? scheduleContent : null}
-          </TabsContent>
-          <TabsContent value="manage-employees" className="space-y-6">
-            {activeTab === 'manage-employees' ? (
-              <AddEmployeePanel
-                employees={employees}
-                loading={employeesLoading}
-                onAddEmployee={addEmployee}
-                onDeleteEmployee={deleteEmployee}
-              />
-            ) : null}
           </TabsContent>
           <TabsContent value="attendance" className="space-y-6">
             {activeTab === 'attendance' ? <AttendanceAdmin /> : null}

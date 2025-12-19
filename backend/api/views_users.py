@@ -11,6 +11,7 @@ import jwt
 from django.contrib.auth.hashers import make_password
 
 from .views_common import USERS, _paginate, _maybe_seed_from_memory, _safe_user_from_db, _now_iso, DEFAULT_ROLE_PERMISSIONS
+from .utils_audit import record_audit
 
 
 ROLES = {
@@ -33,6 +34,22 @@ ROLES = {
         "permissions": sorted(list(DEFAULT_ROLE_PERMISSIONS.get("staff", set()))),
     },
 }
+
+
+def _log_user_action(request, actor, target_user, action: str, *, details: str = "", meta=None):
+    """Record activity log for user management changes; best-effort."""
+    try:
+        record_audit(
+            request,
+            user=actor if getattr(actor, "id", None) else None,
+            type="action",
+            action=action,
+            details=details or "",
+            severity="info",
+            meta=meta or {},
+        )
+    except Exception:
+        pass
 
 
 @require_http_methods(["GET", "POST"]) 
@@ -191,6 +208,18 @@ def users(request):
                 "message": f"Email '{new_email}' is already in use. Please use a different email."
             }, status=400)
 
+        _log_user_action(
+            request,
+            actor=current,
+            target_user=db_user,
+            action=f"user.created:{db_user.email}:{db_user.role}",
+            meta={
+                "userId": str(db_user.id),
+                "email": db_user.email,
+                "role": db_user.role,
+                "status": db_user.status,
+            },
+        )
         return JsonResponse({"success": True, "data": _safe_user_from_db(db_user)})
     except (OperationalError, ProgrammingError):
         pass
@@ -248,6 +277,13 @@ def user_detail(request, user_id):
         if request.method == "DELETE":
             # Admin only delete (already validated above)
             db_user.delete()
+            _log_user_action(
+                request,
+                actor=actor,
+                target_user=db_user,
+                action=f"user.deleted:{db_user.email}",
+                meta={"userId": user_id, "email": db_user.email, "role": db_user.role, "status": db_user.status},
+            )
             return JsonResponse({"success": True, "message": "Deleted"})
 
         try:
@@ -257,6 +293,16 @@ def user_detail(request, user_id):
         # Only admin can update user details in User Management
         # (actor already validated as admin above)
         changed = False
+        changes = {}
+        before_snapshot = {
+            "name": db_user.name,
+            "email": db_user.email,
+            "role": db_user.role,
+            "status": db_user.status,
+            "permissions": db_user.permissions,
+            "phone": db_user.phone,
+        }
+        password_changed = False
         # Optional password update
         if "password" in payload and payload["password"] is not None:
             new_pw = (str(payload.get("password")) or "").strip()
@@ -265,13 +311,33 @@ def user_detail(request, user_id):
             if new_pw:
                 db_user.password_hash = make_password(new_pw)
                 changed = True
+                password_changed = True
 
         for k in ["name", "email", "role", "status", "permissions", "phone"]:
             if k in payload and payload[k] is not None:
-                setattr(db_user, "email" if k == "email" else k, payload[k] if k != "role" else str(payload[k]).lower())
+                new_val = payload[k] if k != "role" else str(payload[k]).lower()
+                setattr(db_user, "email" if k == "email" else k, new_val)
+                if before_snapshot.get(k) != new_val:
+                    changes[k] = {"from": before_snapshot.get(k), "to": new_val}
                 changed = True
         if changed:
             db_user.save()
+            changed_fields = sorted(list(changes.keys()))
+            if password_changed and "password" not in changed_fields:
+                changed_fields.append("password")
+            action_fields = ",".join(changed_fields) if changed_fields else "password"
+            _log_user_action(
+                request,
+                actor=actor,
+                target_user=db_user,
+                action=f"user.updated:{action_fields}",
+                meta={
+                    "userId": user_id,
+                    "email": db_user.email,
+                    "changes": changes,
+                    "passwordChanged": password_changed,
+                },
+            )
         return JsonResponse({"success": True, "data": _safe_user_from_db(db_user)})
     except (OperationalError, ProgrammingError):
         pass
@@ -336,8 +402,16 @@ def user_status(request, user_id):
         status = (payload.get("status") or "").lower()
         if status not in {"active", "deactivated"}:
             return JsonResponse({"success": False, "message": "Invalid status"}, status=400)
+        previous = db_user.status
         db_user.status = status
         db_user.save(update_fields=["status"])
+        _log_user_action(
+            request,
+            actor=actor,
+            target_user=db_user,
+            action=f"user.status:{previous}->{status}",
+            meta={"userId": user_id, "status": status, "previousStatus": previous},
+        )
         return JsonResponse({"success": True, "data": _safe_user_from_db(db_user)})
     except (OperationalError, ProgrammingError):
         pass
@@ -390,6 +464,7 @@ def user_role(request, user_id):
         role = (payload.get("role") or "").lower()
         if role not in ROLES:
             return JsonResponse({"success": False, "message": "Invalid role"}, status=400)
+        previous_role = db_user.role
         db_user.role = role
         # Initialize permissions to role defaults if empty/not set
         if not (db_user.permissions or []):
@@ -397,6 +472,13 @@ def user_role(request, user_id):
             db_user.save(update_fields=["role", "permissions"])
         else:
             db_user.save(update_fields=["role"])
+        _log_user_action(
+            request,
+            actor=actor,
+            target_user=db_user,
+            action=f"user.role:{previous_role}->{role}",
+            meta={"userId": user_id, "role": role, "previousRole": previous_role},
+        )
         return JsonResponse({"success": True, "data": _safe_user_from_db(db_user)})
     except (OperationalError, ProgrammingError):
         pass

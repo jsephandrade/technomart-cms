@@ -627,11 +627,11 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="w-full space-y-6"
         >
-          <TabsList className="w-full grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <TabsList className="w-full grid grid-cols-2 gap-2 sm:grid-cols-4 bg-muted/40 p-1 rounded-lg">
             <TabsTrigger
               value="add"
               aria-label="Add Employee"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ShieldPlus className="h-4 w-4" aria-hidden="true" />
               <span>Add Employee</span>
@@ -639,7 +639,7 @@ const EmployeeSchedule = () => {
             <TabsTrigger
               value="schedule"
               aria-label="Weekly Schedule"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
               <span>Weekly Schedule</span>
@@ -647,7 +647,7 @@ const EmployeeSchedule = () => {
             <TabsTrigger
               value="attendance"
               aria-label="Attendance Records"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
               <span>Attendance Records</span>
@@ -655,7 +655,7 @@ const EmployeeSchedule = () => {
             <TabsTrigger
               value="leave"
               aria-label="Leave Records"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <Plane className="h-4 w-4" aria-hidden="true" />
               <span>Leave Records</span>

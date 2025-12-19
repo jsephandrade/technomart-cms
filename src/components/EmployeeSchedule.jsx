@@ -441,6 +441,36 @@ const EmployeeSchedule = () => {
     }
   };
 
+  const handleManageEmployeeClick = (employee) => {
+    if (!canManage || !employee) return;
+    setManagedEmployee({
+      id: employee.id,
+      name: employee.name || '',
+      position: employee.position || '',
+      hourlyRate: employee.hourlyRate ?? 0,
+      contact: employee.contact || '',
+      status: employee.status || 'active',
+    });
+    setEmployeeDialogOpen(true);
+  };
+
+  const handleDeleteEmployeeClick = async (employeeId) => {
+    if (!canManage || !employeeId) return;
+    const confirmDelete =
+      typeof window !== 'undefined'
+        ? window.confirm('Delete this employee? This also removes schedules.')
+        : true;
+    if (!confirmDelete) return;
+    try {
+      await deleteEmployee(employeeId);
+      await Promise.all([refetchEmployees(), refetchSchedule()]);
+      toast.success('Employee deleted');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete employee');
+    }
+  };
+
   const addEmployeeContent = (
     <AddEmployeeTab
       quickAdd={quickAdd}
@@ -450,6 +480,9 @@ const EmployeeSchedule = () => {
       scheduleLoading={scheduleLoading}
       canManage={canManage}
       daysOfWeek={DAYS_OF_WEEK}
+      employees={displayEmployees}
+      onManageEmployee={handleManageEmployeeClick}
+      onDeleteEmployee={handleDeleteEmployeeClick}
     />
   );
 

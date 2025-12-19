@@ -463,7 +463,7 @@ const WeeklyScheduleCard = ({
                 {employee?.name || entry?.employeeName || 'Unassigned'}
               </p>
               <p className="text-xs text-muted-foreground">
-                {employee?.position || 'Team member'}
+                {employee?.position || entry?.position || 'Team member'}
               </p>
             </div>
             <Badge variant="outline" className="text-[11px]">

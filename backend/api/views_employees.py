@@ -82,6 +82,12 @@ def _safe_sched(s):
         sid = s.get("id") or s.get("schedule_id_str") or s.get("id_str")
         employee_id = s.get("employeeId") or s.get("employee_id_str") or s.get("employee_id")
         employee_name = s.get("employeeName") or s.get("employee_name") or ""
+        employee_position = (
+            s.get("employee_position")
+            or s.get("employeePosition")
+            or s.get("employee__position")
+            or ""
+        )
         day = s.get("day")
         start_time = s.get("start_time") or s.get("startTime")
         end_time = s.get("end_time") or s.get("endTime")
@@ -90,7 +96,16 @@ def _safe_sched(s):
     else:
         sid = getattr(s, "id", None)
         employee_id = getattr(s, "employee_id", None)
-        employee_name = getattr(s.employee, "name", "") if hasattr(s, "employee") else ""
+        employee_name = (
+            getattr(s.employee, "name", "")
+            if hasattr(s, "employee")
+            else ""
+        )
+        employee_position = (
+            getattr(s.employee, "position", "")
+            if hasattr(s, "employee")
+            else ""
+        )
         day = getattr(s, "day", None)
         start_time = getattr(s, "start_time", None)
         end_time = getattr(s, "end_time", None)
@@ -100,6 +115,7 @@ def _safe_sched(s):
         "id": str(sid) if sid is not None else None,
         "employeeId": str(employee_id) if employee_id is not None else None,
         "employeeName": employee_name or "",
+        "employeePosition": employee_position or "",
         "day": day,
         "startTime": _time_to_str(start_time),
         "endTime": _time_to_str(end_time),
@@ -329,6 +345,7 @@ def schedule(request):
                 schedule_id_str=Cast("id", CharField()),
                 employee_id_str=Cast("employee_id", CharField()),
                 employee_name=Coalesce(F("employee__name"), Value("")),
+                employee_position=Coalesce(F("employee__position"), Value("")),
             )
             role_l = (getattr(actor, "role", "") or "").lower()
             can_manage = role_l in {"admin", "manager"} or _has_permission(actor, "schedule.manage")
@@ -349,6 +366,7 @@ def schedule(request):
                 "schedule_id_str",
                 "employee_id_str",
                 "employee_name",
+                "employee_position",
                 "day",
                 "start_time",
                 "end_time",

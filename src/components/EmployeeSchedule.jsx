@@ -455,15 +455,12 @@ const EmployeeSchedule = () => {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className="border-primary/50 text-primary bg-primary/10"
-                  >
-                    <ShieldPlus className="h-4 w-4 mr-1" aria-hidden="true" />
-                    Inline Add
-                  </Badge>
+                  <ShieldPlus
+                    className="h-4 w-4 text-primary"
+                    aria-hidden="true"
+                  />
                   <CardTitle className="text-base font-semibold">
-                    Add employee & shift (fast path)
+                    Add Employee and Shift
                   </CardTitle>
                 </div>
                 <span className="text-xs text-muted-foreground hidden md:inline">

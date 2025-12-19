@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Edit2, ShieldPlus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUsers } from '@/hooks/useUsers';
 
 const AddEmployeeTab = ({
   quickAdd,
@@ -18,6 +19,48 @@ const AddEmployeeTab = ({
   onManageEmployee,
   onDeleteEmployee,
 }) => {
+  const { users = [] } = useUsers();
+  const [copyFromSelection, setCopyFromSelection] = useState('');
+  const staffUsers = useMemo(
+    () =>
+      users.filter((user) =>
+        ['staff', 'manager'].includes((user.role || '').toLowerCase())
+      ),
+    [users]
+  );
+
+  const handleCopyFromChange = (value) => {
+    setCopyFromSelection(value);
+    if (!value) {
+      setQuickAdd((prev) => ({
+        ...prev,
+        name: '',
+        position: '',
+      }));
+      return;
+    }
+    const [type, id] = value.split(':');
+    if (type === 'employee') {
+      const match = employees.find((emp) => emp.id === id);
+      if (match) {
+        setQuickAdd((prev) => ({
+          ...prev,
+          name: match.name || prev.name,
+          position: match.position || prev.position,
+        }));
+      }
+    } else if (type === 'user') {
+      const match = staffUsers.find((user) => user.id === id);
+      if (match) {
+        setQuickAdd((prev) => ({
+          ...prev,
+          name: match.name || prev.name,
+          position: match.role || prev.position,
+        }));
+      }
+    }
+  };
+
   if (!canManage) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -43,6 +86,46 @@ const AddEmployeeTab = ({
           </div>
         </CardHeader>
         <CardContent>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">
+                Copy from
+              </Label>
+              <div className="relative">
+                <select
+                  className={cn(
+                    'w-full appearance-none rounded-md border-input bg-background px-3 py-2 text-sm',
+                    'focus:outline-none focus:ring-2 focus:ring-primary/40'
+                  )}
+                  value={copyFromSelection}
+                  onChange={(event) => handleCopyFromChange(event.target.value)}
+                >
+                  <option value="">Start with blank profile</option>
+                  {employees.length ? (
+                    <optgroup label="Existing employees">
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={`employee:${emp.id}`}>
+                          {emp.name} • {emp.position || 'No role'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {staffUsers.length ? (
+                    <optgroup label="App users (staff/manager)">
+                      {staffUsers.map((user) => (
+                        <option key={user.id} value={`user:${user.id}`}>
+                          {user.name} • {user.role || 'Staff'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground/70">
+                  v
+                </span>
+              </div>
+            </div>
+          </div>
           <div className="grid items-end gap-3 md:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_0.8fr_auto]">
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wide">Name *</Label>

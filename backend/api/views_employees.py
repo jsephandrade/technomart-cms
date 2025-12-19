@@ -190,8 +190,67 @@ def employees(request):
             # Minimal fallback: empty list
             return JsonResponse({"success": True, "data": [], "pagination": {"page": 1, "limit": 50, "total": 0, "totalPages": 1}})
 
-    # POST: disabled (no employee creation allowed)
-    return JsonResponse({"success": False, "message": "Employee creation is disabled"}, status=403)
+    # POST: disabled (use employees_with_schedule endpoint)
+    return JsonResponse({"success": False, "message": "Employee creation is disabled; use /employees/with-schedule"}, status=403)
+
+
+@require_http_methods(["POST"])
+def employees_with_schedule(request):
+    """Create employee plus initial schedule entries in one request."""
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "employees.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"success": False, "message": "Name is required"}, status=400)
+
+    schedule_payload = payload.get("schedule") or []
+    if not isinstance(schedule_payload, list):
+        schedule_payload = []
+
+    valid_rows = []
+    for entry in schedule_payload:
+        day = entry.get("day")
+        st = _parse_time(entry.get("startTime") or entry.get("start_time"))
+        et = _parse_time(entry.get("endTime") or entry.get("end_time"))
+        if day in DAYS and st and et and st < et:
+            valid_rows.append({"day": day, "start_time": st, "end_time": et})
+
+    try:
+        from .models import Employee, ScheduleEntry
+        with transaction.atomic():
+            emp = Employee.objects.create(
+                name=name,
+                position=(payload.get("position") or "").strip(),
+                hourly_rate=float(payload.get("hourlyRate") or 0),
+                contact=(payload.get("contact") or "").strip(),
+                status=(payload.get("status") or "active").lower(),
+            )
+            created_schedule = []
+            for row in valid_rows:
+                entry = ScheduleEntry.objects.create(
+                    employee=emp, day=row["day"], start_time=row["start_time"], end_time=row["end_time"]
+                )
+                created_schedule.append(entry)
+        return JsonResponse(
+            {
+                "success": True,
+                "data": {
+                    "employee": _safe_emp(emp),
+                    "schedule": [_safe_sched(s) for s in created_schedule],
+                },
+            }
+        )
+    except Exception:
+        return JsonResponse({"success": False, "message": "Failed to create employee with schedule"}, status=500)
 
 
 @require_http_methods(["GET", "PUT", "DELETE"])
@@ -379,6 +438,7 @@ def schedule_detail(request, sid):
 
 __all__ = [
     "employees",
+    "employees_with_schedule",
     "employee_detail",
     "schedule",
     "schedule_detail",

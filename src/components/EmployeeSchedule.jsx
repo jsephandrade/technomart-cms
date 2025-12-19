@@ -13,7 +13,7 @@ import AttendanceAdmin from '@/components/AttendanceAdmin';
 import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, ClipboardList, Plane } from 'lucide-react';
+import { CalendarDays, ClipboardList, Plane, ShieldPlus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const DAYS_OF_WEEK = [
   'Sunday',
@@ -58,9 +61,11 @@ const EmployeeSchedule = () => {
 
   const {
     employees = [],
+    addEmployeeWithSchedule,
     updateEmployee,
     deleteEmployee,
     loading: employeesLoading,
+    refetch: refetchEmployees,
   } = useEmployees();
 
   const displayEmployees = useMemo(
@@ -77,6 +82,7 @@ const EmployeeSchedule = () => {
     updateScheduleEntry,
     deleteScheduleEntry,
     loading: scheduleLoading,
+    refetch: refetchSchedule,
   } = useSchedule({}, { autoFetch: true });
 
   const [dialogOpen, setDialogOpenState] = useState(false);
@@ -88,9 +94,49 @@ const EmployeeSchedule = () => {
   const [managedEmployee, setManagedEmployee] = useState({
     ...DEFAULT_EMPLOYEE_FORM,
   });
+  const [quickAdd, setQuickAdd] = useState({
+    name: '',
+    position: '',
+    day: 'Monday',
+    startTime: '08:00',
+    endTime: '16:00',
+  });
   const [activeTab, setActiveTab] = useState('schedule');
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const attendanceAutoOpenDismissed = useRef(false);
+
+  const handleQuickAdd = async () => {
+    if (!canManage) return;
+    if (!quickAdd.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    const payload = {
+      name: quickAdd.name,
+      position: quickAdd.position,
+      schedule: [
+        {
+          day: quickAdd.day,
+          startTime: quickAdd.startTime,
+          endTime: quickAdd.endTime,
+        },
+      ],
+    };
+    try {
+      await addEmployeeWithSchedule(payload);
+      await Promise.all([refetchEmployees(), refetchSchedule()]);
+      setQuickAdd({
+        name: '',
+        position: '',
+        day: 'Monday',
+        startTime: '08:00',
+        endTime: '16:00',
+      });
+      toast.success('Employee and shift added');
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const hasShiftToday = useMemo(() => {
     // Check if user has a linked Employee record
@@ -401,6 +447,94 @@ const EmployeeSchedule = () => {
   const scheduleContent = (
     <>
       <div className="mt-2 space-y-6">
+        {canManage ? (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldPlus className="h-4 w-4" aria-hidden="true" />
+                Quick add employee + shift
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-5">
+              <div className="space-y-1">
+                <Label>Name *</Label>
+                <Input
+                  value={quickAdd.name}
+                  onChange={(e) =>
+                    setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="Jane Smith"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Role</Label>
+                <Input
+                  value={quickAdd.position}
+                  onChange={(e) =>
+                    setQuickAdd((prev) => ({
+                      ...prev,
+                      position: e.target.value,
+                    }))
+                  }
+                  placeholder="Barista"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Day</Label>
+                <select
+                  className="border-input bg-transparent text-sm rounded-md px-3 py-2"
+                  value={quickAdd.day}
+                  onChange={(e) =>
+                    setQuickAdd((prev) => ({ ...prev, day: e.target.value }))
+                  }
+                >
+                  {DAYS_OF_WEEK.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>Start</Label>
+                <Input
+                  type="time"
+                  value={quickAdd.startTime}
+                  onChange={(e) =>
+                    setQuickAdd((prev) => ({
+                      ...prev,
+                      startTime: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>End</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="time"
+                    value={quickAdd.endTime}
+                    onChange={(e) =>
+                      setQuickAdd((prev) => ({
+                        ...prev,
+                        endTime: e.target.value,
+                      }))
+                    }
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={handleQuickAdd}
+                    disabled={employeesLoading || scheduleLoading}
+                  >
+                    Save & schedule
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
         <div className="grid gap-2 items-start lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.6fr)] 2xl:grid-cols-[minmax(0,1.8fr)_minmax(0,0.6fr)]">
           <WeeklyScheduleCard
             daysOfWeek={DAYS_OF_WEEK}

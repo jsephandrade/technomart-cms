@@ -54,6 +54,20 @@ export const useEmployees = () => {
     }
   };
 
+  const addEmployeeWithSchedule = async (payload) => {
+    try {
+      const res = await employeeService.createEmployeeWithSchedule(payload);
+      toast.success('Employee and schedule added successfully');
+      await fetchEmployees();
+      return res;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to add employee';
+      toast.error(errorMessage);
+      throw err;
+    }
+  };
+
   useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
@@ -62,6 +76,7 @@ export const useEmployees = () => {
     employees,
     loading,
     error,
+    addEmployeeWithSchedule,
     updateEmployee,
     deleteEmployee,
     refetch: fetchEmployees,

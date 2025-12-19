@@ -129,6 +129,7 @@ urlpatterns = [
     # Employees & Schedule
     path("employees", emp_views.employees, name="employees"),
     path("employees/<uuid:emp_id>", emp_views.employee_detail, name="employee_detail"),
+    path("employees/with-schedule", emp_views.employees_with_schedule, name="employees_with_schedule"),
     path("schedule", emp_views.schedule, name="schedule"),
     path("schedule/<uuid:sid>", emp_views.schedule_detail, name="schedule_detail"),
 

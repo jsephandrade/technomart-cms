@@ -373,7 +373,11 @@ const ScheduleCalendar = ({
               const employee = employeeLookup.get(entry.employeeId);
               const displayName =
                 employee?.name || entry.employeeName || 'Unassigned';
-              const displayRole = employee?.position || 'N/A';
+              const displayRole =
+                employee?.position ||
+                entry?.position ||
+                entry?.employee?.position ||
+                'N/A';
               const compositeKey =
                 entry.id ??
                 `${entry.employeeId || 'unknown'}-${entry.day}-${entry.startTime}-${entry.endTime}`;

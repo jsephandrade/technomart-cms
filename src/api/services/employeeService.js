@@ -99,19 +99,7 @@ class EmployeeService {
   }
 
   async createEmployee(employee) {
-    const payload = {
-      name: employee?.name || '',
-      position: employee?.position || '',
-      hourlyRate: Number(employee?.hourlyRate ?? 0),
-      contact: employee?.contact || '',
-      status: (employee?.status || 'active').toLowerCase(),
-      schedule: Array.isArray(employee?.schedule) ? employee.schedule : [],
-    };
-    const res = await apiClient.post('/employees', payload, {
-      retry: { retries: 1 },
-    });
-    const e = res?.data || res;
-    return this._normalizeEmployee(e);
+    throw new Error('Employee creation is disabled');
   }
 
   async updateEmployee(id, updates) {

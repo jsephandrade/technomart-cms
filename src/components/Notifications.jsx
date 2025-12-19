@@ -270,107 +270,105 @@ const Notifications = () => {
       </TabsList>
 
       <TabsContent value="notifications" className="mt-6">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="md:col-span-2 space-y-4">
-            <FeaturePanelCard
-              title="Notification Center"
-              titleStyle="accent"
-              titleIcon={Bell}
-              titleAccentClassName="px-3 py-1 text-xs md:text-sm"
-              titleClassName="text-xs md:text-sm"
-              description="System alerts and messages"
-              badgeText={unreadCount > 0 ? `${unreadCount} unread` : null}
-              badgeClassName="text-[10px] md:text-xs"
-              headerActions={
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={markAllAsRead}
-                    disabled={unreadCount === 0}
+        <div className="space-y-4">
+          <FeaturePanelCard
+            title="Notification Center"
+            titleStyle="accent"
+            titleIcon={Bell}
+            titleAccentClassName="px-3 py-1 text-xs md:text-sm"
+            titleClassName="text-xs md:text-sm"
+            description="System alerts and messages"
+            badgeText={unreadCount > 0 ? `${unreadCount} unread` : null}
+            badgeClassName="text-[10px] md:text-xs"
+            headerActions={
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={markAllAsRead}
+                  disabled={unreadCount === 0}
+                >
+                  Mark all as read
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                  onClick={refreshList}
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
+            }
+            contentClassName="space-y-5"
+          >
+            {notifications.length > 0 ? (
+              <div className="space-y-4">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`flex items-start justify-between gap-4 rounded-lg border border-border/40 p-3 transition hover:border-border/60 ${notification.read ? 'bg-background' : 'bg-primary/5'}`}
                   >
-                    Mark all as read
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-1"
-                    onClick={refreshList}
-                  >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </div>
-              }
-              contentClassName="space-y-5"
-            >
-              {notifications.length > 0 ? (
-                <div className="space-y-4">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`flex items-start justify-between gap-4 rounded-lg border border-border/40 p-3 transition hover:border-border/60 ${notification.read ? 'bg-background' : 'bg-primary/5'}`}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="mt-1">
-                          {notification.type === 'warning' && (
-                            <Bell className="h-5 w-5 text-orange-500" />
-                          )}
-                          {notification.type === 'info' && (
-                            <Bell className="h-5 w-5 text-blue-500" />
-                          )}
-                          {notification.type === 'success' && (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                          )}
-                          {notification.type === 'error' && (
-                            <XCircle className="h-5 w-5 text-red-500" />
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <h4
-                            className={`font-medium leading-snug ${notification.read ? '' : 'font-semibold text-foreground'}`}
-                          >
-                            {notification.title}
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            {notification.message}
-                          </p>
-                          <span className="block text-xs text-muted-foreground/80">
-                            {notification.time}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-shrink-0 items-center gap-2">
-                        {!notification.read && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => markAsRead(notification.id)}
-                          >
-                            Mark as read
-                          </Button>
+                    <div className="flex items-start gap-4">
+                      <div className="mt-1">
+                        {notification.type === 'warning' && (
+                          <Bell className="h-5 w-5 text-orange-500" />
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Delete notification"
-                          onClick={() => deleteNotification(notification.id)}
+                        {notification.type === 'info' && (
+                          <Bell className="h-5 w-5 text-blue-500" />
+                        )}
+                        {notification.type === 'success' && (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        )}
+                        {notification.type === 'error' && (
+                          <XCircle className="h-5 w-5 text-red-500" />
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <h4
+                          className={`font-medium leading-snug ${notification.read ? '' : 'font-semibold text-foreground'}`}
                         >
-                          <XCircle className="h-4 w-4" aria-hidden="true" />
-                        </Button>
+                          {notification.title}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          {notification.message}
+                        </p>
+                        <span className="block text-xs text-muted-foreground/80">
+                          {notification.time}
+                        </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 py-8 text-center">
-                  <Bell className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
-                  <p className="text-sm text-muted-foreground">
-                    No notifications to display
-                  </p>
-                </div>
-              )}
-            </FeaturePanelCard>
-          </div>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      {!notification.read && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => markAsRead(notification.id)}
+                        >
+                          Mark as read
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete notification"
+                        onClick={() => deleteNotification(notification.id)}
+                      >
+                        <XCircle className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 py-8 text-center">
+                <Bell className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
+                <p className="text-sm text-muted-foreground">
+                  No notifications to display
+                </p>
+              </div>
+            )}
+          </FeaturePanelCard>
         </div>
       </TabsContent>
 

@@ -212,7 +212,7 @@ def users(request):
             request,
             actor=current,
             target_user=db_user,
-            action=f"user.created:{db_user.email}:{db_user.role}",
+            action=f"User created ({db_user.email}, role {db_user.role})",
             meta={
                 "userId": str(db_user.id),
                 "email": db_user.email,
@@ -281,7 +281,7 @@ def user_detail(request, user_id):
                 request,
                 actor=actor,
                 target_user=db_user,
-                action=f"user.deleted:{db_user.email}",
+                action=f"User deleted ({db_user.email})",
                 meta={"userId": user_id, "email": db_user.email, "role": db_user.role, "status": db_user.status},
             )
             return JsonResponse({"success": True, "message": "Deleted"})
@@ -330,7 +330,7 @@ def user_detail(request, user_id):
                 request,
                 actor=actor,
                 target_user=db_user,
-                action=f"user.updated:{action_fields}",
+                action=f"User updated ({action_fields})",
                 meta={
                     "userId": user_id,
                     "email": db_user.email,
@@ -409,7 +409,7 @@ def user_status(request, user_id):
             request,
             actor=actor,
             target_user=db_user,
-            action=f"user.status:{previous}->{status}",
+            action=f"User status updated to {status}",
             meta={"userId": user_id, "status": status, "previousStatus": previous},
         )
         return JsonResponse({"success": True, "data": _safe_user_from_db(db_user)})
@@ -476,7 +476,7 @@ def user_role(request, user_id):
             request,
             actor=actor,
             target_user=db_user,
-            action=f"user.role:{previous_role}->{role}",
+            action=f"User role updated to {role}",
             meta={"userId": user_id, "role": role, "previousRole": previous_role},
         )
         return JsonResponse({"success": True, "data": _safe_user_from_db(db_user)})

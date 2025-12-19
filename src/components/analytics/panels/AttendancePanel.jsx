@@ -398,7 +398,7 @@ export default function AttendancePanel() {
               Top team members by total scheduled hours
             </CardDescription>
           </CardHeader>
-          <CardContent className="h-80 relative">
+          <CardContent className="h-80 relative pt-6">
             {chartData.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <AlertCircle className="h-12 w-12 mb-3 opacity-50" />

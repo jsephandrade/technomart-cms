@@ -13,7 +13,7 @@ import AttendanceAdmin from '@/components/AttendanceAdmin';
 import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, ClipboardList, ShieldPlus } from 'lucide-react';
+import { CalendarDays, ClipboardList, ShieldPlus, Plane } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -627,7 +627,7 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="w-full space-y-6"
         >
-          <TabsList className="w-full grid grid-cols-4">
+          <TabsList className="w-full grid grid-cols-2 gap-2 sm:grid-cols-4">
             <TabsTrigger
               value="add"
               aria-label="Add Employee"
@@ -657,6 +657,7 @@ const EmployeeSchedule = () => {
               aria-label="Leave Records"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2"
             >
+              <Plane className="h-4 w-4" aria-hidden="true" />
               <span>Leave Records</span>
             </TabsTrigger>
           </TabsList>

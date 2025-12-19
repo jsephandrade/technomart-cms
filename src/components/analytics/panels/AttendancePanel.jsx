@@ -184,6 +184,11 @@ export default function AttendancePanel() {
       .reverse();
   }, [hoursByStaff]);
 
+  const chartMaxHours = useMemo(() => {
+    if (!chartData.length) return 0;
+    return Math.max(...chartData.map((entry) => entry.hours));
+  }, [chartData]);
+
   const roster = useMemo(() => {
     const rosterList = employees.map((emp) => {
       const staffHours =
@@ -431,6 +436,7 @@ export default function AttendancePanel() {
                   <YAxis
                     tick={CHART_STYLES.axisTick}
                     width={48}
+                    domain={[0, chartMaxHours ? chartMaxHours + 10 : 10]}
                     tickFormatter={(value) => `${roundHours(value)}h`}
                   />
                   <Tooltip
@@ -469,23 +475,6 @@ export default function AttendancePanel() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            )}
-            {chartData.length > 0 && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                {chartData.map((entry) => (
-                  <div
-                    key={`leader-${entry.name}`}
-                    className="rounded-2xl border border-border/60 bg-card/70 p-3 text-center shadow-sm"
-                  >
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatHoursValue(entry.hours)}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {entry.name}
-                    </p>
-                  </div>
-                ))}
-              </div>
             )}
           </CardContent>
         </Card>

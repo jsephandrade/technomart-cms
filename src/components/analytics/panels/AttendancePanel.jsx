@@ -470,6 +470,23 @@ export default function AttendancePanel() {
                 </BarChart>
               </ResponsiveContainer>
             )}
+            {chartData.length > 0 && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                {chartData.map((entry) => (
+                  <div
+                    key={`leader-${entry.name}`}
+                    className="rounded-2xl border border-border/60 bg-card/70 p-3 text-center shadow-sm"
+                  >
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatHoursValue(entry.hours)}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {entry.name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

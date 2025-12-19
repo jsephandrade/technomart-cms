@@ -10,10 +10,9 @@ import WeeklyScheduleCard from '@/components/employee-schedule/WeeklyScheduleCar
 import EditScheduleDialog from '@/components/employee-schedule/EditScheduleDialog';
 import ScheduleCalendar from '@/components/schedule/ScheduleCalendar';
 import AttendanceAdmin from '@/components/AttendanceAdmin';
-import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, ClipboardList, Plane, ShieldPlus } from 'lucide-react';
+import { CalendarDays, ClipboardList, ShieldPlus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -24,7 +23,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -447,125 +445,123 @@ const EmployeeSchedule = () => {
     }
   };
 
+  const addEmployeeContent = canManage ? (
+    <div className="space-y-4">
+      <Card className="border-dashed border-primary/30 bg-muted/30">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldPlus className="h-4 w-4 text-primary" aria-hidden="true" />
+              <CardTitle className="text-base font-semibold">
+                Add Employee and Shift
+              </CardTitle>
+            </div>
+            <span className="text-xs text-muted-foreground hidden md:inline">
+              Inline with Weekly Shift Planner styling
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_0.8fr_auto] items-end">
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">Name *</Label>
+              <Input
+                value={quickAdd.name}
+                onChange={(e) =>
+                  setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
+                }
+                placeholder="Jane Smith"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">Role</Label>
+              <Input
+                value={quickAdd.position}
+                onChange={(e) =>
+                  setQuickAdd((prev) => ({
+                    ...prev,
+                    position: e.target.value,
+                  }))
+                }
+                placeholder="Barista"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">Day</Label>
+              <div className="relative">
+                <select
+                  className={cn(
+                    'w-full appearance-none rounded-md border-input bg-background text-sm px-3 py-2',
+                    'focus:outline-none focus:ring-2 focus:ring-primary/40'
+                  )}
+                  value={quickAdd.day}
+                  onChange={(e) =>
+                    setQuickAdd((prev) => ({
+                      ...prev,
+                      day: e.target.value,
+                    }))
+                  }
+                >
+                  {DAYS_OF_WEEK.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground/70 text-xs">
+                  ▼
+                </span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">Start</Label>
+              <Input
+                type="time"
+                value={quickAdd.startTime}
+                onChange={(e) =>
+                  setQuickAdd((prev) => ({
+                    ...prev,
+                    startTime: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">End</Label>
+              <Input
+                type="time"
+                value={quickAdd.endTime}
+                onChange={(e) =>
+                  setQuickAdd((prev) => ({
+                    ...prev,
+                    endTime: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="flex items-center justify-end">
+              <Button
+                size="sm"
+                className="whitespace-nowrap"
+                onClick={handleQuickAdd}
+                disabled={employeesLoading || scheduleLoading}
+              >
+                Save & schedule
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  ) : (
+    <div className="text-sm text-muted-foreground">
+      Manager access required.
+    </div>
+  );
+
   const scheduleContent = (
     <>
       <div className="mt-2 space-y-6">
-        {canManage ? (
-          <Card className="border-dashed border-primary/30 bg-muted/30">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <ShieldPlus
-                    className="h-4 w-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  <CardTitle className="text-base font-semibold">
-                    Add Employee and Shift
-                  </CardTitle>
-                </div>
-                <span className="text-xs text-muted-foreground hidden md:inline">
-                  Aligned with Weekly Shift Planner styling
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_0.8fr_auto] items-end">
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wide">
-                    Name *
-                  </Label>
-                  <Input
-                    value={quickAdd.name}
-                    onChange={(e) =>
-                      setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
-                    }
-                    placeholder="Jane Smith"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wide">
-                    Role
-                  </Label>
-                  <Input
-                    value={quickAdd.position}
-                    onChange={(e) =>
-                      setQuickAdd((prev) => ({
-                        ...prev,
-                        position: e.target.value,
-                      }))
-                    }
-                    placeholder="Barista"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wide">Day</Label>
-                  <div className="relative">
-                    <select
-                      className={cn(
-                        'w-full appearance-none rounded-md border-input bg-background text-sm px-3 py-2',
-                        'focus:outline-none focus:ring-2 focus:ring-primary/40'
-                      )}
-                      value={quickAdd.day}
-                      onChange={(e) =>
-                        setQuickAdd((prev) => ({
-                          ...prev,
-                          day: e.target.value,
-                        }))
-                      }
-                    >
-                      {DAYS_OF_WEEK.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground/70 text-xs">
-                      ▼
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wide">
-                    Start
-                  </Label>
-                  <Input
-                    type="time"
-                    value={quickAdd.startTime}
-                    onChange={(e) =>
-                      setQuickAdd((prev) => ({
-                        ...prev,
-                        startTime: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs uppercase tracking-wide">End</Label>
-                  <Input
-                    type="time"
-                    value={quickAdd.endTime}
-                    onChange={(e) =>
-                      setQuickAdd((prev) => ({
-                        ...prev,
-                        endTime: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-end">
-                  <Button
-                    size="sm"
-                    className="whitespace-nowrap"
-                    onClick={handleQuickAdd}
-                    disabled={employeesLoading || scheduleLoading}
-                  >
-                    Save & schedule
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
         <div className="grid gap-2 items-start lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.6fr)] 2xl:grid-cols-[minmax(0,1.8fr)_minmax(0,0.6fr)]">
           <WeeklyScheduleCard
             daysOfWeek={DAYS_OF_WEEK}
@@ -632,6 +628,14 @@ const EmployeeSchedule = () => {
         >
           <TabsList className="grid w-full grid-cols-3 divide-x divide-border rounded-lg bg-muted/40 text-xs sm:flex sm:w-fit sm:flex-wrap sm:gap-2 sm:divide-x-0 sm:bg-transparent">
             <TabsTrigger
+              value="add"
+              aria-label="Add Employee"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
+            >
+              <ShieldPlus className="h-4 w-4 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Add Employee</span>
+            </TabsTrigger>
+            <TabsTrigger
               value="schedule"
               aria-label="Weekly Schedule"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
@@ -647,23 +651,15 @@ const EmployeeSchedule = () => {
               <ClipboardList className="h-4 w-4 sm:hidden" aria-hidden="true" />
               <span className="hidden sm:inline">Attendance Records</span>
             </TabsTrigger>
-            <TabsTrigger
-              value="leave"
-              aria-label="Leave Records"
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 sm:min-w-[160px] sm:flex-none sm:px-4"
-            >
-              <Plane className="h-4 w-4 sm:hidden" aria-hidden="true" />
-              <span className="hidden sm:inline">Leave Records</span>
-            </TabsTrigger>
           </TabsList>
+          <TabsContent value="add" className="space-y-6">
+            {activeTab === 'add' ? addEmployeeContent : null}
+          </TabsContent>
           <TabsContent value="schedule" className="space-y-6">
             {activeTab === 'schedule' ? scheduleContent : null}
           </TabsContent>
           <TabsContent value="attendance" className="space-y-6">
             {activeTab === 'attendance' ? <AttendanceAdmin /> : null}
-          </TabsContent>
-          <TabsContent value="leave" className="space-y-6">
-            {activeTab === 'leave' ? <LeaveManagement /> : null}
           </TabsContent>
         </Tabs>
       ) : (

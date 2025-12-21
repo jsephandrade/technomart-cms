@@ -18,6 +18,15 @@ const STATUS_BADGE_STYLES = {
   inactive: 'border border-border/60 bg-muted text-muted-foreground',
   pending: 'border border-amber-500/30 bg-amber-500/10 text-amber-700',
 };
+const HEADER_LAYOUT_CLASSES =
+  'flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between';
+const ACCENT_CONTAINER_CLASSES =
+  'inline-flex max-w-fit items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1 text-[clamp(0.6rem,1vw,0.75rem)] font-semibold uppercase tracking-wide text-primary shadow-sm sm:px-3 sm:py-1.5 sm:text-xs';
+const ACCENT_TITLE_CLASSES =
+  'text-[clamp(0.7rem,1.2vw,0.85rem)] font-bold uppercase tracking-wider bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent sm:text-sm';
+const ACCENT_ICON_CLASSES = 'h-4 w-4 text-primary drop-shadow-sm';
+const ACCENT_DESCRIPTION_CLASSES =
+  'max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm';
 
 const getInitials = (name = '') =>
   name
@@ -96,14 +105,24 @@ const AddEmployeeTab = ({
     <div className="space-y-4">
       <Card className="border-border/60 bg-card/80 shadow-sm">
         <CardHeader className="pb-3">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-              <ShieldPlus className="h-3.5 w-3.5" aria-hidden="true" />
-              Add Employee and Schedule
+          <div className={HEADER_LAYOUT_CLASSES}>
+            <div className="space-y-2">
+              <div className={ACCENT_CONTAINER_CLASSES}>
+                <ShieldPlus
+                  className={ACCENT_ICON_CLASSES}
+                  aria-hidden="true"
+                />
+                <span
+                  className={ACCENT_TITLE_CLASSES}
+                  aria-label="Add Employee and Schedule"
+                >
+                  Add Employee and Schedule
+                </span>
+              </div>
+              <CardDescription className={ACCENT_DESCRIPTION_CLASSES}>
+                Create a teammate and set their first schedule in one flow.
+              </CardDescription>
             </div>
-            <CardDescription className="text-xs">
-              Create a teammate and set their first schedule in one flow.
-            </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -256,13 +275,18 @@ const AddEmployeeTab = ({
 
       <Card className="border-border/60 bg-card/80 shadow-sm">
         <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className={HEADER_LAYOUT_CLASSES}>
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-                <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                Team Directory
+              <div className={ACCENT_CONTAINER_CLASSES}>
+                <Users className={ACCENT_ICON_CLASSES} aria-hidden="true" />
+                <span
+                  className={ACCENT_TITLE_CLASSES}
+                  aria-label="Team Directory"
+                >
+                  Team Directory
+                </span>
               </div>
-              <CardDescription className="text-xs">
+              <CardDescription className={ACCENT_DESCRIPTION_CLASSES}>
                 View, edit, or archive employees in your roster.
               </CardDescription>
             </div>

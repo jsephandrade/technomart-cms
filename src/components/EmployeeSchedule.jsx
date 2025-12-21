@@ -653,7 +653,9 @@ const EmployeeSchedule = () => {
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ShieldPlus className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">Add Employee</span>
+              <span className="hidden lg:inline">
+                Add Employee and Schedule
+              </span>
             </TabsTrigger>
             <TabsTrigger
               value="schedule"

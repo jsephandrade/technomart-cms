@@ -7,7 +7,6 @@ import {
   Ban,
   BellOff,
   CheckCircle2,
-  ChevronDown,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -101,9 +100,6 @@ const SecurityAlertsCard = ({
   onMute,
   headerActions,
 }) => {
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const MAX_VISIBLE_ALERTS = 10;
-
   const normalizedAlerts = useMemo(() => {
     const list = Array.isArray(securityAlerts) ? securityAlerts : [];
     return list.map((alert) => ({
@@ -113,12 +109,7 @@ const SecurityAlertsCard = ({
     }));
   }, [securityAlerts]);
 
-  const safeAlerts = Array.isArray(securityAlerts) ? securityAlerts : [];
-  const hasMoreAlerts = safeAlerts.length > MAX_VISIBLE_ALERTS;
-  const displayedAlerts =
-    !hasMoreAlerts || isExpanded
-      ? normalizedAlerts
-      : normalizedAlerts.slice(0, MAX_VISIBLE_ALERTS);
+  const displayedAlerts = normalizedAlerts;
   const displayedCount = displayedAlerts.length;
 
   return (
@@ -133,10 +124,7 @@ const SecurityAlertsCard = ({
       headerActions={headerActions}
       contentClassName="space-y-4"
     >
-      <div
-        className="relative w-full overflow-hidden transition-[max-height] duration-500 ease-in-out"
-        style={{ maxHeight: isExpanded ? '60rem' : '28rem' }}
-      >
+      <div className="relative w-full max-h-[28rem] overflow-y-auto scrollbar-hide">
         <div className="space-y-3">
           {displayedAlerts.length > 0 ? (
             displayedAlerts.map((alert) => {
@@ -341,40 +329,11 @@ const SecurityAlertsCard = ({
             </div>
           )}
         </div>
-        {hasMoreAlerts && !isExpanded && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background via-background/80 to-transparent" />
-        )}
       </div>
 
       <div className="text-xs text-muted-foreground">
-        Showing {displayedCount} of {safeAlerts.length} security alerts
+        Showing {displayedCount} security alerts
       </div>
-
-      {hasMoreAlerts && (
-        <div className="flex justify-start md:justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="group flex items-center gap-1"
-            onClick={() => setIsExpanded((prev) => !prev)}
-            aria-expanded={isExpanded}
-            aria-label={
-              isExpanded ? 'Collapse security alerts' : 'Expand security alerts'
-            }
-          >
-            <span className="text-sm font-medium">
-              {isExpanded ? 'Show Less' : 'Show All Alerts'}
-            </span>
-            <span className="rounded-full border border-border bg-background p-1 transition-transform duration-300 ease-in-out group-hover:translate-y-0.5">
-              <ChevronDown
-                className={`h-4 w-4 transition-transform duration-300 ease-in-out ${
-                  isExpanded ? 'rotate-180' : ''
-                }`}
-              />
-            </span>
-          </Button>
-        </div>
-      )}
     </FeaturePanelCard>
   );
 };

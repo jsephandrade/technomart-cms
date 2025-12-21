@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Archive, Edit2, ShieldPlus, Users } from 'lucide-react';
+import { Archive, Edit, Edit2, ShieldPlus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUsers } from '@/hooks/useUsers';
 
@@ -95,21 +95,31 @@ const AddEmployeeTab = ({
 
   return (
     <div className="space-y-4">
-      <Card className="border-dashed border-primary/30 bg-muted/30">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ShieldPlus className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-base font-semibold">
-                Add Employee and Shift
-              </CardTitle>
+      <Card className="border-border/60 bg-card/80 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldPlus className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold">
+                  Add employee and shift
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Create a teammate and set their first shift in one flow.
+                </CardDescription>
+              </div>
             </div>
-            <span className="hidden text-xs text-muted-foreground md:inline">
-              Inline with Weekly Shift Planner styling
-            </span>
+            <Badge
+              variant="outline"
+              className="text-[11px] uppercase tracking-wide"
+            >
+              Quick setup
+            </Badge>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wide">
@@ -358,7 +368,7 @@ const AddEmployeeTab = ({
                         }
                         disabled={employeesLoading}
                       >
-                        <Edit2 className="h-4 w-4" aria-hidden="true" />
+                        <Edit className="h-4 w-4" aria-hidden="true" />
                         <span className="hidden sm:inline">Edit</span>
                         <span className="sr-only">Edit employee</span>
                       </Button>

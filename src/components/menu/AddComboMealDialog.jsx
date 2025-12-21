@@ -13,15 +13,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { AlertCircle, Layers, Tag } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { AlertCircle, Check, ChevronsUpDown, Layers, Tag } from 'lucide-react';
 
 const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
   const [name, setName] = useState('');
@@ -30,6 +36,9 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
   const [sel1, setSel1] = useState('');
   const [sel2, setSel2] = useState('');
   const [sel3, setSel3] = useState('');
+  const [item1Open, setItem1Open] = useState(false);
+  const [item2Open, setItem2Open] = useState(false);
+  const [item3Open, setItem3Open] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [creating, setCreating] = useState(false);
   const nameInputRef = useRef(null);
@@ -42,6 +51,9 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
       setSel1('');
       setSel2('');
       setSel3('');
+      setItem1Open(false);
+      setItem2Open(false);
+      setItem3Open(false);
       setSubmitted(false);
       setCreating(false);
       return;
@@ -49,15 +61,48 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
 
     setSubmitted(false);
     setCreating(false);
+    setItem1Open(false);
+    setItem2Open(false);
+    setItem3Open(false);
     setTimeout(() => {
       nameInputRef.current?.focus?.();
     }, 100);
   }, [open]);
 
-  const options = useMemo(
-    () => (items || []).map((i) => ({ id: i.id, label: i.name })),
-    [items]
-  );
+  const options = useMemo(() => {
+    const isComboMeal = (item) => {
+      if (!item) return false;
+      const category = String(
+        item.category || item.categoryName || item.category_label || ''
+      ).toLowerCase();
+      if (category.includes('combo')) return true;
+      const type = String(
+        item.type || item.itemType || item.kind || ''
+      ).toLowerCase();
+      if (type.includes('combo')) return true;
+      if (
+        item.isCombo ||
+        item.is_combo ||
+        item.is_combo_meal ||
+        item.isComboMeal ||
+        item.combo
+      ) {
+        return true;
+      }
+      const ingredients =
+        item.ingredients || item.ingredientIds || item.ingredient_ids;
+      return Array.isArray(ingredients) && ingredients.length > 0;
+    };
+
+    return (items || [])
+      .filter((item) => !isComboMeal(item))
+      .map((item) => ({
+        id: item.id,
+        label: item.name || 'Unnamed item',
+        category: item.category || item.categoryName || '',
+      }))
+      .filter((option) => option.id !== undefined && option.id !== null);
+  }, [items]);
 
   const summary = useMemo(() => {
     const labels = [sel1, sel2, sel3]
@@ -208,24 +253,70 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="flex items-center h-5">Item 1</Label>
-                <Select
-                  value={sel1}
-                  onValueChange={setSel1}
-                  disabled={creating}
-                >
-                  <SelectTrigger
-                    className={cn(selectionError && 'border-destructive')}
+                <Popover open={item1Open} onOpenChange={setItem1Open}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={item1Open}
+                      className={cn(
+                        'w-full justify-between text-sm font-normal',
+                        selectionError && !sel1 && 'border-destructive'
+                      )}
+                      disabled={creating}
+                    >
+                      <span className="truncate">
+                        {options.find((o) => o.id === sel1)?.label ||
+                          'Select a menu item'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-0"
+                    align="start"
                   >
-                    <SelectValue placeholder="Select a menu item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <Command>
+                      <CommandInput placeholder="Search menu items..." />
+                      <CommandList className="max-h-64 overflow-y-auto">
+                        <CommandEmpty>No menu items found.</CommandEmpty>
+                        <CommandGroup
+                          heading={`Available items (${options.length})`}
+                        >
+                          {options.map((option) => {
+                            const selected = option.id === sel1;
+                            return (
+                              <CommandItem
+                                key={option.id}
+                                value={[option.label, option.category]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  setSel1(option.id);
+                                  setItem1Open(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    selected ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <span className="truncate">{option.label}</span>
+                                {option.category ? (
+                                  <span className="ml-auto text-xs text-muted-foreground">
+                                    {option.category}
+                                  </span>
+                                ) : null}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2">
@@ -235,24 +326,70 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
                     Optional
                   </Badge>
                 </Label>
-                <Select
-                  value={sel2}
-                  onValueChange={setSel2}
-                  disabled={creating}
-                >
-                  <SelectTrigger
-                    className={cn(selectionError && 'border-destructive')}
+                <Popover open={item2Open} onOpenChange={setItem2Open}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={item2Open}
+                      className={cn(
+                        'w-full justify-between text-sm font-normal',
+                        selectionError && !sel2 && 'border-destructive'
+                      )}
+                      disabled={creating}
+                    >
+                      <span className="truncate">
+                        {options.find((o) => o.id === sel2)?.label ||
+                          'Select a menu item'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-0"
+                    align="start"
                   >
-                    <SelectValue placeholder="Select a menu item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <Command>
+                      <CommandInput placeholder="Search menu items..." />
+                      <CommandList className="max-h-64 overflow-y-auto">
+                        <CommandEmpty>No menu items found.</CommandEmpty>
+                        <CommandGroup
+                          heading={`Available items (${options.length})`}
+                        >
+                          {options.map((option) => {
+                            const selected = option.id === sel2;
+                            return (
+                              <CommandItem
+                                key={option.id}
+                                value={[option.label, option.category]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  setSel2(option.id);
+                                  setItem2Open(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    selected ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <span className="truncate">{option.label}</span>
+                                {option.category ? (
+                                  <span className="ml-auto text-xs text-muted-foreground">
+                                    {option.category}
+                                  </span>
+                                ) : null}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-2 sm:col-span-2">
@@ -262,24 +399,70 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
                     Optional
                   </Badge>
                 </Label>
-                <Select
-                  value={sel3}
-                  onValueChange={setSel3}
-                  disabled={creating}
-                >
-                  <SelectTrigger
-                    className={cn(selectionError && 'border-destructive')}
+                <Popover open={item3Open} onOpenChange={setItem3Open}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={item3Open}
+                      className={cn(
+                        'w-full justify-between text-sm font-normal',
+                        selectionError && !sel3 && 'border-destructive'
+                      )}
+                      disabled={creating}
+                    >
+                      <span className="truncate">
+                        {options.find((o) => o.id === sel3)?.label ||
+                          'Select a menu item'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-0"
+                    align="start"
                   >
-                    <SelectValue placeholder="Select a menu item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((o) => (
-                      <SelectItem key={o.id} value={o.id}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <Command>
+                      <CommandInput placeholder="Search menu items..." />
+                      <CommandList className="max-h-64 overflow-y-auto">
+                        <CommandEmpty>No menu items found.</CommandEmpty>
+                        <CommandGroup
+                          heading={`Available items (${options.length})`}
+                        >
+                          {options.map((option) => {
+                            const selected = option.id === sel3;
+                            return (
+                              <CommandItem
+                                key={option.id}
+                                value={[option.label, option.category]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  setSel3(option.id);
+                                  setItem3Open(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    selected ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <span className="truncate">{option.label}</span>
+                                {option.category ? (
+                                  <span className="ml-auto text-xs text-muted-foreground">
+                                    {option.category}
+                                  </span>
+                                ) : null}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 

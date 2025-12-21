@@ -113,6 +113,7 @@ urlpatterns = [
     path("payments/<uuid:pid>/refund", pay_views.payment_refund, name="payment_refund"),
     path("payments/<uuid:pid>/invoice", pay_views.payment_invoice, name="payment_invoice"),
     path("payments/config", pay_views.payments_config, name="payments_config"),
+    path("orders/checkout", pay_views.order_checkout, name="order_checkout"),
     path("orders/<str:order_id>/payment", pay_views.order_payment, name="order_payment"),
 
     # Orders

@@ -707,69 +707,8 @@ def _safe_order(o, with_items=True):
     return data
 
 
-@require_http_methods(["GET", "POST"])  # list or create
-@rate_limit(limit=20, window_seconds=60)
-def orders(request):
-    actor, err = _actor_from_request(request)
-    if not actor:
-        return err
-    # GET list with basic filters
-    if request.method == "GET":
-        try:
-            from .models import Order
-            status = (request.GET.get("status") or "").lower().strip()
-            channel = (request.GET.get("channel") or "").strip()
-            priority = (request.GET.get("priority") or "").strip().lower()
-            search = (request.GET.get("search") or "").strip().lower()
-            try:
-                page = int(request.GET.get("page") or 1)
-            except Exception:
-                page = 1
-            try:
-                limit = int(request.GET.get("limit") or 50)
-            except Exception:
-                limit = 50
-            page = max(1, page)
-            limit = max(1, min(200, limit))
-            qs = Order.objects.all()
-            if status:
-                canonical = canonical_status(status)
-                if canonical != status:
-                    qs = qs.filter(status__in=[status, canonical])
-                else:
-                    qs = qs.filter(status=canonical)
-            if channel:
-                qs = qs.filter(channel__iexact=channel)
-            if priority:
-                qs = qs.filter(priority__iexact=priority)
-            if search:
-                qs = qs.filter(order_number__icontains=search)
-            qs = qs.order_by("-created_at")
-            total = qs.count()
-            start = (page - 1) * limit
-            end = start + limit
-            rows = list(qs[start:end])
-            data = [_safe_order(x) for x in rows]
-            return JsonResponse({
-                "success": True,
-                "data": data,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "totalPages": max(1, (total + limit - 1) // limit),
-                },
-            })
-        except Exception:
-            logger.exception("Failed to list orders")
-            return JsonResponse({"success": False, "message": "Unable to fetch orders"}, status=500)
-
-    # POST create (place order)
-    if not _has_permission(actor, "order.place"):
-        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except Exception:
+def _create_order_from_payload(payload, actor, *, with_items=True):
+    if not isinstance(payload, dict):
         payload = {}
     items = payload.get("items") or []
     order_type = (payload.get("type") or "walk-in").lower()
@@ -782,7 +721,7 @@ def orders(request):
     promised_time_input = payload.get("promisedTime") or payload.get("promised_time") or None
     promised_time = parse_iso_datetime(promised_time_input) if promised_time_input else None
     if not isinstance(items, list) or not items:
-        return JsonResponse({"success": False, "message": "items is required"}, status=400)
+        return None, None, JsonResponse({"success": False, "message": "items is required"}, status=400)
 
     try:
         from .models import Order, OrderItem, MenuItem
@@ -836,7 +775,6 @@ def orders(request):
             order_number = generate_unique_order_number(
                 prefix=prefix_letter, order_model=Order
             )
-
 
         auto_throttle = []
         subtotal = Decimal("0")
@@ -905,7 +843,7 @@ def orders(request):
                 sequence_counter += 1
 
             if not line_blueprints:
-                return JsonResponse({"success": False, "message": "No valid items"}, status=400)
+                return None, None, JsonResponse({"success": False, "message": "No valid items"}, status=400)
 
             if auto_throttle and not throttle_reason:
                 parts = []
@@ -942,9 +880,9 @@ def orders(request):
             customer_name=customer_name,
             subtotal=subtotal,
             discount=discount,
-            total_amount=total,  # Make sure 'total' is Decimal(subtotal - discount)
+            total_amount=total,
             payment_method=payment_method or ("cash" if requested_channel == "walk-in" else ""),
-            placed_by=actor if getattr(actor, "id", None) else None,  # correct FK to AppUser
+            placed_by=actor if getattr(actor, "id", None) else None,
             promised_time=promised_time,
             quoted_minutes=recommended_quote,
             priority=requested_priority,
@@ -957,29 +895,29 @@ def orders(request):
         )
         created_items = []
         for blueprint in line_blueprints:
-                item = OrderItem.objects.create(
-                    order=o,
-                    menu_item=blueprint["menu_item"],
-                    item_name=blueprint["menu_item"].name,
-                    category=blueprint["category"],
-                    price=blueprint["price"],
-                    quantity=blueprint["quantity"],
-                    state="queued",
-                    station_code=blueprint["station_code"],
-                    station_name=blueprint["station_name"],
-                    cook_seconds_estimate=blueprint["cook_seconds_estimate"],
-                    priority=blueprint["priority"],
-                    sequence=blueprint["sequence"],
-                    modifiers=blueprint["modifiers"],
-                    allergens=blueprint["allergens"],
-                    notes=blueprint["notes"],
-                    meta={"stationSuggestion": blueprint["explicit_station"]} if blueprint["explicit_station"] else {},
-                )
-                created_items.append(item)
+            item = OrderItem.objects.create(
+                order=o,
+                menu_item=blueprint["menu_item"],
+                item_name=blueprint["menu_item"].name,
+                category=blueprint["category"],
+                price=blueprint["price"],
+                quantity=blueprint["quantity"],
+                state="queued",
+                station_code=blueprint["station_code"],
+                station_name=blueprint["station_name"],
+                cook_seconds_estimate=blueprint["cook_seconds_estimate"],
+                priority=blueprint["priority"],
+                sequence=blueprint["sequence"],
+                modifiers=blueprint["modifiers"],
+                allergens=blueprint["allergens"],
+                notes=blueprint["notes"],
+                meta={"stationSuggestion": blueprint["explicit_station"]} if blueprint["explicit_station"] else {},
+            )
+            created_items.append(item)
 
         recalc_order_counters(o, created_items)
 
-        order_payload = _safe_order(o)
+        order_payload = _safe_order(o, with_items=with_items)
         record_order_event(
             o,
             event_type="order.created",
@@ -992,20 +930,97 @@ def orders(request):
                 "quotedMinutes": recommended_quote,
             },
         )
-        publish_event("order.created", {"order": order_payload}, roles={"admin", "manager", "staff"}, user_ids=[str(o.placed_by_id)] if getattr(o, "placed_by_id", None) else None)
+        publish_event(
+            "order.created",
+            {"order": order_payload},
+            roles={"admin", "manager", "staff"},
+            user_ids=[str(o.placed_by_id)] if getattr(o, "placed_by_id", None) else None,
+        )
 
-        # Trigger notifications for new order and large orders
         try:
             from .notification_triggers import trigger_new_order, trigger_large_order
+
             trigger_new_order(o)
             trigger_large_order(o)
         except Exception:
             pass
 
-        return JsonResponse({"success": True, "data": order_payload})
+        return o, order_payload, None
     except Exception:
         logger.exception("Failed to create order")
-        return JsonResponse({"success": False, "message": "Failed to create order"}, status=500)
+        return None, None, JsonResponse({"success": False, "message": "Failed to create order"}, status=500)
+
+
+@require_http_methods(["GET", "POST"])  # list or create
+@rate_limit(limit=20, window_seconds=60)
+def orders(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    # GET list with basic filters
+    if request.method == "GET":
+        try:
+            from .models import Order
+            status = (request.GET.get("status") or "").lower().strip()
+            channel = (request.GET.get("channel") or "").strip()
+            priority = (request.GET.get("priority") or "").strip().lower()
+            search = (request.GET.get("search") or "").strip().lower()
+            try:
+                page = int(request.GET.get("page") or 1)
+            except Exception:
+                page = 1
+            try:
+                limit = int(request.GET.get("limit") or 50)
+            except Exception:
+                limit = 50
+            page = max(1, page)
+            limit = max(1, min(200, limit))
+            qs = Order.objects.all()
+            if status:
+                canonical = canonical_status(status)
+                if canonical != status:
+                    qs = qs.filter(status__in=[status, canonical])
+                else:
+                    qs = qs.filter(status=canonical)
+            if channel:
+                qs = qs.filter(channel__iexact=channel)
+            if priority:
+                qs = qs.filter(priority__iexact=priority)
+            if search:
+                qs = qs.filter(order_number__icontains=search)
+            qs = qs.order_by("-created_at")
+            total = qs.count()
+            start = (page - 1) * limit
+            end = start + limit
+            rows = list(qs[start:end])
+            data = [_safe_order(x) for x in rows]
+            return JsonResponse({
+                "success": True,
+                "data": data,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "totalPages": max(1, (total + limit - 1) // limit),
+                },
+            })
+        except Exception:
+            logger.exception("Failed to list orders")
+            return JsonResponse({"success": False, "message": "Unable to fetch orders"}, status=500)
+
+    # POST create (place order)
+    if not _has_permission(actor, "order.place"):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+    order, order_payload, error = _create_order_from_payload(
+        payload, actor, with_items=True
+    )
+    if error:
+        return error
+    return JsonResponse({"success": True, "data": order_payload})
 
 
 @require_http_methods(["GET"])

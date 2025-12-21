@@ -217,7 +217,6 @@ export const usePOSLogic = () => {
       typeof paymentDetails.change === 'number'
         ? paymentDetails.change
         : Math.max(0, tenderedAmount - total);
-    let createdOrder = null;
     try {
       const scheduleOrderIdentifierRefresh = () => {
         const trigger = () => {
@@ -250,26 +249,22 @@ export const usePOSLogic = () => {
         tenderedAmount,
         change,
       };
-      const res = await orderService.createOrder(payload);
+      const idempotencyKey = identifiers?.number
+        ? `pos-${identifiers.number}`
+        : '';
+      const res = await orderService.checkoutOrder(payload, { idempotencyKey });
       const data = res?.data ?? res;
       const infoRaw = extractOrderInfo(data) || {
         id: data?.id || null,
         orderNumber: data?.orderNumber || data?.order_number || null,
       };
       if (!infoRaw || !infoRaw.id) {
-        throw new Error('Order was not created');
+        throw new Error('Order checkout failed');
       }
       const info = {
         ...infoRaw,
         orderNumber: infoRaw.orderNumber || identifiers.number,
       };
-      createdOrder = info;
-      await orderService.processPayment(info.id, {
-        amount: total,
-        method: paymentMethod,
-        tenderedAmount,
-        change,
-      });
       clearOrder();
 
       if (isMountedRef.current) {
@@ -279,16 +274,6 @@ export const usePOSLogic = () => {
       return info;
     } catch (e) {
       console.error(e);
-      if (createdOrder?.id) {
-        try {
-          await orderService.cancelOrder(
-            createdOrder.id,
-            'Payment could not be completed'
-          );
-        } catch (cancelError) {
-          console.error(cancelError);
-        }
-      }
       const message =
         e?.message ||
         e?.details?.message ||

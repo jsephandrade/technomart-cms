@@ -20,7 +20,12 @@ from .views_common import (
     _require_admin_or_manager,
     rate_limit,
 )
-from .views_orders import _start_auto_flow, canonical_status
+from .views_orders import (
+    _create_order_from_payload,
+    _safe_order,
+    _start_auto_flow,
+    canonical_status,
+)
 from .models import PaymentTransaction, PaymentMethodConfig, Order, AppUser
 
 
@@ -126,6 +131,46 @@ def _parse_payment_payload(request):
     return payload, None
 
 
+def _parse_payment_payload_dict(data, request):
+    if not isinstance(data, dict):
+        data = {}
+    if "amount" not in data:
+        return None, JsonResponse({"success": False, "message": "Amount is required"}, status=400)
+    try:
+        amount = _to_amount(data.get("amount"))
+    except (InvalidOperation, TypeError, ValueError):
+        return None, JsonResponse({"success": False, "message": "Invalid amount"}, status=400)
+
+    method = str(data.get("method") or "cash").lower().strip()
+    allowed_methods = {choice[0] for choice in PaymentTransaction.METHOD_CHOICES}
+    if method not in allowed_methods:
+        return None, JsonResponse({"success": False, "message": "Unsupported payment method"}, status=400)
+
+    tendered_raw = data.get("tenderedAmount") or data.get("tendered_amount")
+    tendered_amount = amount
+    if tendered_raw is not None:
+        try:
+            tendered_amount = _to_amount(tendered_raw)
+        except (InvalidOperation, TypeError, ValueError):
+            return None, JsonResponse({"success": False, "message": "Invalid tendered amount"}, status=400)
+
+    change_due = max(tendered_amount - amount, Decimal("0.00")).quantize(MONEY_PLACES)
+    payload = {
+        "amount": amount,
+        "method": method,
+        "customer": (data.get("customer") or "").strip(),
+        "reference": (data.get("reference") or data.get("txn_ref") or "").strip(),
+        "tendered_amount": tendered_amount,
+        "change_due": change_due,
+        "idempotency_key": (
+            request.META.get("HTTP_IDEMPOTENCY_KEY")
+            or data.get("idempotencyKey")
+            or ""
+        ).strip(),
+    }
+    return payload, None
+
+
 def _method_enabled(method: str) -> bool:
     try:
         cfg = PaymentMethodConfig.objects.first()
@@ -217,6 +262,129 @@ def _audit_payment(request, actor, payment):
         )
     except Exception:
         pass
+
+
+@require_http_methods(["POST"])  # /orders/checkout
+@rate_limit(limit=20, window_seconds=60)
+def order_checkout(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    if not _has_permission(actor, "order.place") or not _has_permission(
+        actor, "payment.process"
+    ):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    idempotency_key = (
+        request.META.get("HTTP_IDEMPOTENCY_KEY")
+        or payload.get("idempotencyKey")
+        or ""
+    ).strip()
+
+    order = None
+    order_payload = None
+    if idempotency_key:
+        try:
+            order = (
+                Order.objects.filter(meta__posIdempotencyKey=idempotency_key)
+                .select_related("placed_by")
+                .first()
+            )
+            if order:
+                order_payload = _safe_order(order, with_items=False)
+        except Exception:
+            order = None
+
+    if not order:
+        order, order_payload, error = _create_order_from_payload(
+            payload, actor, with_items=False
+        )
+        if error:
+            return error
+        if idempotency_key:
+            try:
+                meta = order.meta or {}
+                meta["posIdempotencyKey"] = idempotency_key
+                order.meta = meta
+                order.save(update_fields=["meta", "updated_at"])
+            except Exception:
+                logger.exception("Failed to store POS idempotency key")
+
+    payment_seed = payload.get("payment") or {}
+    raw_payment = {
+        "amount": payment_seed.get("amount")
+        or payload.get("amount")
+        or payload.get("total")
+        or float(order.total_amount or 0),
+        "method": payment_seed.get("method") or payload.get("paymentMethod") or "cash",
+        "tenderedAmount": payment_seed.get("tenderedAmount")
+        or payload.get("tenderedAmount")
+        or payment_seed.get("tendered_amount")
+        or payload.get("tendered_amount"),
+        "customer": payment_seed.get("customer") or payload.get("customer") or "",
+        "reference": payment_seed.get("reference") or payload.get("reference") or "",
+        "idempotencyKey": payment_seed.get("idempotencyKey")
+        or payload.get("idempotencyKey")
+        or idempotency_key,
+    }
+
+    payment_payload, parse_err = _parse_payment_payload_dict(raw_payment, request)
+    if parse_err:
+        return parse_err
+    payment_payload["method"] = PaymentTransaction.METHOD_CASH
+    if not _method_enabled(payment_payload["method"]):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": f"Payment method '{payment_payload['method']}' is disabled",
+            },
+            status=400,
+        )
+
+    if order.total_amount and abs(order.total_amount - payment_payload["amount"]) > Decimal("0.01"):
+        payment_payload["amount"] = Decimal(order.total_amount).quantize(MONEY_PLACES)
+
+    existing = _existing_payment(str(order.id), payment_payload)
+    if existing:
+        order_payload = _safe_order(order, with_items=False)
+        order_payload["payment"] = _serialize_payment(existing, order)
+        return JsonResponse({"success": True, "data": order_payload})
+
+    already_paid = (
+        PaymentTransaction.objects.filter(
+            order_id=str(order.id), status=PaymentTransaction.STATUS_COMPLETED
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if already_paid and not payment_payload.get("idempotency_key"):
+        order_payload = _safe_order(order, with_items=False)
+        order_payload["payment"] = _serialize_payment(already_paid, order)
+        return JsonResponse({"success": True, "data": order_payload})
+
+    payment = PaymentTransaction.objects.create(
+        order_id=str(order.id),
+        amount=payment_payload["amount"],
+        method=payment_payload["method"],
+        status=PaymentTransaction.STATUS_COMPLETED,
+        reference=payment_payload["reference"],
+        customer=payment_payload["customer"],
+        processed_by=actor if hasattr(actor, "id") else None,
+        meta=_payment_meta(payment_payload),
+    )
+
+    _update_order_after_payment(order, payment_payload["method"])
+    _reward_loyalty_points(order.placed_by_id or getattr(actor, "id", None))
+    _audit_payment(request, actor, payment)
+
+    order_payload = _safe_order(order, with_items=False)
+    order_payload["payment"] = _serialize_payment(payment, order)
+    return JsonResponse({"success": True, "data": order_payload})
 
 
 @require_http_methods(["POST"])  # /orders/<order_id>/payment
@@ -391,7 +559,14 @@ def payment_refund(request, pid: str):
         return JsonResponse({"success": False, "message": "Refund failed"}, status=500)
 
 
-__all__ = ["order_payment", "payments_list", "payment_refund", "payments_config", "payment_invoice"]
+__all__ = [
+    "order_checkout",
+    "order_payment",
+    "payments_list",
+    "payment_refund",
+    "payments_config",
+    "payment_invoice",
+]
 
 
 @require_http_methods(["GET", "PUT"])  # /payments/config

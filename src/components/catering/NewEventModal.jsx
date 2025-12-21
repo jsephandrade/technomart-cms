@@ -530,9 +530,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
                   className="flex items-center gap-2 h-5"
                 >
                   Location
-                  <Badge variant="secondary" className="text-xs">
-                    Optional
-                  </Badge>
                 </Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -556,9 +553,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
                   className="flex items-center gap-2 h-5"
                 >
                   Number of Attendees
-                  <Badge variant="secondary" className="text-xs">
-                    Optional
-                  </Badge>
                 </Label>
                 <div className="relative">
                   <Users className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -597,9 +591,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
                   className="flex items-center gap-2 h-5"
                 >
                   Contact Name
-                  <Badge variant="secondary" className="text-xs">
-                    Optional
-                  </Badge>
                 </Label>
                 <Input
                   id="contact-name"
@@ -621,9 +612,6 @@ export const NewEventModal = ({ open, onOpenChange, onCreateEvent }) => {
                   className="flex items-center gap-2 h-5"
                 >
                   Contact Phone
-                  <Badge variant="secondary" className="text-xs">
-                    Optional
-                  </Badge>
                 </Label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />

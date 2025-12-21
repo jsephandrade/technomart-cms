@@ -440,6 +440,43 @@ class OrderService {
     return normalizeApiResult(res);
   }
 
+  async checkoutOrder(orderData, options = {}) {
+    if (shouldUseMocks()) {
+      await mockDelay(800);
+      const now = new Date().toISOString();
+      const totalAmount =
+        orderData?.totals?.total ??
+        orderData?.totals?.amount ??
+        orderData?.total ??
+        0;
+      const newOrder = {
+        id: Date.now().toString(),
+        ...orderData,
+        orderNumber:
+          orderData?.orderNumber || `W-${String(Date.now()).slice(-6)}`,
+        status: 'accepted',
+        canonicalStatus: 'accepted',
+        timeReceived: now,
+        createdAt: now,
+        timeCompleted: null,
+        payment: {
+          id: `pay-${Date.now()}`,
+          amount: totalAmount,
+          method: 'cash',
+          status: 'completed',
+        },
+      };
+      return normalizeApiResult({ success: true, data: newOrder });
+    }
+    const headers = options?.idempotencyKey
+      ? { 'Idempotency-Key': options.idempotencyKey }
+      : undefined;
+    const res = await apiClient.post('/orders/checkout', orderData, {
+      headers,
+    });
+    return normalizeApiResult(res);
+  }
+
   async updateOrderStatus(orderId, status, extra = {}) {
     if (shouldUseMocks()) {
       await mockDelay(600);

@@ -286,6 +286,12 @@ const WeeklyScheduleCard = ({
         titleStyle="accent"
         titleIcon={CalendarRange}
         description="Plan coverage, assign teammates, and publish this week's roster from a single view."
+        decor={
+          <div
+            className="pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl"
+            aria-hidden="true"
+          />
+        }
       >
         {showSkeletonBoard ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

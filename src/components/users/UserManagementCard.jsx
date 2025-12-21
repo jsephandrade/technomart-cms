@@ -27,6 +27,7 @@ const UserManagementCard = ({
   titleClassName,
   titleAccentClassName,
   description,
+  decor,
   headerActions,
   headerContent,
   headerClassName,
@@ -34,6 +35,7 @@ const UserManagementCard = ({
 }) => {
   return (
     <Card className={cn(baseCardClasses, className)}>
+      {decor}
       <CardHeader
         className={cn(
           'flex flex-col gap-3 rounded-t-2xl px-3 py-4 sm:px-6 sm:py-5',

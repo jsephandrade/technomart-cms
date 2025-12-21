@@ -27,6 +27,8 @@ const ACCENT_TITLE_CLASSES =
 const ACCENT_ICON_CLASSES = 'h-4 w-4 text-primary drop-shadow-sm';
 const ACCENT_DESCRIPTION_CLASSES =
   'max-w-prose text-xs leading-relaxed text-muted-foreground sm:text-sm';
+const CARD_DECOR_CLASSES =
+  'pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl';
 
 const getInitials = (name = '') =>
   name
@@ -103,7 +105,8 @@ const AddEmployeeTab = ({
 
   return (
     <div className="space-y-4">
-      <Card className="border-border/60 bg-card/80 shadow-sm">
+      <Card className="relative overflow-hidden border-border/60 bg-card/80 shadow-sm">
+        <div className={CARD_DECOR_CLASSES} aria-hidden="true" />
         <CardHeader className="pb-3">
           <div className={HEADER_LAYOUT_CLASSES}>
             <div className="space-y-2">
@@ -273,7 +276,8 @@ const AddEmployeeTab = ({
         </CardContent>
       </Card>
 
-      <Card className="border-border/60 bg-card/80 shadow-sm">
+      <Card className="relative overflow-hidden border-border/60 bg-card/80 shadow-sm">
+        <div className={CARD_DECOR_CLASSES} aria-hidden="true" />
         <CardHeader className="pb-3">
           <div className={HEADER_LAYOUT_CLASSES}>
             <div className="space-y-2">

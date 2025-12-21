@@ -79,13 +79,14 @@ const ActivityLogsCard = ({
 
   return (
     <FeaturePanelCard
-      className="w-full"
+      className="w-full shadow-none hover:shadow-none lg:shadow-sm lg:hover:shadow-md"
       title="Activity Logs"
       titleStyle="accent"
       titleIcon={FileText}
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
       description="Track system and user activities"
+      decorClassName="hidden lg:block"
       headerActions={
         <div className="flex gap-2">
           <Button

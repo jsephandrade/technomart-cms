@@ -232,7 +232,7 @@ const SecurityAlertsCard = ({
 
   return (
     <FeaturePanelCard
-      className="w-full"
+      className="w-full shadow-none hover:shadow-none lg:shadow-sm lg:hover:shadow-md"
       title="Security Alerts"
       titleStyle="accent"
       titleIcon={ShieldAlert}
@@ -240,6 +240,7 @@ const SecurityAlertsCard = ({
       titleClassName="text-xs md:text-sm"
       description="Important security notifications"
       headerActions={headerActions}
+      decorClassName="hidden lg:block"
       contentClassName="space-y-4"
     >
       <div className="relative w-full max-h-[28rem] overflow-y-auto scrollbar-hide">

@@ -22,13 +22,14 @@ const LogSummaryCard = ({ summary }) => {
   const month = summary?.month || week;
   return (
     <FeaturePanelCard
-      className="w-full"
+      className="w-full shadow-none hover:shadow-none lg:shadow-sm lg:hover:shadow-md"
       title="Log Summary"
       titleStyle="accent"
       titleIcon={BarChart}
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
       description="Activity overview"
+      decorClassName="hidden lg:block"
       contentClassName="pt-2"
     >
       <Tabs defaultValue="today">

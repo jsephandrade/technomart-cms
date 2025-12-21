@@ -32,8 +32,15 @@ const FeaturePanelCard = ({
   headerClassName,
   contentClassName,
   disableDecor = false,
+  decorClassName,
   variant = 'default', // 'default', 'gradient', 'minimal', 'elevated'
 }) => {
+  const renderDecor = (classes) => (
+    <div
+      className={cn('pointer-events-none absolute', classes, decorClassName)}
+    />
+  );
+
   const getVariantClasses = () => {
     switch (variant) {
       case 'gradient':
@@ -52,23 +59,37 @@ const FeaturePanelCard = ({
       case 'gradient':
         return (
           <>
-            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br from-primary/30 via-primary/20 to-transparent blur-3xl animate-pulse" />
-            <div className="pointer-events-none absolute -bottom-20 left-8 h-56 w-56 rounded-full bg-gradient-to-tr from-accent/20 via-muted/30 to-transparent blur-3xl" />
-            <div className="pointer-events-none absolute top-1/2 right-1/4 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
+            {renderDecor(
+              '-right-20 -top-20 h-64 w-64 rounded-full bg-gradient-to-br from-primary/30 via-primary/20 to-transparent blur-3xl animate-pulse'
+            )}
+            {renderDecor(
+              '-bottom-20 left-8 h-56 w-56 rounded-full bg-gradient-to-tr from-accent/20 via-muted/30 to-transparent blur-3xl'
+            )}
+            {renderDecor(
+              'top-1/2 right-1/4 h-32 w-32 rounded-full bg-primary/10 blur-2xl'
+            )}
           </>
         );
       case 'elevated':
         return (
           <>
-            <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/15 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-12 left-8 h-44 w-44 rounded-full bg-muted/30 blur-2xl" />
+            {renderDecor(
+              '-right-12 -top-12 h-40 w-40 rounded-full bg-primary/15 blur-2xl'
+            )}
+            {renderDecor(
+              '-bottom-12 left-8 h-44 w-44 rounded-full bg-muted/30 blur-2xl'
+            )}
           </>
         );
       default:
         return (
           <>
-            <div className="pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-16 left-12 h-48 w-48 rounded-full bg-muted/40 blur-3xl" />
+            {renderDecor(
+              '-right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl'
+            )}
+            {renderDecor(
+              '-bottom-16 left-12 h-48 w-48 rounded-full bg-muted/40 blur-3xl'
+            )}
           </>
         );
     }

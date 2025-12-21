@@ -15,8 +15,10 @@ import SecurityAlertsCard from './user-logs/SecurityAlertsCard';
 import LogSummaryCard from './user-logs/LogSummaryCard';
 import LogDetailsDialog from './user-logs/LogDetailsDialog';
 import { useLogs } from '@/hooks/useLogs';
+import { muteUserFor24Hours } from '@/lib/mutedUsers';
 
 const DEMO_ALERTS_STORAGE_KEY = 'ui.demoSecurityAlerts';
+const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 
 const buildDemoAlerts = () => {
   const now = Date.now();
@@ -71,6 +73,32 @@ const loadDemoAlerts = () => {
   } catch {
     return [];
   }
+};
+
+const formatMuteUntil = (timestamp) => {
+  if (!timestamp) return '';
+  try {
+    const dt = new Date(timestamp);
+    if (Number.isNaN(dt.getTime())) return String(timestamp);
+    return dt.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return String(timestamp);
+  }
+};
+
+const extractAlertEmail = (alert) => {
+  const raw =
+    alert?.user || alert?.userEmail || alert?.actor || alert?.meta?.user || '';
+  if (!raw) return '';
+  const match = String(raw).match(EMAIL_REGEX);
+  return match?.[0] || '';
 };
 
 const UserLogs = () => {
@@ -232,15 +260,25 @@ const UserLogs = () => {
   };
 
   const handleMuteAlert = (alert) => {
-    if (!alert?.id) return;
-    recordDismissedAlert(alert.id);
-    setAcknowledgedAlertIds((prev) =>
-      prev.filter((entry) => entry !== alert.id)
+    const userEmail = extractAlertEmail(alert);
+    if (!userEmail) {
+      toast({
+        title: 'Unable to mute user',
+        description: 'No user email found for this alert.',
+      });
+      return;
+    }
+    const mutedUntil = muteUserFor24Hours(userEmail);
+    setSecurityAlerts((prev) =>
+      prev.map((entry) =>
+        entry.id === alert?.id ? { ...entry, status: 'muted' } : entry
+      )
     );
-    setSecurityAlerts((prev) => prev.filter((entry) => entry.id !== alert.id));
     toast({
-      title: 'Alert Muted',
-      description: 'This alert has been muted for 24 hours.',
+      title: 'User Muted for 24 Hours',
+      description: mutedUntil
+        ? `${userEmail} is muted until ${formatMuteUntil(mutedUntil)}.`
+        : `${userEmail} is muted for 24 hours.`,
     });
   };
 

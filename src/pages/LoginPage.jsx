@@ -15,6 +15,7 @@ import {
   rememberEmail,
   clearRememberedEmail,
 } from '@/lib/credentials';
+import { getMutedUser } from '@/lib/mutedUsers';
 
 const PASSWORD_MISMATCH_MESSAGE = 'Incorrect email and password.';
 
@@ -60,6 +61,24 @@ const isPasswordMismatchError = (result) => {
   }
 
   return false;
+};
+
+const formatMuteUntil = (timestamp) => {
+  if (!timestamp) return '';
+  try {
+    const dt = new Date(timestamp);
+    if (Number.isNaN(dt.getTime())) return String(timestamp);
+    return dt.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return String(timestamp);
+  }
 };
 
 const LoginPage = () => {
@@ -136,6 +155,17 @@ const LoginPage = () => {
     if (pending) return;
     setError('');
     if (!validate()) return;
+
+    const mutedRecord = getMutedUser(email);
+    if (mutedRecord?.mutedUntil) {
+      setPasswordError('');
+      setError(
+        `Your account has been muted for 24 hours due to suspicious activity. Try again after ${formatMuteUntil(
+          mutedRecord.mutedUntil
+        )}.`
+      );
+      return;
+    }
 
     setPending(true);
     try {

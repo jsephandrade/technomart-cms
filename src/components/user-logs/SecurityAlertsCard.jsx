@@ -188,103 +188,47 @@ const SecurityAlertsCard = ({
                   className={`rounded-xl border p-4 ${severity.containerClass}`}
                 >
                   <div className="flex flex-col gap-3">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`rounded-lg border border-white/40 bg-white/70 p-2 ${severity.iconClass}`}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${severity.badgeClass}`}
-                          >
-                            {severity.label}
-                          </span>
-                          {status ? (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <div
+                          className={`rounded-lg border border-white/40 bg-white/70 p-2 ${severity.iconClass}`}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span
-                              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${status.badgeClass}`}
+                              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${severity.badgeClass}`}
                             >
-                              {status.label}
+                              {severity.label}
                             </span>
-                          ) : null}
-                          {alert.code ? (
-                            <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border/60">
-                              {alert.code}
-                            </span>
-                          ) : null}
+                            {status ? (
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${status.badgeClass}`}
+                              >
+                                {status.label}
+                              </span>
+                            ) : null}
+                            {alert.code ? (
+                              <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border/60">
+                                {alert.code}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-foreground">
+                              {alert.title || 'Security alert'}
+                            </h4>
+                            {alert.description ? (
+                              <p className="text-sm text-muted-foreground">
+                                {alert.description}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="text-sm font-semibold text-foreground">
-                            {alert.title || 'Security alert'}
-                          </h4>
-                          {alert.description ? (
-                            <p className="text-sm text-muted-foreground">
-                              {alert.description}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    {meta.length > 0 ? (
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        {meta.map((entry) => (
-                          <span
-                            key={`${alert.id}-${entry.label}`}
-                            className="rounded-full bg-white/70 px-2 py-1 ring-1 ring-inset ring-border/60"
-                          >
-                            {entry.label}: {entry.value}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {severity.level >= 2 ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onInvestigate?.(alert)}
-                          >
-                            <Search className="mr-2 h-4 w-4" />
-                            Investigate
-                          </Button>
-                        ) : null}
-                        {severity.level >= 3 ? (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => onEscalate?.(alert)}
-                          >
-                            <ArrowUpRight className="mr-2 h-4 w-4" />
-                            Escalate
-                          </Button>
-                        ) : null}
-                        {severity.level >= 3 ? (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => onBlockIP?.(alert.id)}
-                          >
-                            <Ban className="mr-2 h-4 w-4" />
-                            Block IP
-                          </Button>
-                        ) : null}
-                        {severity.level >= 2 ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onMute?.(alert)}
-                          >
-                            <BellOff className="mr-2 h-4 w-4" />
-                            Mute 24h
-                          </Button>
-                        ) : null}
                       </div>
 
-                      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                      <div className="flex flex-col items-end gap-2 shrink-0">
                         {isAcknowledged ? (
                           <Button size="sm" variant="secondary" disabled>
                             <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -309,6 +253,62 @@ const SecurityAlertsCard = ({
                           Dismiss
                         </Button>
                       </div>
+                    </div>
+
+                    {meta.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {meta.map((entry) => (
+                          <span
+                            key={`${alert.id}-${entry.label}`}
+                            className="rounded-full bg-white/70 px-2 py-1 ring-1 ring-inset ring-border/60"
+                          >
+                            {entry.label}: {entry.value}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {severity.level >= 2 ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onInvestigate?.(alert)}
+                        >
+                          <Search className="mr-2 h-4 w-4" />
+                          Investigate
+                        </Button>
+                      ) : null}
+                      {severity.level >= 3 ? (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => onEscalate?.(alert)}
+                        >
+                          <ArrowUpRight className="mr-2 h-4 w-4" />
+                          Escalate
+                        </Button>
+                      ) : null}
+                      {severity.level >= 3 ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => onBlockIP?.(alert.id)}
+                        >
+                          <Ban className="mr-2 h-4 w-4" />
+                          Block IP
+                        </Button>
+                      ) : null}
+                      {severity.level >= 2 ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onMute?.(alert)}
+                        >
+                          <BellOff className="mr-2 h-4 w-4" />
+                          Mute 24h
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </div>

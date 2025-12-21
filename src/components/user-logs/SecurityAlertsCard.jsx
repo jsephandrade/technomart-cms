@@ -6,11 +6,12 @@ import {
   ArrowUpRight,
   Ban,
   BellOff,
+  CheckCircle2,
   ChevronDown,
   Search,
   ShieldAlert,
   ShieldCheck,
-  X,
+  XCircle,
 } from 'lucide-react';
 
 const resolveSeverity = (alert) => {
@@ -51,6 +52,27 @@ const resolveSeverity = (alert) => {
   };
 };
 
+const resolveStatus = (alert) => {
+  const raw = String(alert?.status || alert?.state || '').toLowerCase();
+  if (['acknowledged', 'ack', 'resolved'].includes(raw)) {
+    return {
+      key: 'acknowledged',
+      label: 'Acknowledged',
+      badgeClass:
+        'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200/70',
+    };
+  }
+  if (['muted', 'snoozed'].includes(raw)) {
+    return {
+      key: 'muted',
+      label: 'Muted',
+      badgeClass:
+        'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200/70',
+    };
+  }
+  return null;
+};
+
 const formatTimestamp = (value) => {
   if (!value) return '';
   try {
@@ -84,6 +106,7 @@ const SecurityAlertsCard = ({
     return list.map((alert) => ({
       ...alert,
       severity: alert?.severity || alert?.type || 'info',
+      status: alert?.status || alert?.state || '',
     }));
   }, [securityAlerts]);
 
@@ -114,7 +137,9 @@ const SecurityAlertsCard = ({
           {displayedAlerts.length > 0 ? (
             displayedAlerts.map((alert) => {
               const severity = resolveSeverity(alert);
+              const status = resolveStatus(alert);
               const Icon = severity.icon;
+              const isAcknowledged = status?.key === 'acknowledged';
               const meta = [
                 {
                   label: 'Source',
@@ -176,6 +201,13 @@ const SecurityAlertsCard = ({
                           >
                             {severity.label}
                           </span>
+                          {status ? (
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${status.badgeClass}`}
+                            >
+                              {status.label}
+                            </span>
+                          ) : null}
                           {alert.code ? (
                             <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border/60">
                               {alert.code}
@@ -249,20 +281,27 @@ const SecurityAlertsCard = ({
                           Mute 24h
                         </Button>
                       ) : null}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onAcknowledge?.(alert)}
-                      >
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        Acknowledge
-                      </Button>
+                      {isAcknowledged ? (
+                        <Button size="sm" variant="secondary" disabled>
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                          Acknowledged
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onAcknowledge?.(alert)}
+                        >
+                          <ShieldCheck className="mr-2 h-4 w-4" />
+                          Acknowledge
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => onDismiss?.(alert.id)}
                       >
-                        <X className="mr-2 h-4 w-4" />
+                        <XCircle className="mr-2 h-4 w-4" />
                         Dismiss
                       </Button>
                     </div>

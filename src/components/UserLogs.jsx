@@ -21,13 +21,19 @@ const UserLogs = () => {
   });
   const [securityAlerts, setSecurityAlerts] = useState([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState([]);
+  const [acknowledgedAlertIds, setAcknowledgedAlertIds] = useState([]);
 
   useEffect(() => {
-    const nextAlerts = (alerts || []).filter(
-      (alert) => !dismissedAlertIds.includes(alert.id)
-    );
+    const nextAlerts = (alerts || [])
+      .filter((alert) => !dismissedAlertIds.includes(alert.id))
+      .map((alert) => {
+        if (acknowledgedAlertIds.includes(alert.id)) {
+          return { ...alert, status: 'acknowledged' };
+        }
+        return alert;
+      });
     setSecurityAlerts(nextAlerts);
-  }, [alerts, dismissedAlertIds]);
+  }, [alerts, dismissedAlertIds, acknowledgedAlertIds]);
 
   // Sync UI controls to backend filters
   useEffect(() => {
@@ -84,17 +90,29 @@ const UserLogs = () => {
     );
   };
 
+  const recordAcknowledgedAlert = (alertId) => {
+    setAcknowledgedAlertIds((prev) =>
+      prev.includes(alertId) ? prev : [...prev, alertId]
+    );
+  };
+
   const handleBlockIP = (alertId) => {
     toast({
       title: 'IP Address Blocked',
       description: 'The suspicious IP address has been blocked successfully.',
     });
     recordDismissedAlert(alertId);
+    setAcknowledgedAlertIds((prev) =>
+      prev.filter((entry) => entry !== alertId)
+    );
     setSecurityAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
   };
 
   const handleDismissAlert = (alertId) => {
     recordDismissedAlert(alertId);
+    setAcknowledgedAlertIds((prev) =>
+      prev.filter((entry) => entry !== alertId)
+    );
     setSecurityAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
     toast({
       title: 'Alert Dismissed',
@@ -104,8 +122,12 @@ const UserLogs = () => {
 
   const handleAcknowledgeAlert = (alert) => {
     if (!alert?.id) return;
-    recordDismissedAlert(alert.id);
-    setSecurityAlerts((prev) => prev.filter((entry) => entry.id !== alert.id));
+    recordAcknowledgedAlert(alert.id);
+    setSecurityAlerts((prev) =>
+      prev.map((entry) =>
+        entry.id === alert.id ? { ...entry, status: 'acknowledged' } : entry
+      )
+    );
     toast({
       title: 'Alert Acknowledged',
       description: 'Security alert marked as reviewed.',
@@ -129,6 +151,9 @@ const UserLogs = () => {
   const handleMuteAlert = (alert) => {
     if (!alert?.id) return;
     recordDismissedAlert(alert.id);
+    setAcknowledgedAlertIds((prev) =>
+      prev.filter((entry) => entry !== alert.id)
+    );
     setSecurityAlerts((prev) => prev.filter((entry) => entry.id !== alert.id));
     toast({
       title: 'Alert Muted',

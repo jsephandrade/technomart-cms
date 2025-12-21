@@ -329,12 +329,10 @@ const MenuManagement = () => {
         open={comboDialogOpen}
         onOpenChange={setComboDialogOpen}
         items={items}
-        onCreate={async (payload) => {
-          try {
-            await createMenuItem(payload);
-          } catch (e) {
+        onCreate={(payload) => {
+          createMenuItemOptimistic(payload).catch((e) => {
             toast.error(e?.message || 'Failed to create combo meal');
-          }
+          });
         }}
       />
     </div>

@@ -108,8 +108,8 @@ const UserLogs = () => {
   };
 
   return (
-    <div className="grid gap-4 md:grid-cols-7">
-      <div className="space-y-4 md:col-span-5">
+    <div className="grid w-full gap-4 max-w-[640px] sm:max-w-[720px] mx-auto md:mx-0 md:max-w-none md:grid-cols-3">
+      <div className="space-y-4 md:col-span-2">
         <ActivityLogsCard
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -130,7 +130,7 @@ const UserLogs = () => {
         />
       </div>
 
-      <div className="space-y-4 md:col-span-2">
+      <div className="space-y-4 md:col-span-1">
         <SecurityAlertsCard
           securityAlerts={securityAlerts}
           onBlockIP={handleBlockIP}

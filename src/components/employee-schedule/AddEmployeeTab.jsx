@@ -120,7 +120,7 @@ const AddEmployeeTab = ({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-3">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr]">
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wide">
                 Copy from
@@ -139,7 +139,7 @@ const AddEmployeeTab = ({
                     <optgroup label="Existing employees">
                       {employees.map((emp) => (
                         <option key={emp.id} value={`employee:${emp.id}`}>
-                          {emp.name} • {emp.position || 'No role'}
+                          {emp.name} - {emp.position || 'No role'}
                         </option>
                       ))}
                     </optgroup>
@@ -148,7 +148,7 @@ const AddEmployeeTab = ({
                     <optgroup label="App users (staff/manager)">
                       {staffUsers.map((user) => (
                         <option key={user.id} value={`user:${user.id}`}>
-                          {user.name} • {user.role || 'Staff'}
+                          {user.name} - {user.role || 'Staff'}
                         </option>
                       ))}
                     </optgroup>
@@ -159,8 +159,6 @@ const AddEmployeeTab = ({
                 </span>
               </div>
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wide">Name *</Label>
               <Input

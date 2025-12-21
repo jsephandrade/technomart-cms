@@ -13,11 +13,13 @@ import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCar
 import AddEmployeeTab from '@/components/employee-schedule/AddEmployeeTab';
 import ScheduleTab from '@/components/employee-schedule/ScheduleTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import {
   Archive,
   CalendarDays,
   ClipboardList,
   Plane,
+  RotateCcw,
   ShieldPlus,
 } from 'lucide-react';
 import {
@@ -87,6 +89,11 @@ const EmployeeSchedule = () => {
       ),
     [employees]
   );
+  const archivedEmployees = useMemo(() => {
+    return employees
+      .filter((emp) => emp && (emp.status || '').toLowerCase() === 'inactive')
+      .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
+  }, [employees]);
 
   const {
     schedule = [],
@@ -118,6 +125,8 @@ const EmployeeSchedule = () => {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [archivingEmployee, setArchivingEmployee] = useState(false);
+  const [archivedDialogOpen, setArchivedDialogOpen] = useState(false);
+  const [restoringEmployeeId, setRestoringEmployeeId] = useState(null);
   const attendanceAutoOpenDismissed = useRef(false);
 
   const handleQuickAdd = async () => {
@@ -213,12 +222,17 @@ const EmployeeSchedule = () => {
       setArchiveDialogOpen(false);
       setArchiveTarget(null);
     }
+    if (archivedDialogOpen) {
+      setArchivedDialogOpen(false);
+      setRestoringEmployeeId(null);
+    }
   }, [
     canManage,
     dialogOpen,
     editingSchedule,
     employeeDialogOpen,
     archiveDialogOpen,
+    archivedDialogOpen,
   ]);
 
   useEffect(() => {
@@ -512,6 +526,26 @@ const EmployeeSchedule = () => {
     }
   };
 
+  const handleOpenArchivedEmployees = () => {
+    if (!canManage) return;
+    setArchivedDialogOpen(true);
+  };
+
+  const handleRestoreEmployee = async (employee) => {
+    if (!canManage || !employee?.id || restoringEmployeeId) return;
+    setRestoringEmployeeId(employee.id);
+    try {
+      await updateEmployee(employee.id, { status: 'active' });
+      await Promise.all([refetchEmployees(), refetchSchedule()]);
+      toast.success('Employee restored');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to restore employee');
+    } finally {
+      setRestoringEmployeeId(null);
+    }
+  };
+
   const handleOpenManageEmployees = () => {
     if (!canManage) return;
     const firstEmployee = displayEmployees[0];
@@ -540,9 +574,11 @@ const EmployeeSchedule = () => {
       canManage={canManage}
       daysOfWeek={DAYS_OF_WEEK}
       employees={displayEmployees}
+      archivedEmployees={archivedEmployees}
       onManageEmployee={handleManageEmployeeClick}
       onArchiveEmployee={handleArchiveEmployeeRequest}
       onOpenManageEmployees={handleOpenManageEmployees}
+      onOpenArchivedEmployees={handleOpenArchivedEmployees}
     />
   );
 
@@ -664,7 +700,7 @@ const EmployeeSchedule = () => {
       >
         <AlertDialogContent className="sm:max-w-[420px]">
           <AlertDialogHeader className="space-y-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
               <Archive className="h-4 w-4" aria-hidden="true" />
             </div>
             <AlertDialogTitle>Archive employee?</AlertDialogTitle>
@@ -673,7 +709,7 @@ const EmployeeSchedule = () => {
                 ? `Archive ${archiveTarget.name}?`
                 : 'Archive this employee?'}{' '}
               They will be hidden from scheduling, but their profile and history
-              stay available.
+              stay available. You can restore them from Archived employees.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-3">
@@ -681,7 +717,7 @@ const EmployeeSchedule = () => {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="gap-2 bg-amber-500 text-white hover:bg-amber-500/90"
+              className="gap-2"
               disabled={archivingEmployee}
               onClick={(event) => {
                 event.preventDefault();
@@ -694,6 +730,62 @@ const EmployeeSchedule = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={archivedDialogOpen}
+        onOpenChange={(open) => {
+          setArchivedDialogOpen(open);
+          if (!open) {
+            setRestoringEmployeeId(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Archive className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <DialogTitle>Archived employees</DialogTitle>
+            <DialogDescription>
+              Archived team members are hidden from scheduling. Restore them
+              anytime.
+            </DialogDescription>
+          </DialogHeader>
+          {archivedEmployees.length ? (
+            <div className="space-y-2">
+              {archivedEmployees.map((employee) => (
+                <div
+                  key={employee.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {employee.name || 'Unnamed employee'}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {employee.position || 'No role'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => handleRestoreEmployee(employee)}
+                    disabled={restoringEmployeeId === employee.id}
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+              No archived employees yet.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AddScheduleDialog
         open={dialogOpen}

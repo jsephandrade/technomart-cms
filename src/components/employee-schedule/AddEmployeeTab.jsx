@@ -37,9 +37,11 @@ const AddEmployeeTab = ({
   canManage,
   daysOfWeek,
   employees = [],
+  archivedEmployees = [],
   onManageEmployee,
   onArchiveEmployee,
   onOpenManageEmployees,
+  onOpenArchivedEmployees,
 }) => {
   const { users = [] } = useUsers();
   const [copyFromSelection, setCopyFromSelection] = useState('');
@@ -270,6 +272,25 @@ const AddEmployeeTab = ({
               >
                 {employees.length} team members
               </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  if (typeof onOpenArchivedEmployees === 'function') {
+                    onOpenArchivedEmployees();
+                  }
+                }}
+              >
+                <Archive className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  Archived
+                  {archivedEmployees.length
+                    ? ` (${archivedEmployees.length})`
+                    : ''}
+                </span>
+                <span className="sr-only">Archived employees</span>
+              </Button>
               <Button
                 size="sm"
                 variant="outline"

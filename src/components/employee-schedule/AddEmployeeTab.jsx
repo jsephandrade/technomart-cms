@@ -186,37 +186,44 @@ const AddEmployeeTab = ({
           <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
             <div className="space-y-1 sm:col-span-2 lg:col-span-1">
               <Label className="text-xs uppercase tracking-wide">Days</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                {(daysOfWeek || []).map((day) => {
-                  const selected =
-                    Array.isArray(quickAdd.repeatDays) &&
-                    quickAdd.repeatDays.includes(day);
-                  return (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant={selected ? 'default' : 'outline'}
-                      className="rounded-full px-3 text-[11px] uppercase"
-                      key={day}
-                      onClick={() => {
-                        setQuickAdd((prev) => {
-                          const nextDays = new Set(prev.repeatDays || []);
-                          if (nextDays.has(day)) {
-                            nextDays.delete(day);
-                          } else {
-                            nextDays.add(day);
-                          }
-                          return {
-                            ...prev,
-                            repeatDays: Array.from(nextDays),
-                          };
-                        });
-                      }}
-                    >
-                      {day.slice(0, 3)}
-                    </Button>
-                  );
-                })}
+              <div className="grid grid-cols-3 gap-2">
+                {(daysOfWeek || [])
+                  .filter((day) => String(day || '').toLowerCase() !== 'sunday')
+                  .map((day) => {
+                    const selected =
+                      Array.isArray(quickAdd.repeatDays) &&
+                      quickAdd.repeatDays.includes(day);
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          'h-8 w-full rounded-full px-0 text-[11px] font-semibold uppercase',
+                          selected
+                            ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                            : 'border-border/60 bg-background text-foreground hover:bg-muted/40'
+                        )}
+                        key={day}
+                        onClick={() => {
+                          setQuickAdd((prev) => {
+                            const nextDays = new Set(prev.repeatDays || []);
+                            if (nextDays.has(day)) {
+                              nextDays.delete(day);
+                            } else {
+                              nextDays.add(day);
+                            }
+                            return {
+                              ...prev,
+                              repeatDays: Array.from(nextDays),
+                            };
+                          });
+                        }}
+                      >
+                        {day.slice(0, 3)}
+                      </Button>
+                    );
+                  })}
               </div>
             </div>
             <div className="space-y-1">

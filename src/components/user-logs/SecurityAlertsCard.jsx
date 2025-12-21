@@ -90,6 +90,25 @@ const formatTimestamp = (value) => {
   }
 };
 
+const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+
+const resolveAlertUser = (alert) => {
+  const raw =
+    alert?.user ||
+    alert?.userEmail ||
+    alert?.actor ||
+    alert?.actorEmail ||
+    alert?.meta?.user ||
+    alert?.meta?.email ||
+    alert?.meta?.actor ||
+    '';
+  if (raw) return raw;
+  const fallback =
+    alert?.details || alert?.description || alert?.title || alert?.action || '';
+  const match = String(fallback).match(EMAIL_REGEX);
+  return match?.[0] || '';
+};
+
 const normalizeUserForSeverity = (value, severityLevel) => {
   if (!value) return value;
   if (severityLevel < 2) return value;
@@ -100,6 +119,38 @@ const normalizeUserForSeverity = (value, severityLevel) => {
     return raw.slice(6).trim();
   }
   return value;
+};
+
+const resolveStatusKey = (alert) => {
+  const raw = String(alert?.status || alert?.state || '').toLowerCase();
+  if (['muted', 'snoozed'].includes(raw)) return 'muted';
+  if (['acknowledged', 'ack', 'resolved'].includes(raw)) {
+    return 'acknowledged';
+  }
+  return '';
+};
+
+const getAlertTimestamp = (alert) => {
+  const value =
+    alert?.timestamp ||
+    alert?.time ||
+    alert?.createdAt ||
+    alert?.created_at ||
+    alert?.meta?.timestamp;
+  if (!value) return 0;
+  const dt = new Date(value);
+  const time = dt.getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const buildAlertGroupKey = (severityKey, userValue, titleValue) => {
+  const userKey = String(userValue || 'unknown')
+    .trim()
+    .toLowerCase();
+  const titleKey = String(titleValue || 'security alert')
+    .trim()
+    .toLowerCase();
+  return `${severityKey}:${userKey}:${titleKey}`;
 };
 
 const SecurityAlertsCard = ({
@@ -121,7 +172,62 @@ const SecurityAlertsCard = ({
     }));
   }, [securityAlerts]);
 
-  const displayedAlerts = normalizedAlerts;
+  const groupedAlerts = useMemo(() => {
+    const groups = new Map();
+    const ordered = [];
+
+    normalizedAlerts.forEach((alert) => {
+      const severity = resolveSeverity(alert);
+      const userValue = resolveAlertUser(alert);
+      const titleValue =
+        alert?.title || alert?.action || alert?.code || 'Security alert';
+      const key = buildAlertGroupKey(severity.key, userValue, titleValue);
+      let group = groups.get(key);
+
+      if (!group) {
+        group = {
+          key,
+          baseAlert: alert,
+          count: 0,
+          latestTs: getAlertTimestamp(alert),
+          hasMuted: false,
+          hasAcknowledged: false,
+        };
+        groups.set(key, group);
+        ordered.push(group);
+      }
+
+      group.count += 1;
+      const statusKey = resolveStatusKey(alert);
+      if (statusKey === 'muted') {
+        group.hasMuted = true;
+      }
+      if (statusKey === 'acknowledged') {
+        group.hasAcknowledged = true;
+      }
+
+      const ts = getAlertTimestamp(alert);
+      if (ts > group.latestTs) {
+        group.latestTs = ts;
+        group.baseAlert = alert;
+      }
+    });
+
+    return ordered.map((group) => {
+      const statusKey = group.hasMuted
+        ? 'muted'
+        : group.hasAcknowledged
+          ? 'acknowledged'
+          : resolveStatusKey(group.baseAlert);
+      return {
+        ...group.baseAlert,
+        status: statusKey || group.baseAlert.status || '',
+        groupCount: group.count,
+      };
+    });
+  }, [normalizedAlerts]);
+
+  const displayedAlerts = groupedAlerts;
   const displayedCount = displayedAlerts.length;
 
   return (
@@ -144,6 +250,8 @@ const SecurityAlertsCard = ({
               const status = resolveStatus(alert);
               const Icon = severity.icon;
               const isAcknowledged = status?.key === 'acknowledged';
+              const userValue = resolveAlertUser(alert);
+              const groupCount = alert.groupCount || 1;
               const meta = [
                 {
                   label: 'Source',
@@ -160,14 +268,7 @@ const SecurityAlertsCard = ({
                 },
                 {
                   label: 'User',
-                  value: normalizeUserForSeverity(
-                    alert.user ||
-                      alert.userEmail ||
-                      alert.actor ||
-                      alert?.meta?.user ||
-                      '',
-                    severity.level
-                  ),
+                  value: normalizeUserForSeverity(userValue, severity.level),
                 },
                 {
                   label: 'When',
@@ -219,6 +320,11 @@ const SecurityAlertsCard = ({
                             {alert.code ? (
                               <span className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border/60">
                                 {alert.code}
+                              </span>
+                            ) : null}
+                            {groupCount > 1 ? (
+                              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground shadow-sm">
+                                {groupCount}
                               </span>
                             ) : null}
                           </div>

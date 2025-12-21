@@ -323,12 +323,16 @@ def logs_alerts(request):
         out = []
         for l in qs:
             sev = (l.severity or "").lower()
+            if sev not in {"warning", "critical"}:
+                continue
             out.append(
                 {
                     "id": str(l.id),
-                    "type": "critical" if sev == "critical" else ("warning" if sev == "warning" else "info"),
+                    "type": "critical" if sev == "critical" else "warning",
+                    "severity": sev,
                     "title": l.action,
                     "description": l.details or "",
+                    "timestamp": l.created_at.isoformat(),
                 }
             )
         return JsonResponse({"success": True, "data": out})
@@ -341,12 +345,16 @@ def logs_alerts(request):
         if (e.get("type") or "").lower() != "security":
             continue
         sev = (e.get("severity") or "").lower()
+        if sev not in {"warning", "critical"}:
+            continue
         out.append(
             {
                 "id": str(e.get("id")),
-                "type": "critical" if sev == "critical" else ("warning" if sev == "warning" else "info"),
+                "type": "critical" if sev == "critical" else "warning",
+                "severity": sev,
                 "title": e.get("action") or "Security Event",
                 "description": e.get("details") or "",
+                "timestamp": e.get("timestamp") or dj_timezone.now().isoformat(),
             }
         )
     return JsonResponse({"success": True, "data": out})

@@ -79,10 +79,12 @@ const formatTimestamp = (value) => {
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return String(value);
     return dt.toLocaleString(undefined, {
+      year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
     });
   } catch {
     return String(value);
@@ -169,6 +171,7 @@ const SecurityAlertsCard = ({
                     alert.timestamp ||
                       alert.time ||
                       alert.createdAt ||
+                      alert.created_at ||
                       alert?.meta?.timestamp
                   ),
                 },

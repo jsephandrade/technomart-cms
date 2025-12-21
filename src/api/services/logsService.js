@@ -108,15 +108,19 @@ class LogsService {
         {
           id: 'a1',
           type: 'critical',
+          severity: 'critical',
           title: 'Failed Login Attempts',
           description:
             'Multiple failed login attempts detected for admin account',
+          timestamp: new Date().toISOString(),
         },
         {
           id: 'a2',
           type: 'warning',
+          severity: 'warning',
           title: 'Password Expiring',
           description: '2 user passwords will expire in 7 days',
+          timestamp: new Date(Date.now() - 3600_000).toISOString(),
         },
       ];
     }

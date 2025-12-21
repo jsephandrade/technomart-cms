@@ -31,12 +31,12 @@ const MenuManagement = () => {
   const {
     items,
     createMenuItem,
+    createMenuItemOptimistic,
     updateMenuItem,
     deleteMenuItem: archiveMenuItem,
     uploadItemImage,
     deleteItemImage,
     refetch: refetchActive,
-    setLocalImage,
   } = useMenuManagement({});
   const {
     items: archivedItems,
@@ -119,12 +119,9 @@ const MenuManagement = () => {
     setDialogOpen(false);
     setAdding(false);
 
-    createMenuItem(payload)
+    createMenuItemOptimistic(payload, { previewImageUrl: previewUrl })
       .then((created) => {
         if (imageFile && created?.id) {
-          if (previewUrl) {
-            setLocalImage(created.id, previewUrl);
-          }
           setUploadQueue((prev) => [
             ...prev,
             { id: created.id, file: imageFile },

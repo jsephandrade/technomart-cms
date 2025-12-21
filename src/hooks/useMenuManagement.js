@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import menuService from '@/api/services/menuService';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -20,6 +20,24 @@ export const useMenuManagement = (params = {}) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const pollIntervalMs = resolvePollIntervalMs();
+  const pendingImagesRef = useRef({});
+
+  const setPendingImage = useCallback((id, url) => {
+    if (!id || !url) return;
+    pendingImagesRef.current[id] = url;
+  }, []);
+
+  const clearPendingImage = useCallback((id) => {
+    if (!id) return;
+    if (pendingImagesRef.current?.[id]) {
+      delete pendingImagesRef.current[id];
+    }
+  }, []);
+
+  const resolvePendingImage = useCallback((id) => {
+    if (!id) return '';
+    return pendingImagesRef.current?.[id] || '';
+  }, []);
 
   const sanitizeUpdatePayload = useCallback((updates = {}) => {
     const safe = {};
@@ -59,29 +77,39 @@ export const useMenuManagement = (params = {}) => {
     return safe;
   }, []);
 
-  const normalizeForState = useCallback((item) => {
-    if (!item) return null;
-    const img =
-      (typeof item.image === 'string' && item.image) ||
-      (typeof item.imageUrl === 'string' && item.imageUrl) ||
-      (typeof item.image_url === 'string' && item.image_url) ||
-      (typeof item.photo === 'string' && item.photo) ||
-      (typeof item.picture === 'string' && item.picture) ||
-      '';
-    const cat = item.category;
-    const category =
-      typeof cat === 'string'
-        ? cat
-        : typeof cat === 'object'
-          ? cat?.name || cat?.label || cat?.title || cat?.slug || cat?.id || ''
-          : String(cat || '');
-    return {
-      ...item,
-      category: category || item.category || '',
-      image: img || item.image || item.imageUrl || '',
-      imageUrl: img || item.imageUrl || item.image || '',
-    };
-  }, []);
+  const normalizeForState = useCallback(
+    (item) => {
+      if (!item) return null;
+      const img =
+        (typeof item.image === 'string' && item.image) ||
+        (typeof item.imageUrl === 'string' && item.imageUrl) ||
+        (typeof item.image_url === 'string' && item.image_url) ||
+        (typeof item.photo === 'string' && item.photo) ||
+        (typeof item.picture === 'string' && item.picture) ||
+        '';
+      const pendingImage = resolvePendingImage(item.id);
+      const resolvedImage = img || pendingImage || '';
+      const cat = item.category;
+      const category =
+        typeof cat === 'string'
+          ? cat
+          : typeof cat === 'object'
+            ? cat?.name ||
+              cat?.label ||
+              cat?.title ||
+              cat?.slug ||
+              cat?.id ||
+              ''
+            : String(cat || '');
+      return {
+        ...item,
+        category: category || item.category || '',
+        image: resolvedImage || item.image || item.imageUrl || '',
+        imageUrl: resolvedImage || item.imageUrl || item.image || '',
+      };
+    },
+    [resolvePendingImage]
+  );
 
   const updateMenuCaches = useCallback(
     (mutator) => {
@@ -118,6 +146,8 @@ export const useMenuManagement = (params = {}) => {
 
   const removeItemFromCaches = useCallback(
     (id) => {
+      if (!id) return;
+      clearPendingImage(id);
       updateMenuCaches((response) => {
         const current = response?.data || [];
         if (!Array.isArray(current)) return response;
@@ -126,7 +156,7 @@ export const useMenuManagement = (params = {}) => {
         return { ...(response || {}), data: nextData };
       });
     },
-    [updateMenuCaches]
+    [clearPendingImage, updateMenuCaches]
   );
 
   const setLocalImage = useCallback(
@@ -345,6 +375,9 @@ export const useMenuManagement = (params = {}) => {
       const nextUrl = looksLikeFallback ? '' : uploadedUrl;
 
       upsertItem({ id: variables.itemId, image: nextUrl, imageUrl: nextUrl });
+      if (nextUrl) {
+        clearPendingImage(variables.itemId);
+      }
       broadcastMenuEvent({
         type: 'image',
         id: variables.itemId,
@@ -376,6 +409,7 @@ export const useMenuManagement = (params = {}) => {
   const deleteImageMutation = useMutation({
     mutationFn: (itemId) => menuService.deleteItemImage(itemId),
     onSuccess: (_, itemId) => {
+      clearPendingImage(itemId);
       upsertItem({ id: itemId, image: null, imageUrl: null });
       toast({
         title: 'Image Removed',
@@ -392,6 +426,45 @@ export const useMenuManagement = (params = {}) => {
       });
     },
   });
+
+  const createMenuItemOptimistic = useCallback(
+    async (itemData, options = {}) => {
+      const previewImageUrl = options.previewImageUrl || '';
+      const tempId = `temp-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const optimisticItem = {
+        ...itemData,
+        id: tempId,
+        image: previewImageUrl || itemData?.image || itemData?.imageUrl || '',
+        imageUrl:
+          previewImageUrl || itemData?.imageUrl || itemData?.image || '',
+      };
+
+      upsertItem(optimisticItem);
+
+      try {
+        const res = await createMenuItemMutation.mutateAsync(itemData);
+        const created = res?.data || res;
+        if (created?.id && previewImageUrl) {
+          setPendingImage(created.id, previewImageUrl);
+          setLocalImage(created.id, previewImageUrl);
+        }
+        removeItemFromCaches(tempId);
+        return created;
+      } catch (error) {
+        removeItemFromCaches(tempId);
+        throw error;
+      }
+    },
+    [
+      createMenuItemMutation,
+      removeItemFromCaches,
+      setLocalImage,
+      setPendingImage,
+      upsertItem,
+    ]
+  );
 
   useEffect(() => {
     const handler = () => invalidateMenu();
@@ -411,6 +484,7 @@ export const useMenuManagement = (params = {}) => {
       const res = await createMenuItemMutation.mutateAsync(itemData);
       return res?.data || res;
     },
+    createMenuItemOptimistic,
     updateMenuItem: async (itemId, updates) => {
       const res = await updateMenuItemMutation.mutateAsync({
         itemId,

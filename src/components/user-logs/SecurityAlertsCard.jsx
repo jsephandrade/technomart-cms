@@ -230,27 +230,38 @@ const SecurityAlertsCard = ({
 
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         {isAcknowledged ? (
-                          <Button size="sm" variant="secondary" disabled>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled
+                            aria-label="Acknowledged"
+                          >
                             <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Acknowledged
+                            <span className="hidden lg:inline">
+                              Acknowledged
+                            </span>
                           </Button>
                         ) : (
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => onAcknowledge?.(alert)}
+                            aria-label="Acknowledge"
                           >
                             <ShieldCheck className="mr-2 h-4 w-4" />
-                            Acknowledge
+                            <span className="hidden lg:inline">
+                              Acknowledge
+                            </span>
                           </Button>
                         )}
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => onDismiss?.(alert.id)}
+                          aria-label="Dismiss"
                         >
                           <XCircle className="mr-2 h-4 w-4" />
-                          Dismiss
+                          <span className="hidden lg:inline">Dismiss</span>
                         </Button>
                       </div>
                     </div>
@@ -274,9 +285,10 @@ const SecurityAlertsCard = ({
                           size="sm"
                           variant="outline"
                           onClick={() => onInvestigate?.(alert)}
+                          aria-label="Investigate"
                         >
                           <Search className="mr-2 h-4 w-4" />
-                          Investigate
+                          <span className="hidden lg:inline">Investigate</span>
                         </Button>
                       ) : null}
                       {severity.level >= 3 ? (
@@ -284,9 +296,10 @@ const SecurityAlertsCard = ({
                           size="sm"
                           variant="default"
                           onClick={() => onEscalate?.(alert)}
+                          aria-label="Escalate"
                         >
                           <ArrowUpRight className="mr-2 h-4 w-4" />
-                          Escalate
+                          <span className="hidden lg:inline">Escalate</span>
                         </Button>
                       ) : null}
                       {severity.level >= 3 ? (
@@ -294,9 +307,10 @@ const SecurityAlertsCard = ({
                           size="sm"
                           variant="destructive"
                           onClick={() => onBlockIP?.(alert.id)}
+                          aria-label="Block IP"
                         >
                           <Ban className="mr-2 h-4 w-4" />
-                          Block IP
+                          <span className="hidden lg:inline">Block IP</span>
                         </Button>
                       ) : null}
                       {severity.level >= 2 ? (
@@ -304,9 +318,10 @@ const SecurityAlertsCard = ({
                           size="sm"
                           variant="ghost"
                           onClick={() => onMute?.(alert)}
+                          aria-label="Mute 24h"
                         >
                           <BellOff className="mr-2 h-4 w-4" />
-                          Mute 24h
+                          <span className="hidden lg:inline">Mute 24h</span>
                         </Button>
                       ) : null}
                     </div>

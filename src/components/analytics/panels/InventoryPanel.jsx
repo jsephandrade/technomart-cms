@@ -16,18 +16,24 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
   Cell,
   Legend,
   LabelList,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
-  Treemap,
+  XAxis,
+  YAxis,
 } from 'recharts';
 import { useInventoryReport } from '@/hooks/useAnalytics';
 import {
   ANIMATION_CONFIG,
+  CHART_STYLES,
   CustomNumericTooltip,
   formatPercent,
 } from '@/utils/chartConfig';
@@ -44,38 +50,50 @@ import {
 export default function InventoryPanel() {
   const { inventoryData, loading, error } = useInventoryReport();
 
-  // Calculate treemap data (stock levels with color coding)
-  const treemapData = useMemo(() => {
-    return inventoryData.slice(0, 12).map((item) => {
-      const ratio = item.minStock > 0 ? item.quantity / item.minStock : 10;
-      let fill;
-      let status;
+  // Calculate coverage data (stock levels with color coding)
+  const coverageLimit = 24;
+  const coverageChartData = useMemo(() => {
+    return inventoryData
+      .map((item) => {
+        const minStockValue = Number(item.minStock || 0);
+        const ratio =
+          minStockValue > 0
+            ? item.quantity / minStockValue
+            : item.quantity > 0
+              ? 3
+              : 0;
+        let fill;
+        let status;
 
-      if (item.quantity === 0 || ratio < 0.5) {
-        fill = '#dc2626'; // Critical - Darker Red
-        status = 'Critical';
-      } else if (ratio <= 1.0) {
-        fill = '#f59e0b'; // Low - Orange
-        status = 'Low';
-      } else if (ratio <= 2.0) {
-        fill = '#3b82f6'; // Medium - Blue
-        status = 'Medium';
-      } else {
-        fill = '#10b981'; // Healthy - Green
-        status = 'Healthy';
-      }
+        if (item.quantity === 0 || ratio < 0.5) {
+          fill = '#dc2626'; // Critical - Darker Red
+          status = 'Critical';
+        } else if (ratio <= 1.0) {
+          fill = '#f59e0b'; // Low - Orange
+          status = 'Low';
+        } else if (ratio <= 2.0) {
+          fill = '#3b82f6'; // Medium - Blue
+          status = 'Medium';
+        } else {
+          fill = '#10b981'; // Healthy - Green
+          status = 'Healthy';
+        }
 
-      return {
-        name: item.name,
-        size: Math.max(item.quantity, 1),
-        quantity: item.quantity,
-        minStock: item.minStock,
-        ratio: ratio,
-        status: status,
-        fill,
-      };
-    });
+        return {
+          name: item.name,
+          quantity: item.quantity,
+          minStock: minStockValue,
+          ratio,
+          ratioLabel: minStockValue > 0 ? `${ratio.toFixed(1)}x` : 'No min',
+          status,
+          fill,
+          unit: item.unit,
+        };
+      })
+      .sort((a, b) => a.ratio - b.ratio || a.name.localeCompare(b.name))
+      .slice(0, coverageLimit);
   }, [inventoryData]);
+  const coverageChartHeight = Math.max(240, coverageChartData.length * 28);
 
   // Calculate stock distribution
   const stockDistribution = useMemo(() => {
@@ -283,7 +301,7 @@ export default function InventoryPanel() {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Stock Levels Treemap */}
+        {/* Stock Coverage Heatmap */}
         <Card className="relative overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all duration-300">
           <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-3xl" />
           <CardHeader className="pb-3 relative">
@@ -292,250 +310,151 @@ export default function InventoryPanel() {
                 <Package className="h-4 w-4 text-primary" />
               </div>
               <CardTitle className="text-base font-bold">
-                Inventory Stock Heatmap
+                Inventory Coverage Heatmap
               </CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Size = quantity | Color: 🔴 Critical • 🟠 Low • 🔵 Medium • 🟢
-              Healthy
+              Sorted by coverage ratio (quantity / minimum). Showing{' '}
+              {Math.min(coverageLimit, inventoryData.length)} of {totalItems}{' '}
+              items.
             </CardDescription>
           </CardHeader>
-          <CardContent className="h-80 relative">
-            {treemapData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <CardContent className="relative space-y-3">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                Critical
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
+                Low
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                Medium
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                Healthy
+              </div>
+              <span className="text-muted-foreground/60">|</span>
+              <span>Min line = 1.0x</span>
+            </div>
+            {coverageChartData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-80 text-muted-foreground">
                 <AlertCircle className="h-12 w-12 mb-3 opacity-50" />
                 <p className="text-sm font-medium">
                   No inventory data available
                 </p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <Treemap
-                  data={treemapData}
-                  dataKey="size"
-                  aspectRatio={4 / 3}
-                  stroke="#fff"
-                  strokeWidth={2}
-                  content={({
-                    root,
-                    depth,
-                    x,
-                    y,
-                    width,
-                    height,
-                    index,
-                    name,
-                    quantity,
-                    minStock,
-                    fill,
-                  }) => {
-                    if (depth !== 1) return null;
-
-                    const fontSize = width < 80 ? 11 : width < 120 ? 13 : 15;
-                    const showDetails = width > 70 && height > 45;
-
-                    return (
-                      <g>
-                        <rect
-                          x={x}
-                          y={y}
-                          width={width}
-                          height={height}
+              <div className="max-h-80 overflow-y-auto pr-2">
+                <div style={{ height: coverageChartHeight }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={coverageChartData}
+                      layout="vertical"
+                      margin={{ top: 8, right: 24, left: 12, bottom: 8 }}
+                      barCategoryGap={8}
+                    >
+                      <CartesianGrid
+                        {...CHART_STYLES.grid}
+                        horizontal={false}
+                      />
+                      <XAxis
+                        type="number"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={CHART_STYLES.axisTick}
+                        tickFormatter={(value) => `${value.toFixed(1)}x`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={140}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={CHART_STYLES.axisTick}
+                        tickFormatter={(value) =>
+                          value.length > 16 ? `${value.slice(0, 16)}...` : value
+                        }
+                      />
+                      <ReferenceLine
+                        x={1}
+                        stroke="hsl(var(--border))"
+                        strokeDasharray="4 4"
+                        label={{
+                          value: 'Min',
+                          position: 'insideTopRight',
+                          fill: 'hsl(var(--muted-foreground))',
+                          fontSize: 10,
+                        }}
+                      />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload[0]) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-background/95 backdrop-blur-sm border-2 border-border rounded-lg p-3 shadow-lg">
+                              <p className="font-bold text-sm mb-1">
+                                {data.name}
+                              </p>
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">
+                                  Current:{' '}
+                                  <span className="font-bold text-foreground">
+                                    {data.quantity}
+                                    {data.unit ? ` ${data.unit}` : ''}
+                                  </span>
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Minimum:{' '}
+                                  <span className="font-bold text-foreground">
+                                    {data.minStock > 0
+                                      ? data.minStock
+                                      : 'Not set'}
+                                  </span>
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Coverage:{' '}
+                                  <span className="font-bold text-foreground">
+                                    {data.minStock > 0
+                                      ? `${data.ratio.toFixed(1)}x`
+                                      : 'N/A'}
+                                  </span>
+                                </p>
+                                <div className="pt-1">
+                                  <Badge
+                                    className="border border-border/60 text-white"
+                                    style={{ backgroundColor: data.fill }}
+                                  >
+                                    {data.status}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar dataKey="ratio" radius={[0, 8, 8, 0]} barSize={14}>
+                        {coverageChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                        <LabelList
+                          dataKey="ratioLabel"
+                          position="right"
+                          formatter={(value) => value}
                           style={{
-                            fill,
-                            stroke: '#fff',
-                            strokeWidth: 2,
-                            opacity: 0.95,
+                            fontSize: 10,
+                            fill: 'hsl(var(--muted-foreground))',
+                            fontWeight: 600,
                           }}
                         />
-                        {showDetails && (
-                          <>
-                            {/* Item name with shadow */}
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 - 10}
-                              textAnchor="middle"
-                              fill="#000"
-                              fontSize={fontSize}
-                              fontWeight="100"
-                              opacity="0.4"
-                            >
-                              {name?.length > 15
-                                ? name.substring(0, 15) + '...'
-                                : name}
-                            </text>
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 - 10}
-                              textAnchor="middle"
-                              fill="#fff"
-                              fontSize={fontSize}
-                              fontWeight="100"
-                            >
-                              {name?.length > 15
-                                ? name.substring(0, 15) + '...'
-                                : name}
-                            </text>
-
-                            {/* Quantity with shadow */}
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 + 8}
-                              textAnchor="middle"
-                              fill="#000"
-                              fontSize={fontSize - 1}
-                              fontWeight="100"
-                              opacity="0.4"
-                            >
-                              {quantity} units
-                            </text>
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 + 8}
-                              textAnchor="middle"
-                              fill="#fff"
-                              fontSize={fontSize - 1}
-                              fontWeight="100"
-                            >
-                              {quantity} units
-                            </text>
-
-                            {height > 70 && (
-                              <>
-                                {/* Min stock with shadow */}
-                                <text
-                                  x={x + width / 2}
-                                  y={y + height / 2 + 24}
-                                  textAnchor="middle"
-                                  fill="#000"
-                                  fontSize={fontSize - 2}
-                                  fontWeight="100"
-                                  opacity="0.4"
-                                >
-                                  Min: {minStock}
-                                </text>
-                                <text
-                                  x={x + width / 2}
-                                  y={y + height / 2 + 24}
-                                  textAnchor="middle"
-                                  fill="#fff"
-                                  fontSize={fontSize - 2}
-                                  fontWeight="100"
-                                  opacity="0.95"
-                                >
-                                  Min: {minStock}
-                                </text>
-                              </>
-                            )}
-                          </>
-                        )}
-                        {!showDetails && width > 35 && height > 35 && (
-                          <>
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 - 6}
-                              textAnchor="middle"
-                              fill="#000"
-                              fontSize={11}
-                              fontWeight="100"
-                              opacity="0.4"
-                            >
-                              {name?.substring(0, 8)}
-                            </text>
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 - 6}
-                              textAnchor="middle"
-                              fill="#fff"
-                              fontSize={11}
-                              fontWeight="100"
-                            >
-                              {name?.substring(0, 8)}
-                            </text>
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 + 8}
-                              textAnchor="middle"
-                              fill="#000"
-                              fontSize={10}
-                              fontWeight="100"
-                              opacity="0.4"
-                            >
-                              {quantity}
-                            </text>
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 + 8}
-                              textAnchor="middle"
-                              fill="#fff"
-                              fontSize={10}
-                              fontWeight="100"
-                            >
-                              {quantity}
-                            </text>
-                          </>
-                        )}
-                      </g>
-                    );
-                  }}
-                >
-                  <Tooltip
-                    content={({ payload }) => {
-                      if (!payload || !payload[0]) return null;
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-background/95 backdrop-blur-sm border-2 border-border rounded-lg p-3 shadow-lg">
-                          <p className="font-bold text-sm mb-1">{data.name}</p>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">
-                              Current:{' '}
-                              <span className="font-bold text-foreground">
-                                {data.quantity} units
-                              </span>
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Minimum:{' '}
-                              <span className="font-bold text-foreground">
-                                {data.minStock} units
-                              </span>
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Ratio:{' '}
-                              <span className="font-bold text-foreground">
-                                {(
-                                  (data.quantity / data.minStock) *
-                                  100
-                                ).toFixed(0)}
-                                %
-                              </span>
-                            </p>
-                            <div className="pt-1">
-                              <Badge
-                                variant={
-                                  data.status === 'Critical'
-                                    ? 'destructive'
-                                    : 'secondary'
-                                }
-                                className={
-                                  data.status === 'Low'
-                                    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                                    : data.status === 'Medium'
-                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                                      : data.status === 'Healthy'
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                        : ''
-                                }
-                              >
-                                {data.status}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                </Treemap>
-              </ResponsiveContainer>
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

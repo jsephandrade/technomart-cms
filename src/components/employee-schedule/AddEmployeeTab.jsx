@@ -3,7 +3,6 @@ import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
   CardDescription,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -97,26 +96,14 @@ const AddEmployeeTab = ({
     <div className="space-y-4">
       <Card className="border-border/60 bg-card/80 shadow-sm">
         <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <ShieldPlus className="h-4 w-4" aria-hidden="true" />
-              </div>
-              <div>
-                <CardTitle className="text-base font-semibold">
-                  Add Employee and Schedule
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Create a teammate and set their first schedule in one flow.
-                </CardDescription>
-              </div>
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+              <ShieldPlus className="h-3.5 w-3.5" aria-hidden="true" />
+              Add Employee and Schedule
             </div>
-            <Badge
-              variant="outline"
-              className="text-[11px] uppercase tracking-wide"
-            >
-              Quick setup
-            </Badge>
+            <CardDescription className="text-xs">
+              Create a teammate and set their first schedule in one flow.
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -270,18 +257,14 @@ const AddEmployeeTab = ({
       <Card className="border-border/60 bg-card/80 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Users className="h-4 w-4" aria-hidden="true" />
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                Team Directory
               </div>
-              <div>
-                <CardTitle className="text-base font-semibold">
-                  Team directory
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  View, edit, or archive employees in your roster.
-                </CardDescription>
-              </div>
+              <CardDescription className="text-xs">
+                View, edit, or archive employees in your roster.
+              </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Badge
@@ -365,7 +348,7 @@ const AddEmployeeTab = ({
                             {statusLabel}
                           </Badge>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground mt-1">
                           <span className="whitespace-nowrap">
                             Role: {roleLabel}
                           </span>

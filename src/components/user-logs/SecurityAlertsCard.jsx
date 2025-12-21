@@ -90,6 +90,18 @@ const formatTimestamp = (value) => {
   }
 };
 
+const normalizeUserForSeverity = (value, severityLevel) => {
+  if (!value) return value;
+  if (severityLevel < 2) return value;
+  const raw = String(value).trim();
+  const match = raw.match(/email=([^,;\s]+)/i);
+  if (match?.[1]) return match[1];
+  if (raw.toLowerCase().startsWith('email=')) {
+    return raw.slice(6).trim();
+  }
+  return value;
+};
+
 const SecurityAlertsCard = ({
   securityAlerts,
   onBlockIP,
@@ -148,12 +160,14 @@ const SecurityAlertsCard = ({
                 },
                 {
                   label: 'User',
-                  value:
+                  value: normalizeUserForSeverity(
                     alert.user ||
-                    alert.userEmail ||
-                    alert.actor ||
-                    alert?.meta?.user ||
-                    '',
+                      alert.userEmail ||
+                      alert.actor ||
+                      alert?.meta?.user ||
+                      '',
+                    severity.level
+                  ),
                 },
                 {
                   label: 'When',

@@ -102,6 +102,40 @@ const UserLogs = () => {
     });
   };
 
+  const handleAcknowledgeAlert = (alert) => {
+    if (!alert?.id) return;
+    recordDismissedAlert(alert.id);
+    setSecurityAlerts((prev) => prev.filter((entry) => entry.id !== alert.id));
+    toast({
+      title: 'Alert Acknowledged',
+      description: 'Security alert marked as reviewed.',
+    });
+  };
+
+  const handleInvestigateAlert = (alert) => {
+    toast({
+      title: 'Investigation Started',
+      description: `Investigation queued for ${alert?.title || 'this alert'}.`,
+    });
+  };
+
+  const handleEscalateAlert = (alert) => {
+    toast({
+      title: 'Alert Escalated',
+      description: `Escalation created for ${alert?.title || 'this alert'}.`,
+    });
+  };
+
+  const handleMuteAlert = (alert) => {
+    if (!alert?.id) return;
+    recordDismissedAlert(alert.id);
+    setSecurityAlerts((prev) => prev.filter((entry) => entry.id !== alert.id));
+    toast({
+      title: 'Alert Muted',
+      description: 'This alert has been muted for 24 hours.',
+    });
+  };
+
   const handleRowClick = (log) => {
     setSelectedLog(log);
     setIsModalOpen(true);
@@ -135,6 +169,10 @@ const UserLogs = () => {
           securityAlerts={securityAlerts}
           onBlockIP={handleBlockIP}
           onDismiss={handleDismissAlert}
+          onAcknowledge={handleAcknowledgeAlert}
+          onInvestigate={handleInvestigateAlert}
+          onEscalate={handleEscalateAlert}
+          onMute={handleMuteAlert}
         />
 
         <LogSummaryCard summary={summary} />

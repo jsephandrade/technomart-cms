@@ -71,6 +71,17 @@ const CategoryTabs = ({
     [items]
   );
 
+  const allItemsForLookup = useMemo(() => {
+    const map = new Map();
+    [...(items || []), ...(archivedItems || [])].forEach((item) => {
+      if (item?.id === undefined || item?.id === null || map.has(item.id)) {
+        return;
+      }
+      map.set(item.id, item);
+    });
+    return Array.from(map.values());
+  }, [items, archivedItems]);
+
   const categoryMetaByName = useMemo(() => {
     const map = new Map();
     (categoryRows || []).forEach((row) => {
@@ -238,6 +249,7 @@ const CategoryTabs = ({
     view === 'grid' ? (
       <ItemGrid
         items={list}
+        allItems={allItemsForLookup}
         onEdit={onEdit}
         onArchive={onArchive}
         onHardDeleteRequest={requestHardDelete}
@@ -247,6 +259,7 @@ const CategoryTabs = ({
     ) : (
       <ItemList
         items={list}
+        allItems={allItemsForLookup}
         onEdit={onEdit}
         onArchive={onArchive}
         onHardDeleteRequest={requestHardDelete}
@@ -414,6 +427,7 @@ const CategoryTabs = ({
             {view === 'grid' ? (
               <ItemGrid
                 items={items}
+                allItems={allItemsForLookup}
                 onEdit={onEdit}
                 onArchive={onArchive}
                 showCategory
@@ -421,6 +435,7 @@ const CategoryTabs = ({
             ) : (
               <ItemList
                 items={items}
+                allItems={allItemsForLookup}
                 onEdit={onEdit}
                 onArchive={onArchive}
                 showCategory

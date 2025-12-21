@@ -1,5 +1,5 @@
 // src/components/menu/ItemList.jsx
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,8 +44,53 @@ const resolveImageSrc = (item) => {
   return null;
 };
 
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw = item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const resolveIngredientIds = (item) =>
+  resolveIngredientEntries(item)
+    .map((entry) => {
+      if (!entry) return null;
+      if (typeof entry === 'object') {
+        return (
+          entry.id ||
+          entry.menuItemId ||
+          entry.itemId ||
+          entry.menu_item_id ||
+          null
+        );
+      }
+      return entry;
+    })
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => String(value));
+
+const resolveIngredientImages = (item, imageById) =>
+  resolveIngredientEntries(item)
+    .map((entry) => {
+      if (!entry) return null;
+      if (typeof entry === 'object') {
+        const direct = resolveImageSrc(entry);
+        if (direct) return direct;
+        const id =
+          entry.id ||
+          entry.menuItemId ||
+          entry.itemId ||
+          entry.menu_item_id ||
+          null;
+        if (id === null || id === undefined) return null;
+        return imageById.get(String(id)) || null;
+      }
+      return imageById.get(String(entry)) || null;
+    })
+    .filter(Boolean);
+
 const ItemList = ({
   items = [],
+  allItems = [],
   onEdit,
   onArchive = () => {},
   mode = 'active',
@@ -53,6 +98,20 @@ const ItemList = ({
   onHardDeleteRequest,
 }) => {
   const [brokenImages, setBrokenImages] = useState({});
+  const imageById = useMemo(() => {
+    const map = new Map();
+    (allItems || []).forEach((entry) => {
+      if (entry?.id === undefined || entry?.id === null) return;
+      const src = resolveImageSrc(entry);
+      if (src) map.set(String(entry.id), src);
+    });
+    return map;
+  }, [allItems]);
+
+  const markBroken = (src) => {
+    if (!src) return;
+    setBrokenImages((prev) => (prev[src] ? prev : { ...prev, [src]: true }));
+  };
 
   if (!items || items.length === 0) {
     return (
@@ -66,11 +125,21 @@ const ItemList = ({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
-      {items.map((item, index) => {
+      {items.map((item, itemIndex) => {
         const imageSrc = resolveImageSrc(item);
-        const brokenKey = item?.id ?? item?.name ?? index;
-        const failedSrc = brokenImages[brokenKey];
-        const showImage = Boolean(imageSrc) && failedSrc !== imageSrc;
+        const showImage = Boolean(imageSrc) && !brokenImages[String(imageSrc)];
+        const ingredientIds = resolveIngredientIds(item);
+        const ingredientImages = resolveIngredientImages(item, imageById);
+        const safeIngredientImages = ingredientImages.filter(
+          (src) => src && !brokenImages[String(src)]
+        );
+        const collageSources = safeIngredientImages.slice(0, 3);
+        if (collageSources.length === 0 && showImage) {
+          collageSources.push(imageSrc);
+        }
+        const collageSlots = [...collageSources];
+        while (collageSlots.length < 3) collageSlots.push(null);
+        const showCollage = ingredientIds.length > 0;
         const category = item.category || item.categoryName || 'Uncategorized';
         const availabilityBadge =
           mode === 'archived'
@@ -103,17 +172,36 @@ const ItemList = ({
 
             <div className="relative shrink-0 self-start">
               <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent blur-md opacity-0 transition group-hover:opacity-100" />
-              {showImage ? (
+              {showCollage ? (
+                <div className="relative grid h-16 w-16 grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-xl border border-border/60 bg-muted/30 shadow-sm transition duration-300 group-hover:scale-[1.03]">
+                  {collageSlots.map((src, slotIndex) => (
+                    <div
+                      key={`${item.id || item.name}-${slotIndex}`}
+                      className={`relative overflow-hidden ${
+                        slotIndex === 0 ? 'row-span-2' : ''
+                      }`}
+                    >
+                      {src ? (
+                        <img
+                          src={src}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                          onError={() => markBroken(src)}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-muted/60 text-muted-foreground">
+                          <ImageIcon className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : showImage ? (
                 <img
                   src={imageSrc}
                   alt={item.name}
                   className="relative h-16 w-16 rounded-xl border border-border/60 object-cover shadow-sm transition duration-300 group-hover:scale-[1.03]"
-                  onError={() =>
-                    setBrokenImages((prev) => ({
-                      ...prev,
-                      [brokenKey]: imageSrc || true,
-                    }))
-                  }
+                  onError={() => markBroken(imageSrc)}
                 />
               ) : (
                 <div className="relative flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted text-muted-foreground transition duration-300 group-hover:scale-[1.03]">
@@ -227,7 +315,7 @@ const ItemList = ({
               </div>
             </div>
 
-            {index !== items.length - 1 ? (
+            {itemIndex !== items.length - 1 ? (
               <div className="pointer-events-none absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-border/70 to-transparent opacity-60" />
             ) : null}
           </div>

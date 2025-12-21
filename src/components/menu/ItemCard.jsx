@@ -11,8 +11,71 @@ import {
   Trash2,
 } from 'lucide-react';
 
+const resolveImageSrc = (item) => {
+  if (!item) return null;
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.photo,
+    item.picture,
+    item.thumbnail,
+    item.img,
+    item?.image?.url,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c;
+  }
+  return null;
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw = item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const resolveIngredientIds = (item) =>
+  resolveIngredientEntries(item)
+    .map((entry) => {
+      if (!entry) return null;
+      if (typeof entry === 'object') {
+        return (
+          entry.id ||
+          entry.menuItemId ||
+          entry.itemId ||
+          entry.menu_item_id ||
+          null
+        );
+      }
+      return entry;
+    })
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => String(value));
+
+const resolveIngredientImages = (item, imageById) =>
+  resolveIngredientEntries(item)
+    .map((entry) => {
+      if (!entry) return null;
+      if (typeof entry === 'object') {
+        const direct = resolveImageSrc(entry);
+        if (direct) return direct;
+        const id =
+          entry.id ||
+          entry.menuItemId ||
+          entry.itemId ||
+          entry.menu_item_id ||
+          null;
+        if (id === null || id === undefined) return null;
+        return imageById.get(String(id)) || null;
+      }
+      return imageById.get(String(entry)) || null;
+    })
+    .filter(Boolean);
+
 const ItemCard = ({
   item,
+  allItems = [],
   mode = 'active',
   onEdit,
   onArchive = () => {},
@@ -20,32 +83,57 @@ const ItemCard = ({
   onHardDeleteRequest,
 }) => {
   const [imageError, setImageError] = useState(false);
+  const [brokenImages, setBrokenImages] = useState({});
   const isArchived = mode === 'archived';
 
+  const imageById = useMemo(() => {
+    const map = new Map();
+    (allItems || []).forEach((entry) => {
+      if (entry?.id === undefined || entry?.id === null) return;
+      const src = resolveImageSrc(entry);
+      if (src) map.set(String(entry.id), src);
+    });
+    return map;
+  }, [allItems]);
+
   const imageSrc = useMemo(() => {
-    if (!item) return null;
-    const candidates = [
-      item.image,
-      item.imageUrl,
-      item.image_url,
-      item.photo,
-      item.picture,
-      item.thumbnail,
-      item.img,
-      item?.image?.url,
-    ];
-    for (const c of candidates) {
-      if (typeof c === 'string' && c.trim()) return c;
-    }
-    return null;
+    return resolveImageSrc(item);
   }, [item]);
+
+  const ingredientIds = useMemo(() => resolveIngredientIds(item), [item]);
+  const ingredientImages = useMemo(
+    () => resolveIngredientImages(item, imageById),
+    [item, imageById]
+  );
 
   useEffect(() => {
     // Reset broken-state when a new image URL arrives so fresh uploads render
     setImageError(false);
-  }, [imageSrc]);
+    setBrokenImages({});
+  }, [imageSrc, ingredientImages]);
 
-  const showImage = Boolean(imageSrc) && !imageError;
+  const markBroken = (src) => {
+    if (!src) return;
+    setBrokenImages((prev) => (prev[src] ? prev : { ...prev, [src]: true }));
+  };
+
+  const baseImage =
+    imageSrc && !imageError && !brokenImages[String(imageSrc)]
+      ? imageSrc
+      : null;
+  const safeIngredientImages = ingredientImages.filter(
+    (src) => src && !brokenImages[String(src)]
+  );
+  const collageSources = safeIngredientImages.slice(0, 3);
+  if (collageSources.length === 0 && baseImage) {
+    collageSources.push(baseImage);
+  }
+  const collageSlots = [...collageSources];
+  while (collageSlots.length < 3) collageSlots.push(null);
+  const showCollage = ingredientIds.length > 0;
+  const heroImage = collageSources[0] || baseImage;
+  const showHero = Boolean(heroImage);
+
   const badge = isArchived
     ? {
         label: 'Archived',
@@ -67,10 +155,10 @@ const ItemCard = ({
   return (
     <Card className="group relative h-full overflow-hidden border border-border/50 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
       {/* Blurry background image */}
-      {showImage && (
+      {showHero && (
         <div
           className="absolute inset-0 z-0 bg-cover bg-center blur-sm opacity-30 scale-110"
-          style={{ backgroundImage: `url(${imageSrc})` }}
+          style={{ backgroundImage: `url(${heroImage})` }}
         />
       )}
 
@@ -83,9 +171,33 @@ const ItemCard = ({
       <div className="relative z-10">
         <CardHeader className="p-4 pb-0 space-y-3">
           <div className="relative rounded-lg border border-border/40 bg-background/60 backdrop-blur-sm shadow-inner">
-            {showImage ? (
+            {showCollage ? (
+              <div className="grid h-28 w-full grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-lg">
+                {collageSlots.map((src, slotIndex) => (
+                  <div
+                    key={`${item.id || item.name}-${slotIndex}`}
+                    className={`relative overflow-hidden ${
+                      slotIndex === 0 ? 'row-span-2' : ''
+                    }`}
+                  >
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                        onError={() => markBroken(src)}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted/50 text-muted-foreground">
+                        <ImageIcon className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : baseImage ? (
               <img
-                src={imageSrc}
+                src={baseImage}
                 alt={item.name}
                 className="h-28 w-full rounded-lg object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                 onError={() => setImageError(true)}

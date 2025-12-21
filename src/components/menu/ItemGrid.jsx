@@ -4,6 +4,7 @@ import ItemCard from './ItemCard';
 
 const ItemGrid = ({
   items = [],
+  allItems = [],
   onEdit,
   onArchive = () => {},
   onRestore = () => {},
@@ -17,6 +18,7 @@ const ItemGrid = ({
         <ItemCard
           key={item.id}
           item={showCategory ? item : { ...item }}
+          allItems={allItems}
           onEdit={onEdit}
           onArchive={onArchive}
           onRestore={onRestore}

@@ -1,52 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import UserManagementCard from '@/components/users/UserManagementCard';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import {
-  CalendarRange,
-  Copy,
-  MoreHorizontal,
-  ChevronDown,
-  PlusCircle,
-  Trash2,
-} from 'lucide-react';
+import { CalendarRange, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_DAY_OPTIONS = [
@@ -128,25 +85,6 @@ const formatDurationLabel = (start, end) => {
   return `${mins}m`;
 };
 
-const buildDraftShift = (daysOfWeek, employeeList, preset = {}) => {
-  const fallbackDay = preset.day || daysOfWeek[0] || 'Monday';
-  const fallbackEmployee =
-    preset.employeeId ??
-    (employeeList.length ? String(employeeList[0].id) : '');
-
-  return {
-    id: preset.id || '',
-    employeeId: fallbackEmployee ? String(fallbackEmployee) : '',
-    day: fallbackDay,
-    startTime: preset.startTime || '09:00',
-    endTime: preset.endTime || '17:00',
-    repeatDays:
-      preset.repeatDays && preset.repeatDays.length
-        ? [...new Set(preset.repeatDays)]
-        : [fallbackDay],
-  };
-};
-
 const WeeklyScheduleCard = ({
   daysOfWeek = [],
   employeeList = [],
@@ -156,11 +94,6 @@ const WeeklyScheduleCard = ({
   overviewLoading = false,
   scheduleLoading = false,
   filters,
-  onFiltersChange,
-  onCreateShift,
-  onUpdateShift,
-  onDeleteShift,
-  canManage = false,
 }) => {
   const filteredDays = daysOfWeek.length ? daysOfWeek : DEFAULT_DAY_OPTIONS;
   const selectableDays = (filteredDays || []).filter(
@@ -170,17 +103,10 @@ const WeeklyScheduleCard = ({
         (day) => String(day || '').toLowerCase() !== 'sunday'
       )
     : DEFAULT_DAY_OPTIONS;
-  const [internalFilters, setInternalFilters] = useState({
+  const [internalFilters] = useState({
     employeeId: '',
     day: '_all',
   });
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [composerMode, setComposerMode] = useState('create');
-  const [composerSaving, setComposerSaving] = useState(false);
-  const [draftShift, setDraftShift] = useState(() =>
-    buildDraftShift(selectableDays, employeeList)
-  );
-  const [shiftPendingDelete, setShiftPendingDelete] = useState(null);
   const [collapsedDays, setCollapsedDays] = useState(() => {
     const initial = new Set(selectableDays);
     initial.delete('Monday');
@@ -188,12 +114,6 @@ const WeeklyScheduleCard = ({
   });
 
   const appliedFilters = filters ?? internalFilters;
-
-  const handleFiltersChange = (patch) => {
-    const next = { ...appliedFilters, ...patch };
-    if (typeof onFiltersChange === 'function') onFiltersChange(next);
-    else setInternalFilters(next);
-  };
 
   const directoryList =
     Array.isArray(employeeDirectory) && employeeDirectory.length
@@ -301,22 +221,6 @@ const WeeklyScheduleCard = ({
 
   const showSkeletonBoard =
     scheduleLoading && (filteredSchedule.length === 0 || schedule.length === 0);
-  const composerHasEmployees = employeeList.length > 0;
-  const composerValid =
-    composerHasEmployees &&
-    draftShift.employeeId &&
-    draftShift.day &&
-    draftShift.startTime &&
-    draftShift.endTime;
-
-  const handleComposerOpenChange = (open) => {
-    setComposerOpen(open);
-    if (!open) {
-      setComposerMode('create');
-      setComposerSaving(false);
-      setDraftShift(buildDraftShift(selectableDays, employeeList));
-    }
-  };
 
   const toggleDayCollapsed = (day) => {
     setCollapsedDays((prev) => {
@@ -328,118 +232,6 @@ const WeeklyScheduleCard = ({
       }
       return next;
     });
-  };
-
-  const handleOpenComposer = (mode, preset = {}) => {
-    if (!canManage) return;
-    setComposerMode(mode);
-    setDraftShift(buildDraftShift(selectableDays, employeeList, preset));
-    setComposerOpen(true);
-  };
-
-  const handleComposerFieldChange = (field, value) => {
-    setDraftShift((prev) => {
-      if (field === 'day') {
-        const nextRepeat =
-          composerMode === 'edit'
-            ? [value]
-            : prev.repeatDays.includes(value)
-              ? prev.repeatDays
-              : [...prev.repeatDays, value];
-        return { ...prev, day: value, repeatDays: nextRepeat };
-      }
-      return { ...prev, [field]: value };
-    });
-  };
-
-  const toggleRepeatDay = (day) => {
-    if (composerMode === 'edit') return;
-    setDraftShift((prev) => {
-      const next = new Set(prev.repeatDays || []);
-      if (next.has(day)) {
-        if (next.size > 1) next.delete(day);
-      } else {
-        next.add(day);
-      }
-      return { ...prev, repeatDays: Array.from(next) };
-    });
-  };
-
-  const handleComposerSubmit = async () => {
-    if (!canManage || !composerValid || composerSaving) return;
-    const createMode = composerMode === 'create';
-    const handler =
-      createMode && typeof onCreateShift === 'function'
-        ? onCreateShift
-        : !createMode && typeof onUpdateShift === 'function'
-          ? onUpdateShift
-          : null;
-    if (!handler) return;
-
-    const uniqueDays =
-      createMode && draftShift.repeatDays?.length
-        ? Array.from(new Set(draftShift.repeatDays))
-        : [draftShift.day];
-
-    setComposerSaving(true);
-    try {
-      if (createMode) {
-        for (const day of uniqueDays) {
-          const success = await handler({
-            employeeId: draftShift.employeeId,
-            day,
-            startTime: draftShift.startTime,
-            endTime: draftShift.endTime,
-          });
-          if (!success) {
-            setComposerSaving(false);
-            return;
-          }
-        }
-      } else {
-        const success = await handler({
-          id: draftShift.id,
-          employeeId: draftShift.employeeId,
-          day: draftShift.day,
-          startTime: draftShift.startTime,
-          endTime: draftShift.endTime,
-        });
-        if (!success) {
-          setComposerSaving(false);
-          return;
-        }
-      }
-      handleComposerOpenChange(false);
-    } finally {
-      setComposerSaving(false);
-    }
-  };
-
-  const handleDuplicateShift = (shift) => {
-    if (!canManage) return;
-    handleOpenComposer('create', {
-      employeeId: shift?.employeeId,
-      day: shift?.day,
-      startTime: shift?.startTime,
-      endTime: shift?.endTime,
-      repeatDays: [shift?.day],
-    });
-  };
-
-  const handleConfirmDelete = async () => {
-    if (
-      !canManage ||
-      !shiftPendingDelete ||
-      typeof onDeleteShift !== 'function'
-    ) {
-      setShiftPendingDelete(null);
-      return;
-    }
-    try {
-      await onDeleteShift(shiftPendingDelete.id);
-    } finally {
-      setShiftPendingDelete(null);
-    }
   };
 
   const renderShiftCard = (entry) => {
@@ -483,40 +275,6 @@ const WeeklyScheduleCard = ({
             {entry?.startTime} - {entry?.endTime}
           </p>
         </div>
-        {canManage ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              >
-                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-                <span className="sr-only">Open shift actions</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel>Shift actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => handleOpenComposer('edit', entry)}
-              >
-                Edit shift
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDuplicateShift(entry)}>
-                <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
-                Duplicate
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setShiftPendingDelete(entry)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
       </div>
     );
   };
@@ -528,28 +286,6 @@ const WeeklyScheduleCard = ({
         titleStyle="accent"
         titleIcon={CalendarRange}
         description="Plan coverage, assign teammates, and publish this week's roster from a single view."
-        headerActions={
-          canManage ? (
-            <div className="flex items-center gap-3 text-sm">
-              <Button
-                size="sm"
-                className="gap-2"
-                onClick={() =>
-                  handleOpenComposer('create', {
-                    day:
-                      appliedFilters.day && appliedFilters.day !== '_all'
-                        ? appliedFilters.day
-                        : selectableDays[0],
-                  })
-                }
-                disabled={!composerHasEmployees}
-              >
-                <PlusCircle className="h-4 w-4" aria-hidden="true" />
-                Plan shift
-              </Button>
-            </div>
-          ) : null
-        }
       >
         {showSkeletonBoard ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -598,15 +334,7 @@ const WeeklyScheduleCard = ({
                       >
                         {coverageCopy[badgeKey] || coverageCopy.none}
                       </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleDayCollapsed(day);
-                        }}
-                      >
+                      <span className="flex h-8 w-8 items-center justify-center text-muted-foreground">
                         <ChevronDown
                           className={cn(
                             'h-4 w-4 transition-transform',
@@ -614,28 +342,7 @@ const WeeklyScheduleCard = ({
                           )}
                           aria-hidden="true"
                         />
-                        <span className="sr-only">
-                          {isCollapsed ? 'Expand shifts' : 'Collapse shifts'}
-                        </span>
-                      </Button>
-                      {canManage ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          onClick={() =>
-                            handleOpenComposer('create', {
-                              day,
-                              repeatDays: [day],
-                            })
-                          }
-                          onMouseDown={(event) => event.stopPropagation()}
-                          onClickCapture={(event) => event.stopPropagation()}
-                        >
-                          <PlusCircle className="h-4 w-4" aria-hidden="true" />
-                          <span className="sr-only">Add shift for {day}</span>
-                        </Button>
-                      ) : null}
+                      </span>
                     </div>
                   </div>
                   {!isCollapsed ? (
@@ -645,11 +352,6 @@ const WeeklyScheduleCard = ({
                       ) : (
                         <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-6 text-center text-xs text-muted-foreground">
                           No shifts planned.
-                          {canManage ? (
-                            <span>
-                              {' Use "Plan shift" to assign coverage.'}
-                            </span>
-                          ) : null}
                         </div>
                       )}
                     </div>
@@ -660,160 +362,6 @@ const WeeklyScheduleCard = ({
           </div>
         )}
       </UserManagementCard>
-
-      <Sheet open={composerOpen} onOpenChange={handleComposerOpenChange}>
-        <SheetContent
-          side="right"
-          className="w-full max-w-[520px] overflow-y-auto border-l border-border/80 bg-background/95"
-        >
-          <SheetHeader>
-            <SheetTitle>
-              {composerMode === 'create' ? 'Plan a shift' : 'Edit shift'}
-            </SheetTitle>
-            <SheetDescription>
-              Choose the teammate, timing, and (optionally) duplicate the shift
-              across multiple days.
-            </SheetDescription>
-          </SheetHeader>
-          {composerHasEmployees ? (
-            <div className="mt-6 space-y-4">
-              <div className="space-y-2">
-                <Label>Employee</Label>
-                <Select
-                  value={draftShift.employeeId || ''}
-                  onValueChange={(value) =>
-                    handleComposerFieldChange('employeeId', value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employeeList.map((employee) => (
-                      <SelectItem key={employee.id} value={String(employee.id)}>
-                        {employee.name} ({employee.position || 'Team member'})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Day</Label>
-                  <Select
-                    value={draftShift.day}
-                    onValueChange={(value) =>
-                      handleComposerFieldChange('day', value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select day" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectableDays.map((day) => (
-                        <SelectItem key={day} value={day}>
-                          {day}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Repeat on</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {selectableDays.map((day) => (
-                      <Button
-                        key={day}
-                        type="button"
-                        size="sm"
-                        variant={
-                          draftShift.repeatDays.includes(day)
-                            ? 'default'
-                            : 'outline'
-                        }
-                        className="rounded-full text-xs"
-                        disabled={composerMode === 'edit'}
-                        onClick={() => toggleRepeatDay(day)}
-                      >
-                        {day.slice(0, 3)}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Start time</Label>
-                  <Input
-                    type="time"
-                    value={draftShift.startTime}
-                    onChange={(event) =>
-                      handleComposerFieldChange('startTime', event.target.value)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>End time</Label>
-                  <Input
-                    type="time"
-                    value={draftShift.endTime}
-                    onChange={(event) =>
-                      handleComposerFieldChange('endTime', event.target.value)
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-6 rounded-2xl border border-dashed border-border/60 p-4 text-sm text-muted-foreground">
-              Add employees from the admin panel first to start planning shifts.
-            </p>
-          )}
-          <SheetFooter className="mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleComposerOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleComposerSubmit}
-              disabled={!composerValid || composerSaving}
-            >
-              {composerMode === 'create' ? 'Save shift' : 'Update shift'}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-
-      <AlertDialog
-        open={Boolean(shiftPendingDelete)}
-        onOpenChange={(open) => {
-          if (!open) setShiftPendingDelete(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete shift</AlertDialogTitle>
-            <AlertDialogDescription>
-              This shift will be removed from the weekly planner. This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShiftPendingDelete(null)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleConfirmDelete}
-            >
-              Delete shift
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 };

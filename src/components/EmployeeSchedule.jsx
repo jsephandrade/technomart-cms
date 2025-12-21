@@ -543,14 +543,14 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="w-full space-y-6"
         >
-          <TabsList className="w-full grid grid-cols-2 gap-2 sm:grid-cols-4 bg-muted/40 p-1 rounded-lg">
+          <TabsList className="w-full grid grid-cols-4 gap-2 bg-muted/40 p-1 rounded-lg">
             <TabsTrigger
               value="add"
               aria-label="Add Employee"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ShieldPlus className="h-4 w-4" aria-hidden="true" />
-              <span>Add Employee</span>
+              <span className="hidden lg:inline">Add Employee</span>
             </TabsTrigger>
             <TabsTrigger
               value="schedule"
@@ -558,7 +558,7 @@ const EmployeeSchedule = () => {
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
-              <span>Weekly Schedule</span>
+              <span className="hidden lg:inline">Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
               value="attendance"
@@ -566,7 +566,7 @@ const EmployeeSchedule = () => {
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
-              <span>Attendance Records</span>
+              <span className="hidden lg:inline">Attendance Records</span>
             </TabsTrigger>
             <TabsTrigger
               value="leave"
@@ -574,7 +574,7 @@ const EmployeeSchedule = () => {
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <Plane className="h-4 w-4" aria-hidden="true" />
-              <span>Leave Records</span>
+              <span className="hidden lg:inline">Leave Records</span>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="add" className="space-y-6">

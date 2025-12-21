@@ -21,6 +21,7 @@ import {
   Plane,
   RotateCcw,
   ShieldPlus,
+  Trash2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -78,6 +79,7 @@ const EmployeeSchedule = () => {
     employees = [],
     addEmployeeWithSchedule,
     updateEmployee,
+    deleteEmployee,
     loading: employeesLoading,
     refetch: refetchEmployees,
   } = useEmployees();
@@ -127,6 +129,9 @@ const EmployeeSchedule = () => {
   const [archivingEmployee, setArchivingEmployee] = useState(false);
   const [archivedDialogOpen, setArchivedDialogOpen] = useState(false);
   const [restoringEmployeeId, setRestoringEmployeeId] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingEmployee, setDeletingEmployee] = useState(false);
   const attendanceAutoOpenDismissed = useRef(false);
 
   const handleQuickAdd = async () => {
@@ -226,6 +231,11 @@ const EmployeeSchedule = () => {
       setArchivedDialogOpen(false);
       setRestoringEmployeeId(null);
     }
+    if (deleteDialogOpen) {
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+      setDeletingEmployee(false);
+    }
   }, [
     canManage,
     dialogOpen,
@@ -233,6 +243,7 @@ const EmployeeSchedule = () => {
     employeeDialogOpen,
     archiveDialogOpen,
     archivedDialogOpen,
+    deleteDialogOpen,
   ]);
 
   useEffect(() => {
@@ -546,6 +557,27 @@ const EmployeeSchedule = () => {
     }
   };
 
+  const handleDeleteEmployeeRequest = (employee) => {
+    if (!canManage || !employee?.id) return;
+    setDeleteTarget(employee);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDeleteEmployee = async () => {
+    if (!canManage || !deleteTarget?.id || deletingEmployee) return;
+    setDeletingEmployee(true);
+    try {
+      await deleteEmployee(deleteTarget.id);
+      await refetchSchedule();
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setDeletingEmployee(false);
+    }
+  };
+
   const handleOpenManageEmployees = () => {
     if (!canManage) return;
     const firstEmployee = displayEmployees[0];
@@ -731,6 +763,49 @@ const EmployeeSchedule = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setDeleteTarget(null);
+            setDeletingEmployee(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Permanently delete employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove{' '}
+              <span className="font-semibold text-foreground">
+                {deleteTarget?.name || 'this employee'}
+              </span>{' '}
+              from the database. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel disabled={deletingEmployee}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingEmployee}
+              onClick={(event) => {
+                event.preventDefault();
+                handleConfirmDeleteEmployee();
+              }}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog
         open={archivedDialogOpen}
         onOpenChange={(open) => {
@@ -766,16 +841,33 @@ const EmployeeSchedule = () => {
                       {employee.position || 'No role'}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => handleRestoreEmployee(employee)}
-                    disabled={restoringEmployeeId === employee.id}
-                  >
-                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                    Restore
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => handleRestoreEmployee(employee)}
+                      disabled={
+                        restoringEmployeeId === employee.id ||
+                        (deleteTarget?.id === employee.id && deletingEmployee)
+                      }
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                      Restore
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteEmployeeRequest(employee)}
+                      disabled={
+                        deleteTarget?.id === employee.id && deletingEmployee
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      <span className="sr-only">Delete employee</span>
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

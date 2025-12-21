@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Archive, Edit, Edit2, ShieldPlus, Users } from 'lucide-react';
+import { Archive, Edit, Edit2, Search, ShieldPlus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUsers } from '@/hooks/useUsers';
 
@@ -55,6 +55,7 @@ const AddEmployeeTab = ({
 }) => {
   const { users = [] } = useUsers();
   const [copyFromSelection, setCopyFromSelection] = useState('');
+  const [teamSearch, setTeamSearch] = useState('');
   const staffUsers = useMemo(
     () =>
       users.filter((user) =>
@@ -62,6 +63,22 @@ const AddEmployeeTab = ({
       ),
     [users]
   );
+  const normalizedTeamSearch = teamSearch.trim().toLowerCase();
+  const filteredEmployees = normalizedTeamSearch
+    ? employees.filter((emp) => {
+        const haystack = [
+          emp.name,
+          emp.position,
+          emp.contact,
+          emp.status,
+          emp.hourlyRate != null ? String(emp.hourlyRate) : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(normalizedTeamSearch);
+      })
+    : employees;
 
   const handleCopyFromChange = (value) => {
     setCopyFromSelection(value);
@@ -294,7 +311,21 @@ const AddEmployeeTab = ({
                 View, edit, or archive employees in your roster.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div className="relative w-full sm:w-56">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={teamSearch}
+                  onChange={(event) => setTeamSearch(event.target.value)}
+                  placeholder="Search team..."
+                  className="h-9 w-full pl-9 text-sm"
+                  aria-label="Search team directory"
+                />
+              </div>
               <Badge
                 variant="outline"
                 className="text-[11px] uppercase tracking-wide"
@@ -338,9 +369,9 @@ const AddEmployeeTab = ({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {employees.length ? (
+          {filteredEmployees.length ? (
             <div className="space-y-2">
-              {employees.map((emp) => {
+              {filteredEmployees.map((emp) => {
                 const statusKey = (emp.status || 'active').toLowerCase();
                 const statusLabel = statusKey
                   ? statusKey.charAt(0).toUpperCase() + statusKey.slice(1)
@@ -410,7 +441,7 @@ const AddEmployeeTab = ({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="gap-2 text-muted-foreground hover:text-foreground"
+                        className="gap-2 text-destructive hover:text-destructive"
                         onClick={() =>
                           typeof onArchiveEmployee === 'function'
                             ? onArchiveEmployee(emp)
@@ -426,6 +457,20 @@ const AddEmployeeTab = ({
                   </div>
                 );
               })}
+            </div>
+          ) : employees.length ? (
+            <div className="flex items-start gap-3 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  No matching employees
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Try a different name, role, or contact detail.
+                </p>
+              </div>
             </div>
           ) : (
             <div className="flex items-start gap-3 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">

@@ -685,7 +685,14 @@ const EmployeeSchedule = () => {
           <TabsContent value="add" className="space-y-6">
             {activeTab === 'add' ? addEmployeeContent : null}
           </TabsContent>
-          <TabsContent value="schedule" className="space-y-6">
+          <TabsContent
+            value="schedule"
+            className="relative space-y-6 overflow-hidden"
+          >
+            <div
+              className="pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl"
+              aria-hidden="true"
+            />
             {activeTab === 'schedule' ? schedulePane : null}
           </TabsContent>
           <TabsContent value="attendance" className="space-y-6">

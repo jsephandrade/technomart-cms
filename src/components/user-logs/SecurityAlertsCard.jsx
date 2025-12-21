@@ -232,9 +232,10 @@ const SecurityAlertsCard = ({
                         {isAcknowledged ? (
                           <Button
                             size="sm"
-                            variant="secondary"
+                            variant="default"
                             disabled
                             aria-label="Acknowledged"
+                            className="bg-emerald-600 text-white hover:bg-emerald-600 disabled:opacity-100 disabled:bg-emerald-600 disabled:text-white"
                           >
                             <CheckCircle2 className="mr-2 h-4 w-4" />
                             <span className="hidden lg:inline">

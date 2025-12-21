@@ -240,70 +240,75 @@ const SecurityAlertsCard = ({
                       </div>
                     ) : null}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {severity.level >= 2 ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onInvestigate?.(alert)}
-                        >
-                          <Search className="mr-2 h-4 w-4" />
-                          Investigate
-                        </Button>
-                      ) : null}
-                      {severity.level >= 3 ? (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => onEscalate?.(alert)}
-                        >
-                          <ArrowUpRight className="mr-2 h-4 w-4" />
-                          Escalate
-                        </Button>
-                      ) : null}
-                      {severity.level >= 3 ? (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => onBlockIP?.(alert.id)}
-                        >
-                          <Ban className="mr-2 h-4 w-4" />
-                          Block IP
-                        </Button>
-                      ) : null}
-                      {severity.level >= 2 ? (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {severity.level >= 2 ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onInvestigate?.(alert)}
+                          >
+                            <Search className="mr-2 h-4 w-4" />
+                            Investigate
+                          </Button>
+                        ) : null}
+                        {severity.level >= 3 ? (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => onEscalate?.(alert)}
+                          >
+                            <ArrowUpRight className="mr-2 h-4 w-4" />
+                            Escalate
+                          </Button>
+                        ) : null}
+                        {severity.level >= 3 ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => onBlockIP?.(alert.id)}
+                          >
+                            <Ban className="mr-2 h-4 w-4" />
+                            Block IP
+                          </Button>
+                        ) : null}
+                        {severity.level >= 2 ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onMute?.(alert)}
+                          >
+                            <BellOff className="mr-2 h-4 w-4" />
+                            Mute 24h
+                          </Button>
+                        ) : null}
+                      </div>
+
+                      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                        {isAcknowledged ? (
+                          <Button size="sm" variant="secondary" disabled>
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Acknowledged
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onAcknowledge?.(alert)}
+                          >
+                            <ShieldCheck className="mr-2 h-4 w-4" />
+                            Acknowledge
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => onMute?.(alert)}
+                          onClick={() => onDismiss?.(alert.id)}
                         >
-                          <BellOff className="mr-2 h-4 w-4" />
-                          Mute 24h
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Dismiss
                         </Button>
-                      ) : null}
-                      {isAcknowledged ? (
-                        <Button size="sm" variant="secondary" disabled>
-                          <CheckCircle2 className="mr-2 h-4 w-4" />
-                          Acknowledged
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onAcknowledge?.(alert)}
-                        >
-                          <ShieldCheck className="mr-2 h-4 w-4" />
-                          Acknowledge
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onDismiss?.(alert.id)}
-                      >
-                        <XCircle className="mr-2 h-4 w-4" />
-                        Dismiss
-                      </Button>
+                      </div>
                     </div>
                   </div>
                 </div>

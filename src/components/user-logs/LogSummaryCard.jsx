@@ -22,7 +22,7 @@ const LogSummaryCard = ({ summary }) => {
   const month = summary?.month || week;
   return (
     <FeaturePanelCard
-      className="w-full mx-auto"
+      className="w-full"
       title="Log Summary"
       titleStyle="accent"
       titleIcon={BarChart}

@@ -16,7 +16,7 @@ const SecurityAlertsCard = ({ securityAlerts, onBlockIP, onDismiss }) => {
 
   return (
     <FeaturePanelCard
-      className="w-full mx-auto"
+      className="w-full"
       title="Security Alerts"
       titleStyle="accent"
       titleIcon={ShieldAlert}

@@ -79,7 +79,7 @@ const ActivityLogsCard = ({
 
   return (
     <FeaturePanelCard
-      className="w-full md:max-w-4xl mx-auto"
+      className="w-full"
       title="Activity Logs"
       titleStyle="accent"
       titleIcon={FileText}

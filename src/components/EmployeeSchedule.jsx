@@ -13,7 +13,13 @@ import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCar
 import AddEmployeeTab from '@/components/employee-schedule/AddEmployeeTab';
 import ScheduleTab from '@/components/employee-schedule/ScheduleTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarDays, ClipboardList, ShieldPlus, Plane } from 'lucide-react';
+import {
+  Archive,
+  CalendarDays,
+  ClipboardList,
+  Plane,
+  ShieldPlus,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +27,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const DAYS_OF_WEEK = [
   'Sunday',
@@ -99,6 +115,9 @@ const EmployeeSchedule = () => {
   });
   const [activeTab, setActiveTab] = useState('schedule');
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [archivingEmployee, setArchivingEmployee] = useState(false);
   const attendanceAutoOpenDismissed = useRef(false);
 
   const handleQuickAdd = async () => {
@@ -190,7 +209,17 @@ const EmployeeSchedule = () => {
       setEmployeeDialogOpen(false);
       setManagedEmployee({ ...DEFAULT_EMPLOYEE_FORM });
     }
-  }, [canManage, dialogOpen, editingSchedule, employeeDialogOpen]);
+    if (archiveDialogOpen) {
+      setArchiveDialogOpen(false);
+      setArchiveTarget(null);
+    }
+  }, [
+    canManage,
+    dialogOpen,
+    editingSchedule,
+    employeeDialogOpen,
+    archiveDialogOpen,
+  ]);
 
   useEffect(() => {
     if (!isStaffOnly) return;
@@ -460,24 +489,26 @@ const EmployeeSchedule = () => {
     setEmployeeDialogOpen(true);
   };
 
-  const handleArchiveEmployeeClick = async (employee) => {
-    const employeeId = typeof employee === 'object' ? employee?.id : employee;
-    if (!canManage || !employeeId) return;
-    const employeeName = typeof employee === 'object' ? employee?.name : '';
-    const confirmArchive =
-      typeof window !== 'undefined'
-        ? window.confirm(
-            `Archive ${employeeName || 'this employee'}? They will be hidden from scheduling.`
-          )
-        : true;
-    if (!confirmArchive) return;
+  const handleArchiveEmployeeRequest = (employee) => {
+    if (!canManage || !employee?.id) return;
+    setArchiveTarget(employee);
+    setArchiveDialogOpen(true);
+  };
+
+  const handleConfirmArchiveEmployee = async () => {
+    if (!canManage || !archiveTarget?.id || archivingEmployee) return;
+    setArchivingEmployee(true);
     try {
-      await updateEmployee(employeeId, { status: 'inactive' });
+      await updateEmployee(archiveTarget.id, { status: 'inactive' });
       await Promise.all([refetchEmployees(), refetchSchedule()]);
       toast.success('Employee archived');
+      setArchiveDialogOpen(false);
+      setArchiveTarget(null);
     } catch (error) {
       console.error(error);
       toast.error('Failed to archive employee');
+    } finally {
+      setArchivingEmployee(false);
     }
   };
 
@@ -510,7 +541,7 @@ const EmployeeSchedule = () => {
       daysOfWeek={DAYS_OF_WEEK}
       employees={displayEmployees}
       onManageEmployee={handleManageEmployeeClick}
-      onArchiveEmployee={handleArchiveEmployeeClick}
+      onArchiveEmployee={handleArchiveEmployeeRequest}
       onOpenManageEmployees={handleOpenManageEmployees}
     />
   );
@@ -620,6 +651,49 @@ const EmployeeSchedule = () => {
         onUpdateEmployee={handleUpdateEmployee}
         showTrigger={false}
       />
+
+      <AlertDialog
+        open={archiveDialogOpen}
+        onOpenChange={(open) => {
+          setArchiveDialogOpen(open);
+          if (!open) {
+            setArchiveTarget(null);
+            setArchivingEmployee(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+              <Archive className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Archive employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {archiveTarget?.name
+                ? `Archive ${archiveTarget.name}?`
+                : 'Archive this employee?'}{' '}
+              They will be hidden from scheduling, but their profile and history
+              stay available.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel disabled={archivingEmployee}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-amber-500 text-white hover:bg-amber-500/90"
+              disabled={archivingEmployee}
+              onClick={(event) => {
+                event.preventDefault();
+                handleConfirmArchiveEmployee();
+              }}
+            >
+              <Archive className="h-4 w-4" aria-hidden="true" />
+              Archive employee
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AddScheduleDialog
         open={dialogOpen}

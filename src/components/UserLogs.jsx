@@ -94,11 +94,24 @@ const formatMuteUntil = (timestamp) => {
 };
 
 const extractAlertEmail = (alert) => {
-  const raw =
-    alert?.user || alert?.userEmail || alert?.actor || alert?.meta?.user || '';
-  if (!raw) return '';
-  const match = String(raw).match(EMAIL_REGEX);
-  return match?.[0] || '';
+  const candidates = [
+    alert?.user,
+    alert?.userEmail,
+    alert?.actor,
+    alert?.actorEmail,
+    alert?.meta?.user,
+    alert?.meta?.email,
+    alert?.meta?.actor,
+    alert?.details,
+    alert?.description,
+    alert?.title,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const match = String(candidate).match(EMAIL_REGEX);
+    if (match?.[0]) return match[0];
+  }
+  return '';
 };
 
 const UserLogs = () => {
@@ -261,13 +274,7 @@ const UserLogs = () => {
 
   const handleMuteAlert = (alert) => {
     const userEmail = extractAlertEmail(alert);
-    if (!userEmail) {
-      toast({
-        title: 'Unable to mute user',
-        description: 'No user email found for this alert.',
-      });
-      return;
-    }
+    if (!userEmail) return;
     const mutedUntil = muteUserFor24Hours(userEmail);
     setSecurityAlerts((prev) =>
       prev.map((entry) =>

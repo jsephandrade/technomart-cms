@@ -112,6 +112,8 @@ class LogsService {
           title: 'Failed Login Attempts',
           description:
             'Multiple failed login attempts detected for admin account',
+          user: 'admin@technomart.local',
+          ip: '203.0.113.14',
           timestamp: new Date().toISOString(),
         },
         {
@@ -120,6 +122,7 @@ class LogsService {
           severity: 'warning',
           title: 'Password Expiring',
           description: '2 user passwords will expire in 7 days',
+          user: 'staff@technomart.local',
           timestamp: new Date(Date.now() - 3600_000).toISOString(),
         },
       ];

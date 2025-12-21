@@ -325,14 +325,19 @@ def logs_alerts(request):
             sev = (l.severity or "").lower()
             if sev not in {"warning", "critical"}:
                 continue
+            item = _serialize_db(l)
             out.append(
                 {
-                    "id": str(l.id),
+                    "id": item.get("id") or str(l.id),
                     "type": "critical" if sev == "critical" else "warning",
                     "severity": sev,
-                    "title": l.action,
-                    "description": l.details or "",
-                    "timestamp": l.created_at.isoformat(),
+                    "title": item.get("action") or l.action,
+                    "description": item.get("details") or l.details or "",
+                    "timestamp": item.get("timestamp") or l.created_at.isoformat(),
+                    "user": item.get("user") or "",
+                    "userId": item.get("userId") or "",
+                    "ip": item.get("ip") or "",
+                    "meta": item.get("meta") or {},
                 }
             )
         return JsonResponse({"success": True, "data": out})
@@ -347,14 +352,21 @@ def logs_alerts(request):
         sev = (e.get("severity") or "").lower()
         if sev not in {"warning", "critical"}:
             continue
+        item = _serialize_mem(e)
         out.append(
             {
-                "id": str(e.get("id")),
+                "id": item.get("id") or str(e.get("id")),
                 "type": "critical" if sev == "critical" else "warning",
                 "severity": sev,
-                "title": e.get("action") or "Security Event",
-                "description": e.get("details") or "",
-                "timestamp": e.get("timestamp") or dj_timezone.now().isoformat(),
+                "title": item.get("action") or e.get("action") or "Security Event",
+                "description": item.get("details") or e.get("details") or "",
+                "timestamp": item.get("timestamp")
+                or e.get("timestamp")
+                or dj_timezone.now().isoformat(),
+                "user": item.get("user") or "",
+                "userId": item.get("userId") or "",
+                "ip": item.get("ip") or "",
+                "meta": item.get("meta") or {},
             }
         )
     return JsonResponse({"success": True, "data": out})

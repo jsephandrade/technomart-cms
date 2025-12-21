@@ -183,44 +183,46 @@ const AddEmployeeTab = ({
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs uppercase tracking-wide">Days</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              {(daysOfWeek || []).map((day) => {
-                const selected =
-                  Array.isArray(quickAdd.repeatDays) &&
-                  quickAdd.repeatDays.includes(day);
-                return (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant={selected ? 'default' : 'outline'}
-                    className="rounded-full px-3 text-[11px] uppercase"
-                    key={day}
-                    onClick={() => {
-                      setQuickAdd((prev) => {
-                        const nextDays = new Set(prev.repeatDays || []);
-                        if (nextDays.has(day)) {
-                          nextDays.delete(day);
-                        } else {
-                          nextDays.add(day);
-                        }
-                        return {
-                          ...prev,
-                          repeatDays: Array.from(nextDays),
-                        };
-                      });
-                    }}
-                  >
-                    {day.slice(0, 3)}
-                  </Button>
-                );
-              })}
+          <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
+            <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+              <Label className="text-xs uppercase tracking-wide">Days</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {(daysOfWeek || []).map((day) => {
+                  const selected =
+                    Array.isArray(quickAdd.repeatDays) &&
+                    quickAdd.repeatDays.includes(day);
+                  return (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant={selected ? 'default' : 'outline'}
+                      className="rounded-full px-3 text-[11px] uppercase"
+                      key={day}
+                      onClick={() => {
+                        setQuickAdd((prev) => {
+                          const nextDays = new Set(prev.repeatDays || []);
+                          if (nextDays.has(day)) {
+                            nextDays.delete(day);
+                          } else {
+                            nextDays.add(day);
+                          }
+                          return {
+                            ...prev,
+                            repeatDays: Array.from(nextDays),
+                          };
+                        });
+                      }}
+                    >
+                      {day.slice(0, 3)}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-          <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">Start</Label>
+              <Label className="text-xs uppercase tracking-wide">
+                Start time
+              </Label>
               <Input
                 type="time"
                 value={quickAdd.startTime}
@@ -233,7 +235,9 @@ const AddEmployeeTab = ({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">End</Label>
+              <Label className="text-xs uppercase tracking-wide">
+                End time
+              </Label>
               <Input
                 type="time"
                 value={quickAdd.endTime}
@@ -248,7 +252,7 @@ const AddEmployeeTab = ({
             <div className="flex items-center justify-end sm:col-span-2 lg:col-span-1">
               <Button
                 size="sm"
-                className="w-full whitespace-nowrap sm:w-auto"
+                className="w-full whitespace-nowrap lg:w-auto"
                 onClick={handleQuickAdd}
                 disabled={employeesLoading || scheduleLoading}
               >

@@ -92,13 +92,19 @@ const MenuManagement = () => {
       toast.error('Please fill in all required fields');
       return;
     }
+    const trimmedPrice = String(newItem.price ?? '').trim();
+    const parsedPrice = trimmedPrice === '' ? Number.NaN : Number(trimmedPrice);
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      toast.error('Please enter a valid price.');
+      return;
+    }
 
     setAdding(true);
 
     const payload = {
       name: newItem.name,
       description: newItem.description,
-      price: Number(newItem.price) || 0,
+      price: parsedPrice,
       category: newItem.category,
       available: Boolean(newItem.available),
       ingredients: [],

@@ -67,8 +67,16 @@ const AddItemDialog = ({
     () => String(newItem?.category || '').trim(),
     [newItem]
   );
+  const priceValue = useMemo(
+    () => String(newItem?.price ?? '').trim(),
+    [newItem]
+  );
+  const parsedPrice = priceValue === '' ? Number.NaN : Number(priceValue);
   const nameError = submitted && !nameValue;
   const categoryError = submitted && !categoryValue;
+  const priceError =
+    submitted &&
+    (priceValue === '' || !Number.isFinite(parsedPrice) || parsedPrice < 0);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -89,12 +97,17 @@ const AddItemDialog = ({
 
   const handlePriceChange = (event) => {
     const value = event.target.value;
-    const cleaned = value.replace(/[eE]/g, '');
-    setNewItem({ ...newItem, price: cleaned === '' ? '' : cleaned });
+    if (!/^\d*\.?\d*$/.test(value)) return;
+    setNewItem({ ...newItem, price: value });
   };
 
   const blockExponentInput = (event) => {
-    if (event.key === 'e' || event.key === 'E') {
+    if (
+      event.key === 'e' ||
+      event.key === 'E' ||
+      event.key === '-' ||
+      event.key === '+'
+    ) {
       event.preventDefault();
     }
   };
@@ -103,7 +116,15 @@ const AddItemDialog = ({
     event.preventDefault();
     if (loading) return;
     setSubmitted(true);
-    if (!nameValue || !categoryValue) return;
+    if (
+      !nameValue ||
+      !categoryValue ||
+      priceValue === '' ||
+      !Number.isFinite(parsedPrice) ||
+      parsedPrice < 0
+    ) {
+      return;
+    }
     onAdd?.();
   };
 
@@ -236,21 +257,29 @@ const AddItemDialog = ({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="price" className="flex items-center h-5">
-                  Price
+                  Price <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="price"
-                  type="number"
+                  type="text"
                   inputMode="decimal"
                   value={newItem.price ?? ''}
                   placeholder="0.00"
                   onChange={handlePriceChange}
                   onKeyDown={blockExponentInput}
+                  className={cn(priceError && 'border-destructive')}
                   disabled={loading}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter the price in PHP (₱). Leave empty for 0.00.
-                </p>
+                {priceError ? (
+                  <div className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Price is required and cannot be negative.</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Enter the price in PHP.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

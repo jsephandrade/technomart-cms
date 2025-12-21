@@ -113,12 +113,17 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
 
   const handlePriceChange = (event) => {
     const value = event.target.value;
-    const cleaned = value.replace(/[eE]/g, '');
-    setPrice(cleaned === '' ? '' : cleaned);
+    if (!/^\d*\.?\d*$/.test(value)) return;
+    setPrice(value);
   };
 
   const blockExponentInput = (event) => {
-    if (event.key === 'e' || event.key === 'E') {
+    if (
+      event.key === 'e' ||
+      event.key === 'E' ||
+      event.key === '-' ||
+      event.key === '+'
+    ) {
       event.preventDefault();
     }
   };
@@ -128,15 +133,27 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
     [sel1, sel2, sel3]
   );
   const selectionError = submitted && chosenIds.length === 0;
+  const trimmedPrice = price.trim();
+  const parsedPrice = trimmedPrice === '' ? Number.NaN : Number(trimmedPrice);
+  const priceError =
+    submitted &&
+    (trimmedPrice === '' || !Number.isFinite(parsedPrice) || parsedPrice < 0);
 
   const handleCreate = async () => {
     if (creating) return;
     setSubmitted(true);
     if (chosenIds.length === 0) return;
+    if (
+      trimmedPrice === '' ||
+      !Number.isFinite(parsedPrice) ||
+      parsedPrice < 0
+    ) {
+      return;
+    }
     const payload = {
       name: name.trim() || `Combo: ${summary}`,
       description: summary ? `Includes ${summary}` : 'Combo meal',
-      price: Number(price) || 0,
+      price: parsedPrice,
       category: cat || 'Combo Meals',
       available: true,
       ingredients: chosenIds,
@@ -212,15 +229,23 @@ const AddComboMealDialog = ({ open, onOpenChange, items = [], onCreate }) => {
                   id="combo-price"
                   type="number"
                   inputMode="decimal"
+                  min="0"
                   value={price}
                   onChange={handlePriceChange}
                   onKeyDown={blockExponentInput}
                   placeholder="0.00"
                   disabled={creating}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Set the combo price in PHP (₱).
-                </p>
+                {priceError ? (
+                  <div className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Price is required and cannot be negative.</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Set the combo price in PHP (₱).
+                  </p>
+                )}
               </div>
             </div>
 

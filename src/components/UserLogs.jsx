@@ -327,8 +327,8 @@ const UserLogs = () => {
   };
 
   return (
-    <div className="grid w-full gap-4 max-w-[640px] sm:max-w-[720px] mx-auto md:mx-0 md:max-w-none md:grid-cols-3">
-      <div className="space-y-4 md:col-span-2">
+    <div className="grid w-full gap-4 max-w-[640px] sm:max-w-[720px] mx-auto md:mx-0 md:max-w-none lg:grid-cols-3">
+      <div className="space-y-4 lg:col-span-2">
         <ActivityLogsCard
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}

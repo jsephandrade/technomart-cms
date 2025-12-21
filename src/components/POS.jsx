@@ -57,7 +57,7 @@ const POS = () => {
     calculateTotal,
     applyDiscount,
     removeDiscount,
-    processPayment,
+    processPaymentInBackground,
   } = usePOSLogic();
 
   const hasOrderItems = Array.isArray(currentOrder) && currentOrder.length > 0;
@@ -94,25 +94,31 @@ const POS = () => {
     return EMPTY_QUEUE_STATE;
   }, [setOrderQueue]);
 
-  const handleProcessPayment = async (paymentDetails) => {
-    const info = await processPayment(paymentDetails);
-    if (info?.id) {
-      setIsPaymentModalOpen(false);
-      setActiveTab('queue');
-
-      const triggerQueueRefresh = () => {
-        refreshQueue().catch((e) => console.error(e));
-      };
-
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        window.requestIdleCallback(triggerQueueRefresh);
-      } else {
-        setTimeout(triggerQueueRefresh, 0);
-      }
-
-      return true;
+  const handleProcessPayment = (paymentDetails) => {
+    const { accepted, promise } = processPaymentInBackground(paymentDetails);
+    if (!accepted) {
+      return false;
     }
-    return false;
+
+    setIsPaymentModalOpen(false);
+    setActiveTab('queue');
+
+    const triggerQueueRefresh = () => {
+      refreshQueue().catch((e) => console.error(e));
+    };
+
+    if (promise && typeof promise.then === 'function') {
+      promise.then((info) => {
+        if (!info?.id) return;
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          window.requestIdleCallback(triggerQueueRefresh);
+        } else {
+          setTimeout(triggerQueueRefresh, 0);
+        }
+      });
+    }
+
+    return true;
   };
 
   const handleOpenPaymentModal = () => {

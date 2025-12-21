@@ -196,7 +196,7 @@ export const usePOSLogic = () => {
     setDiscount({ type: 'percentage', value: 0 });
   };
 
-  const processPayment = async (paymentDetails = {}) => {
+  const preparePaymentPayload = (paymentDetails = {}) => {
     const paymentMethod = 'cash';
     const total = calculateTotal();
     if (!currentOrder.length) {
@@ -217,60 +217,84 @@ export const usePOSLogic = () => {
       typeof paymentDetails.change === 'number'
         ? paymentDetails.change
         : Math.max(0, tenderedAmount - total);
+
+    const payload = {
+      items: currentOrder.map((it) => ({
+        menuItemId: it.menuItemId,
+        quantity: it.quantity,
+      })),
+      discount: discount?.type === 'fixed' ? discount.value : 0,
+      discountType: discount.type,
+      totals: {
+        subtotal,
+        discount: discountAmount,
+        total,
+      },
+      type: 'walk-in',
+      orderNumber: identifiers.number,
+      orderReference: identifiers.reference,
+      paymentMethod: paymentMethod,
+      tenderedAmount,
+      change,
+    };
+
+    return {
+      payload,
+      identifiers,
+      paymentMethod,
+      total,
+      tenderedAmount,
+      change,
+    };
+  };
+
+  const scheduleOrderIdentifierRefresh = () => {
+    const trigger = () => {
+      refreshOrderIdentifiers().catch((error) => console.error(error));
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      window.requestIdleCallback(trigger);
+    } else {
+      setTimeout(trigger, 0);
+    }
+  };
+
+  const submitCheckout = async (payload, identifiers) => {
+    const idempotencyKey = identifiers?.number
+      ? `pos-${identifiers.number}`
+      : '';
+    const res = await orderService.checkoutOrder(payload, { idempotencyKey });
+    const data = res?.data ?? res;
+    const infoRaw = extractOrderInfo(data) || {
+      id: data?.id || null,
+      orderNumber: data?.orderNumber || data?.order_number || null,
+    };
+    if (!infoRaw || !infoRaw.id) {
+      throw new Error('Order checkout failed');
+    }
+    return {
+      ...infoRaw,
+      orderNumber: infoRaw.orderNumber || identifiers?.number,
+    };
+  };
+
+  const finalizeForNextOrder = () => {
+    clearOrder();
+    if (isMountedRef.current) {
+      setOrderIdentifiers(createFallbackOrderIdentifiers());
+    }
+    scheduleOrderIdentifierRefresh();
+  };
+
+  const processPayment = async (paymentDetails = {}) => {
+    const prepared = preparePaymentPayload(paymentDetails);
+    if (!prepared) {
+      return null;
+    }
     try {
-      const scheduleOrderIdentifierRefresh = () => {
-        const trigger = () => {
-          refreshOrderIdentifiers().catch((error) => console.error(error));
-        };
-
-        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-          window.requestIdleCallback(trigger);
-        } else {
-          setTimeout(trigger, 0);
-        }
-      };
-
-      const payload = {
-        items: currentOrder.map((it) => ({
-          menuItemId: it.menuItemId,
-          quantity: it.quantity,
-        })),
-        discount: discount?.type === 'fixed' ? discount.value : 0,
-        discountType: discount.type,
-        totals: {
-          subtotal,
-          discount: discountAmount,
-          total,
-        },
-        type: 'walk-in',
-        orderNumber: identifiers.number,
-        orderReference: identifiers.reference,
-        paymentMethod: paymentMethod,
-        tenderedAmount,
-        change,
-      };
-      const idempotencyKey = identifiers?.number
-        ? `pos-${identifiers.number}`
-        : '';
-      const res = await orderService.checkoutOrder(payload, { idempotencyKey });
-      const data = res?.data ?? res;
-      const infoRaw = extractOrderInfo(data) || {
-        id: data?.id || null,
-        orderNumber: data?.orderNumber || data?.order_number || null,
-      };
-      if (!infoRaw || !infoRaw.id) {
-        throw new Error('Order checkout failed');
-      }
-      const info = {
-        ...infoRaw,
-        orderNumber: infoRaw.orderNumber || identifiers.number,
-      };
-      clearOrder();
-
-      if (isMountedRef.current) {
-        setOrderIdentifiers(createFallbackOrderIdentifiers());
-      }
-      scheduleOrderIdentifierRefresh();
+      const info = await submitCheckout(prepared.payload, prepared.identifiers);
+      finalizeForNextOrder();
       return info;
     } catch (e) {
       console.error(e);
@@ -281,6 +305,37 @@ export const usePOSLogic = () => {
       toast.error(message);
       return null;
     }
+  };
+
+  const processPaymentInBackground = (paymentDetails = {}) => {
+    const prepared = preparePaymentPayload(paymentDetails);
+    if (!prepared) {
+      return { accepted: false, promise: null };
+    }
+
+    const orderNumber = prepared.identifiers?.number || '';
+    finalizeForNextOrder();
+
+    const promise = submitCheckout(prepared.payload, prepared.identifiers)
+      .then((info) => {
+        if (info?.orderNumber) {
+          toast.success(`Payment completed for Order #${info.orderNumber}`);
+        } else {
+          toast.success('Payment completed.');
+        }
+        return info;
+      })
+      .catch((e) => {
+        console.error(e);
+        const message =
+          e?.message ||
+          e?.details?.message ||
+          `Payment failed${orderNumber ? ` for Order #${orderNumber}` : ''}.`;
+        toast.error(message);
+        return null;
+      });
+
+    return { accepted: true, promise };
   };
 
   return {
@@ -296,6 +351,7 @@ export const usePOSLogic = () => {
     applyDiscount,
     removeDiscount,
     processPayment,
+    processPaymentInBackground,
     orderNumber: orderIdentifiers.number,
   };
 };

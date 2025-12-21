@@ -27,7 +27,7 @@ import {
   LayoutGrid,
   List,
   Loader2,
-  Pencil,
+  Edit,
   RotateCcw,
 } from 'lucide-react';
 import ItemGrid from './ItemGrid';
@@ -292,7 +292,7 @@ const CategoryTabs = ({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 p-0 border"
+                      className="h-7 w-7 p-0"
                       aria-label={`Edit ${category} category`}
                       title={`Edit ${category}`}
                       onPointerDown={(event) => {
@@ -301,7 +301,7 @@ const CategoryTabs = ({
                       }}
                       onClick={(event) => openEditCategory(event, category)}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Edit className="h-4 w-4" />
                     </Button>
                   )}
                 </div>

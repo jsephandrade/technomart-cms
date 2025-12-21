@@ -649,7 +649,7 @@ const EmployeeSchedule = () => {
           <TabsList className="w-full grid grid-cols-4 gap-2 bg-muted/40 p-1 rounded-lg">
             <TabsTrigger
               value="add"
-              aria-label="Add Employee"
+              aria-label="Add Employee and Schedule"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ShieldPlus className="h-4 w-4" aria-hidden="true" />

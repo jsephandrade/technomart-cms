@@ -9,9 +9,32 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Archive, Edit, Edit2, Search, ShieldPlus, Users } from 'lucide-react';
+import {
+  Archive,
+  Check,
+  ChevronsUpDown,
+  Edit,
+  Edit2,
+  Search,
+  ShieldPlus,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUsers } from '@/hooks/useUsers';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
 
 const STATUS_BADGE_STYLES = {
   active: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
@@ -54,6 +77,7 @@ const AddEmployeeTab = ({
   onOpenArchivedEmployees,
 }) => {
   const { users = [] } = useUsers();
+  const [copyFromOpen, setCopyFromOpen] = useState(false);
   const [copyFromSelection, setCopyFromSelection] = useState('');
   const [teamSearch, setTeamSearch] = useState('');
   const staffUsers = useMemo(
@@ -79,6 +103,27 @@ const AddEmployeeTab = ({
         return haystack.includes(normalizedTeamSearch);
       })
     : employees;
+  const copyFromLabel = useMemo(() => {
+    if (!copyFromSelection) {
+      return 'Start with blank profile';
+    }
+    const [type, id] = copyFromSelection.split(':');
+    if (type === 'employee') {
+      const match = employees.find((emp) => emp.id === id);
+      if (match) {
+        return `${match.name || 'Unnamed employee'} · ${
+          match.position || 'No role'
+        }`;
+      }
+    }
+    if (type === 'user') {
+      const match = staffUsers.find((user) => user.id === id);
+      if (match) {
+        return `${match.name || 'Staff member'} · ${match.role || 'Staff'}`;
+      }
+    }
+    return 'Start with blank profile';
+  }, [copyFromSelection, employees, staffUsers]);
 
   const handleCopyFromChange = (value) => {
     setCopyFromSelection(value);
@@ -151,36 +196,142 @@ const AddEmployeeTab = ({
               <Label className="text-xs uppercase tracking-wide">
                 Copy from
               </Label>
-              <div className="relative">
-                <select
-                  className={cn(
-                    'w-full rounded-md border-input bg-background px-3 py-2 text-sm border',
-                    'focus:outline-none focus:ring-2 focus:ring-primary/40'
-                  )}
-                  value={copyFromSelection}
-                  onChange={(event) => handleCopyFromChange(event.target.value)}
+              <Popover open={copyFromOpen} onOpenChange={setCopyFromOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={copyFromOpen}
+                    className="w-full justify-between text-sm font-normal"
+                  >
+                    <span className="truncate">{copyFromLabel}</span>
+                    <ChevronsUpDown
+                      className="ml-2 h-4 w-4 shrink-0 opacity-50"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
                 >
-                  <option value="">Start with blank profile</option>
-                  {employees.length ? (
-                    <optgroup label="Existing employees">
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={`employee:${emp.id}`}>
-                          {emp.name} - {emp.position || 'No role'}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {staffUsers.length ? (
-                    <optgroup label="App users (staff/manager)">
-                      {staffUsers.map((user) => (
-                        <option key={user.id} value={`user:${user.id}`}>
-                          {user.name} - {user.role || 'Staff'}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                </select>
-              </div>
+                  <Command>
+                    <CommandInput placeholder="Search employees or staff..." />
+                    <CommandList className="max-h-64 overflow-y-auto">
+                      <CommandEmpty>No matches found.</CommandEmpty>
+                      <CommandGroup heading="Quick start">
+                        <CommandItem
+                          value="Start with blank profile"
+                          onSelect={() => {
+                            handleCopyFromChange('');
+                            setCopyFromOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              copyFromSelection ? 'opacity-0' : 'opacity-100'
+                            )}
+                            aria-hidden="true"
+                          />
+                          Start with blank profile
+                        </CommandItem>
+                      </CommandGroup>
+                      <CommandSeparator />
+                      <CommandGroup
+                        heading={`Existing employees (${employees.length})`}
+                      >
+                        {employees.length ? (
+                          employees.map((emp) => {
+                            const value = `employee:${emp.id}`;
+                            const selected = copyFromSelection === value;
+                            return (
+                              <CommandItem
+                                key={emp.id}
+                                value={[
+                                  emp.name,
+                                  emp.position,
+                                  emp.contact,
+                                  emp.status,
+                                  emp.hourlyRate != null
+                                    ? String(emp.hourlyRate)
+                                    : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  handleCopyFromChange(value);
+                                  setCopyFromOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    selected ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                  aria-hidden="true"
+                                />
+                                <span className="truncate">
+                                  {emp.name || 'Unnamed employee'}
+                                </span>
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  {emp.position || 'No role'}
+                                </span>
+                              </CommandItem>
+                            );
+                          })
+                        ) : (
+                          <CommandItem disabled>
+                            No employees available
+                          </CommandItem>
+                        )}
+                      </CommandGroup>
+                      <CommandSeparator />
+                      <CommandGroup
+                        heading={`App users (${staffUsers.length})`}
+                      >
+                        {staffUsers.length ? (
+                          staffUsers.map((user) => {
+                            const value = `user:${user.id}`;
+                            const selected = copyFromSelection === value;
+                            return (
+                              <CommandItem
+                                key={user.id}
+                                value={[user.name, user.role, user.email]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  handleCopyFromChange(value);
+                                  setCopyFromOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    selected ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                  aria-hidden="true"
+                                />
+                                <span className="truncate">
+                                  {user.name || 'Staff member'}
+                                </span>
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  {user.role || 'Staff'}
+                                </span>
+                              </CommandItem>
+                            );
+                          })
+                        ) : (
+                          <CommandItem disabled>
+                            No staff users available
+                          </CommandItem>
+                        )}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-1">
               <Label className="text-xs uppercase tracking-wide">Name *</Label>

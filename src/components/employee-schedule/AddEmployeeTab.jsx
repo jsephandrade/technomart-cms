@@ -128,7 +128,7 @@ const AddEmployeeTab = ({
               <div className="relative">
                 <select
                   className={cn(
-                    'w-full appearance-none rounded-md border-input bg-background px-3 py-2 text-sm',
+                    'w-full rounded-md border-input bg-background px-3 py-2 text-sm border',
                     'focus:outline-none focus:ring-2 focus:ring-primary/40'
                   )}
                   value={copyFromSelection}
@@ -154,9 +154,6 @@ const AddEmployeeTab = ({
                     </optgroup>
                   ) : null}
                 </select>
-                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground/70">
-                  v
-                </span>
               </div>
             </div>
             <div className="space-y-1">
@@ -338,6 +335,12 @@ const AddEmployeeTab = ({
                   ? statusKey.charAt(0).toUpperCase() + statusKey.slice(1)
                   : 'Active';
                 const initials = getInitials(emp.name || '');
+                const roleLabel = String(emp.position || 'No role');
+                const hourlyRate = Number(emp.hourlyRate ?? 0);
+                const hourlyRateLabel = Number.isFinite(hourlyRate)
+                  ? hourlyRate.toFixed(2)
+                  : '0.00';
+                const contactLabel = emp.contact || 'N/A';
                 return (
                   <div
                     key={emp.id}
@@ -362,9 +365,19 @@ const AddEmployeeTab = ({
                             {statusLabel}
                           </Badge>
                         </div>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {(emp.position || 'No role').toString()}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                          <span className="whitespace-nowrap">
+                            Role: {roleLabel}
+                          </span>
+                          <span className="text-muted-foreground/60">|</span>
+                          <span className="whitespace-nowrap">
+                            Hourly rate: {hourlyRateLabel}
+                          </span>
+                          <span className="text-muted-foreground/60">|</span>
+                          <span className="whitespace-nowrap">
+                            Contact: {contactLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

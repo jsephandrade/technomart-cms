@@ -332,11 +332,6 @@ const SecurityAlertsCard = ({
                             <h4 className="text-sm font-semibold text-foreground">
                               {alert.title || 'Security alert'}
                             </h4>
-                            {alert.description ? (
-                              <p className="text-sm text-muted-foreground">
-                                {alert.description}
-                              </p>
-                            ) : null}
                           </div>
                         </div>
                       </div>

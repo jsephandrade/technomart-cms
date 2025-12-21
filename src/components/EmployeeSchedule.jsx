@@ -60,7 +60,6 @@ const EmployeeSchedule = () => {
     employees = [],
     addEmployeeWithSchedule,
     updateEmployee,
-    deleteEmployee,
     loading: employeesLoading,
     refetch: refetchEmployees,
   } = useEmployees();
@@ -461,37 +460,26 @@ const EmployeeSchedule = () => {
     setEmployeeDialogOpen(true);
   };
 
-  const handleDeleteEmployeeClick = async (employeeId) => {
+  const handleArchiveEmployeeClick = async (employee) => {
+    const employeeId = typeof employee === 'object' ? employee?.id : employee;
     if (!canManage || !employeeId) return;
-    const confirmDelete =
+    const employeeName = typeof employee === 'object' ? employee?.name : '';
+    const confirmArchive =
       typeof window !== 'undefined'
-        ? window.confirm('Delete this employee? This also removes schedules.')
+        ? window.confirm(
+            `Archive ${employeeName || 'this employee'}? They will be hidden from scheduling.`
+          )
         : true;
-    if (!confirmDelete) return;
+    if (!confirmArchive) return;
     try {
-      await deleteEmployee(employeeId);
+      await updateEmployee(employeeId, { status: 'inactive' });
       await Promise.all([refetchEmployees(), refetchSchedule()]);
-      toast.success('Employee deleted');
+      toast.success('Employee archived');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete employee');
+      toast.error('Failed to archive employee');
     }
   };
-
-  const addEmployeeContent = (
-    <AddEmployeeTab
-      quickAdd={quickAdd}
-      setQuickAdd={setQuickAdd}
-      handleQuickAdd={handleQuickAdd}
-      employeesLoading={employeesLoading}
-      scheduleLoading={scheduleLoading}
-      canManage={canManage}
-      daysOfWeek={DAYS_OF_WEEK}
-      employees={displayEmployees}
-      onManageEmployee={handleManageEmployeeClick}
-      onDeleteEmployee={handleDeleteEmployeeClick}
-    />
-  );
 
   const handleOpenManageEmployees = () => {
     if (!canManage) return;
@@ -510,6 +498,22 @@ const EmployeeSchedule = () => {
     }
     setEmployeeDialogOpen(true);
   };
+
+  const addEmployeeContent = (
+    <AddEmployeeTab
+      quickAdd={quickAdd}
+      setQuickAdd={setQuickAdd}
+      handleQuickAdd={handleQuickAdd}
+      employeesLoading={employeesLoading}
+      scheduleLoading={scheduleLoading}
+      canManage={canManage}
+      daysOfWeek={DAYS_OF_WEEK}
+      employees={displayEmployees}
+      onManageEmployee={handleManageEmployeeClick}
+      onArchiveEmployee={handleArchiveEmployeeClick}
+      onOpenManageEmployees={handleOpenManageEmployees}
+    />
+  );
 
   const schedulePane = (
     <ScheduleTab

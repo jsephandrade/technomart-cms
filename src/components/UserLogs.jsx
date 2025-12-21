@@ -1,11 +1,77 @@
 import { useState, useEffect } from 'react';
-import { FileText, ShieldAlert, UserCog, LogIn, Settings } from 'lucide-react';
+import {
+  FileText,
+  ShieldAlert,
+  UserCog,
+  LogIn,
+  Settings,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 import ActivityLogsCard from './user-logs/ActivityLogsCard';
 import SecurityAlertsCard from './user-logs/SecurityAlertsCard';
 import LogSummaryCard from './user-logs/LogSummaryCard';
 import LogDetailsDialog from './user-logs/LogDetailsDialog';
 import { useLogs } from '@/hooks/useLogs';
+
+const DEMO_ALERTS_STORAGE_KEY = 'ui.demoSecurityAlerts';
+
+const buildDemoAlerts = () => {
+  const now = Date.now();
+  return [
+    {
+      id: 'demo-critical-1',
+      type: 'critical',
+      severity: 'critical',
+      title: 'Privilege escalation detected',
+      description: 'Admin permissions granted outside of approval flow.',
+      source: 'Access Control',
+      ip: '203.0.113.14',
+      user: 'ops@technomart.local',
+      code: 'SEC-102',
+      count: 1,
+      timestamp: new Date(now - 6 * 60_000).toISOString(),
+    },
+    {
+      id: 'demo-critical-2',
+      type: 'critical',
+      severity: 'critical',
+      title: 'Multiple failed MFA attempts',
+      description: 'Repeated MFA failures for a privileged user account.',
+      source: 'Auth Service',
+      ip: '198.51.100.22',
+      user: 'admin@technomart.local',
+      code: 'AUTH-401',
+      count: 7,
+      timestamp: new Date(now - 28 * 60_000).toISOString(),
+    },
+    {
+      id: 'demo-warning-1',
+      type: 'warning',
+      severity: 'warning',
+      title: 'Password expiring soon',
+      description: '3 user passwords will expire within 7 days.',
+      source: 'User Directory',
+      code: 'USR-204',
+      count: 3,
+      timestamp: new Date(now - 2 * 60 * 60_000).toISOString(),
+    },
+  ];
+};
+
+const loadDemoAlerts = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(DEMO_ALERTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 
 const UserLogs = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,9 +88,20 @@ const UserLogs = () => {
   const [securityAlerts, setSecurityAlerts] = useState([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState([]);
   const [acknowledgedAlertIds, setAcknowledgedAlertIds] = useState([]);
+  const [demoAlerts, setDemoAlerts] = useState([]);
+  const [useDemoAlerts, setUseDemoAlerts] = useState(false);
 
   useEffect(() => {
-    const nextAlerts = (alerts || [])
+    const stored = loadDemoAlerts();
+    if (stored.length > 0) {
+      setDemoAlerts(stored);
+      setUseDemoAlerts(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const sourceAlerts = useDemoAlerts ? demoAlerts : alerts;
+    const nextAlerts = (sourceAlerts || [])
       .filter((alert) => !dismissedAlertIds.includes(alert.id))
       .map((alert) => {
         if (acknowledgedAlertIds.includes(alert.id)) {
@@ -33,7 +110,13 @@ const UserLogs = () => {
         return alert;
       });
     setSecurityAlerts(nextAlerts);
-  }, [alerts, dismissedAlertIds, acknowledgedAlertIds]);
+  }, [
+    alerts,
+    dismissedAlertIds,
+    acknowledgedAlertIds,
+    useDemoAlerts,
+    demoAlerts,
+  ]);
 
   // Sync UI controls to backend filters
   useEffect(() => {
@@ -161,6 +244,38 @@ const UserLogs = () => {
     });
   };
 
+  const handleSeedDemoAlerts = () => {
+    const seeded = buildDemoAlerts();
+    setDemoAlerts(seeded);
+    setUseDemoAlerts(true);
+    setDismissedAlertIds([]);
+    setAcknowledgedAlertIds([]);
+    try {
+      window.localStorage.setItem(
+        DEMO_ALERTS_STORAGE_KEY,
+        JSON.stringify(seeded)
+      );
+    } catch {}
+    toast({
+      title: 'Demo Alerts Seeded',
+      description: 'Security alerts are now using demo data.',
+    });
+  };
+
+  const handleClearDemoAlerts = () => {
+    setDemoAlerts([]);
+    setUseDemoAlerts(false);
+    setDismissedAlertIds([]);
+    setAcknowledgedAlertIds([]);
+    try {
+      window.localStorage.removeItem(DEMO_ALERTS_STORAGE_KEY);
+    } catch {}
+    toast({
+      title: 'Demo Alerts Cleared',
+      description: 'Security alerts returned to live data.',
+    });
+  };
+
   const handleRowClick = (log) => {
     setSelectedLog(log);
     setIsModalOpen(true);
@@ -192,6 +307,29 @@ const UserLogs = () => {
       <div className="space-y-4">
         <SecurityAlertsCard
           securityAlerts={securityAlerts}
+          headerActions={
+            useDemoAlerts ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+                onClick={handleClearDemoAlerts}
+              >
+                <Trash2 className="h-4 w-4" />
+                Clear demo
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+                onClick={handleSeedDemoAlerts}
+              >
+                <Sparkles className="h-4 w-4" />
+                Seed demo data
+              </Button>
+            )
+          }
           onBlockIP={handleBlockIP}
           onDismiss={handleDismissAlert}
           onAcknowledge={handleAcknowledgeAlert}

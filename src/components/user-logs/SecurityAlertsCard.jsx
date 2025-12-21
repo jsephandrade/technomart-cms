@@ -99,6 +99,7 @@ const SecurityAlertsCard = ({
   onInvestigate,
   onEscalate,
   onMute,
+  headerActions,
 }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const MAX_VISIBLE_ALERTS = 10;
@@ -129,6 +130,7 @@ const SecurityAlertsCard = ({
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
       description="Important security notifications"
+      headerActions={headerActions}
       contentClassName="space-y-4"
     >
       <div

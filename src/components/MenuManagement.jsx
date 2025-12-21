@@ -86,49 +86,54 @@ const MenuManagement = () => {
   const [uploadQueue, setUploadQueue] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleAddItem = async () => {
+  const handleAddItem = () => {
     if (adding) return;
-    try {
-      if (!newItem.name || !newItem.category) {
-        toast.error('Please fill in all required fields');
-        return;
-      }
-      setAdding(true);
-      const payload = {
-        name: newItem.name,
-        description: newItem.description,
-        price: Number(newItem.price) || 0,
-        category: newItem.category,
-        available: Boolean(newItem.available),
-        ingredients: [],
-        preparationTime: 0,
-      };
-      const created = await createMenuItem(payload);
-      const previewUrl = newItem.imageUrl;
-      if (newItem.imageFile && created?.id) {
-        if (previewUrl) {
-          setLocalImage(created.id, previewUrl);
-        }
-        setUploadQueue((prev) => [
-          ...prev,
-          { id: created.id, file: newItem.imageFile },
-        ]);
-      }
-      setNewItem({
-        name: '',
-        description: '',
-        price: '',
-        category: '',
-        available: true,
-        imageUrl: '',
-        imageFile: null,
-      });
-      setDialogOpen(false);
-    } catch (e) {
-      toast.error(e?.message || 'Failed to add menu item');
-    } finally {
-      setAdding(false);
+    if (!newItem.name || !newItem.category) {
+      toast.error('Please fill in all required fields');
+      return;
     }
+
+    setAdding(true);
+
+    const payload = {
+      name: newItem.name,
+      description: newItem.description,
+      price: Number(newItem.price) || 0,
+      category: newItem.category,
+      available: Boolean(newItem.available),
+      ingredients: [],
+      preparationTime: 0,
+    };
+    const previewUrl = newItem.imageUrl;
+    const imageFile = newItem.imageFile;
+
+    setNewItem({
+      name: '',
+      description: '',
+      price: '',
+      category: '',
+      available: true,
+      imageUrl: '',
+      imageFile: null,
+    });
+    setDialogOpen(false);
+    setAdding(false);
+
+    createMenuItem(payload)
+      .then((created) => {
+        if (imageFile && created?.id) {
+          if (previewUrl) {
+            setLocalImage(created.id, previewUrl);
+          }
+          setUploadQueue((prev) => [
+            ...prev,
+            { id: created.id, file: imageFile },
+          ]);
+        }
+      })
+      .catch((e) => {
+        toast.error(e?.message || 'Failed to add menu item');
+      });
   };
 
   useEffect(() => {

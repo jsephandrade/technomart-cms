@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import verificationService from '@/api/services/verificationService';
 
 export const useVerificationQueue = (params = {}) => {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const qp = {
     status: 'pending',
@@ -55,16 +54,13 @@ export const useVerificationQueue = (params = {}) => {
       invalidate();
       refreshUsers();
       broadcastUsersUpdated({ type: 'approve' });
-      toast({
-        title: 'Approved',
+      toast.success('Approved', {
         description: 'Access granted and role assigned.',
       });
     },
     onError: (err) => {
-      toast({
-        title: 'Approval failed',
+      toast.error('Approval failed', {
         description: err?.message || 'Unable to approve',
-        variant: 'destructive',
       });
     },
   });
@@ -74,13 +70,13 @@ export const useVerificationQueue = (params = {}) => {
       verificationService.reject({ requestId, note }),
     onSuccess: () => {
       invalidate();
-      toast({ title: 'Rejected', description: 'Request has been rejected.' });
+      toast('Rejected', {
+        description: 'Request has been rejected.',
+      });
     },
     onError: (err) => {
-      toast({
-        title: 'Rejection failed',
+      toast.error('Rejection failed', {
         description: err?.message || 'Unable to reject',
-        variant: 'destructive',
       });
     },
   });

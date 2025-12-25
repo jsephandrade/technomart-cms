@@ -8,7 +8,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import ActivityLogsCard from './user-logs/ActivityLogsCard';
 import SecurityAlertsCard from './user-logs/SecurityAlertsCard';
@@ -120,7 +120,6 @@ const UserLogs = () => {
   const [timeRange, setTimeRange] = useState('24h');
   const [selectedLog, setSelectedLog] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { toast } = useToast();
 
   const { logs, filters, setFilters, alerts, summary } = useLogs({
     timeRange: '24h',
@@ -221,8 +220,7 @@ const UserLogs = () => {
   };
 
   const handleBlockIP = (alertId) => {
-    toast({
-      title: 'IP Address Blocked',
+    toast.success('IP Address Blocked', {
       description: 'The suspicious IP address has been blocked successfully.',
     });
     recordDismissedAlert(alertId);
@@ -238,8 +236,7 @@ const UserLogs = () => {
       prev.filter((entry) => entry !== alertId)
     );
     setSecurityAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
-    toast({
-      title: 'Alert Dismissed',
+    toast.success('Alert Dismissed', {
       description: 'Security alert has been dismissed.',
     });
   };
@@ -252,22 +249,19 @@ const UserLogs = () => {
         entry.id === alert.id ? { ...entry, status: 'acknowledged' } : entry
       )
     );
-    toast({
-      title: 'Alert Acknowledged',
+    toast.success('Alert Acknowledged', {
       description: 'Security alert marked as reviewed.',
     });
   };
 
   const handleInvestigateAlert = (alert) => {
-    toast({
-      title: 'Investigation Started',
+    toast('Investigation Started', {
       description: `Investigation queued for ${alert?.title || 'this alert'}.`,
     });
   };
 
   const handleEscalateAlert = (alert) => {
-    toast({
-      title: 'Alert Escalated',
+    toast('Alert Escalated', {
       description: `Escalation created for ${alert?.title || 'this alert'}.`,
     });
   };
@@ -281,8 +275,7 @@ const UserLogs = () => {
         entry.id === alert?.id ? { ...entry, status: 'muted' } : entry
       )
     );
-    toast({
-      title: 'User Muted for 24 Hours',
+    toast.success('User Muted for 24 Hours', {
       description: mutedUntil
         ? `${userEmail} is muted until ${formatMuteUntil(mutedUntil)}.`
         : `${userEmail} is muted for 24 hours.`,
@@ -301,8 +294,7 @@ const UserLogs = () => {
         JSON.stringify(seeded)
       );
     } catch {}
-    toast({
-      title: 'Demo Alerts Seeded',
+    toast.success('Demo Alerts Seeded', {
       description: 'Security alerts are now using demo data.',
     });
   };
@@ -315,8 +307,7 @@ const UserLogs = () => {
     try {
       window.localStorage.removeItem(DEMO_ALERTS_STORAGE_KEY);
     } catch {}
-    toast({
-      title: 'Demo Alerts Cleared',
+    toast.success('Demo Alerts Cleared', {
       description: 'Security alerts returned to live data.',
     });
   };

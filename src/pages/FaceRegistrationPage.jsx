@@ -18,7 +18,7 @@ import AuthPageShell, {
   AUTH_PAGE_DEFAULT_BACKGROUND,
 } from '@/components/auth/AuthPageShell';
 import AuthBrandIntro from '@/components/auth/AuthBrandIntro';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import authService from '@/api/services/authService';
 
 const FaceRegistrationPage = () => {
@@ -30,7 +30,6 @@ const FaceRegistrationPage = () => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   const startCapture = async () => {
     setStep('capturing');
@@ -121,8 +120,7 @@ const FaceRegistrationPage = () => {
         sessionStorage.setItem('face_enabled', '1');
       } catch {}
 
-      toast({
-        title: 'Face registered successfully!',
+      toast.success('Face registered successfully!', {
         description: 'You can now use face scan to log in.',
       });
 

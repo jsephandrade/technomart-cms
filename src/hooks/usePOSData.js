@@ -69,16 +69,25 @@ export const usePOSData = () => {
         }
         return null;
       };
+      const resolveIngredients = (obj) => {
+        const raw =
+          obj?.ingredients ?? obj?.ingredientIds ?? obj?.ingredient_ids;
+        return Array.isArray(raw) ? raw : [];
+      };
       const items = (itemsRes?.data || []).map((it) => {
         const catName = getCatName(it.category) || 'General';
+        const image = toImage(it);
         return {
+          ...it,
           id: it.id,
           name: it.name,
           description: it.description || '',
           price: Number(it.price || 0),
           category: String(catName),
           available: !!it.available,
-          image: toImage(it),
+          image: image || it.image || it.imageUrl || '',
+          imageUrl: image || it.imageUrl || it.image || '',
+          ingredients: resolveIngredients(it),
         };
       });
 

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Mail } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 const HelpPage = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   const supportEmail = 'josephformentera2@gmail.com';
   const defaultBody = useMemo(() => {
     const lines = [];
@@ -205,8 +204,7 @@ const HelpPage = () => {
                 try {
                   window.location.href = href;
                 } finally {
-                  toast({
-                    title: 'Opening your email client...',
+                  toast('Opening your email client...', {
                     description: `If it didn't open, email ${supportEmail}`,
                   });
                   setOpen(false);

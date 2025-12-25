@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import analyticsService from '@/api/services/analyticsService';
 
 /**
@@ -9,13 +9,6 @@ export const useSalesReport = (range = '7d') => {
   const [salesData, setSalesData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
-  const toastRef = useRef(toast);
-
-  // Update ref when toast changes
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   const fetchSalesReport = useCallback(async () => {
     setLoading(true);
@@ -31,10 +24,8 @@ export const useSalesReport = (range = '7d') => {
       }
     } catch (error) {
       setError(error.message);
-      toastRef.current({
-        title: 'Error Loading Sales Report',
+      toast.error('Error Loading Sales Report', {
         description: 'Failed to load sales report. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -64,12 +55,6 @@ export const useInventoryReport = () => {
   const [inventoryData, setInventoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
-  const toastRef = useRef(toast);
-
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   const fetchInventoryReport = useCallback(async () => {
     setLoading(true);
@@ -85,10 +70,8 @@ export const useInventoryReport = () => {
       }
     } catch (error) {
       setError(error.message);
-      toastRef.current({
-        title: 'Error Loading Inventory Report',
+      toast.error('Error Loading Inventory Report', {
         description: 'Failed to load inventory report. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -118,12 +101,6 @@ export const useOrdersReport = (range = '7d') => {
   const [ordersData, setOrdersData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
-  const toastRef = useRef(toast);
-
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   const fetchOrdersReport = useCallback(async () => {
     setLoading(true);
@@ -139,10 +116,8 @@ export const useOrdersReport = (range = '7d') => {
       }
     } catch (error) {
       setError(error.message);
-      toastRef.current({
-        title: 'Error Loading Orders Report',
+      toast.error('Error Loading Orders Report', {
         description: 'Failed to load orders report. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -172,12 +147,6 @@ export const useCustomerHistory = (params = {}) => {
   const [customerData, setCustomerData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
-  const toastRef = useRef(toast);
-
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   // Stringify params to avoid infinite loops from object reference changes
   const paramsString = JSON.stringify(params);
@@ -197,10 +166,8 @@ export const useCustomerHistory = (params = {}) => {
       }
     } catch (error) {
       setError(error.message);
-      toastRef.current({
-        title: 'Error Loading Customer History',
+      toast.error('Error Loading Customer History', {
         description: 'Failed to load customer history. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -230,12 +197,6 @@ export const useAttendanceReport = (range = '7d') => {
   const [attendanceData, setAttendanceData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
-  const toastRef = useRef(toast);
-
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
 
   const fetchAttendanceReport = useCallback(async () => {
     setLoading(true);
@@ -251,10 +212,8 @@ export const useAttendanceReport = (range = '7d') => {
       }
     } catch (error) {
       setError(error.message);
-      toastRef.current({
-        title: 'Error Loading Attendance Report',
+      toast.error('Error Loading Attendance Report', {
         description: 'Failed to load attendance report. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);

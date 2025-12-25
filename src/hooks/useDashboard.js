@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import dashboardService from '@/api/services/dashboardService';
 
 export const useDashboard = (timeRange = 'today') => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
 
   const fetchDashboardStats = useCallback(async () => {
     setLoading(true);
@@ -22,15 +21,13 @@ export const useDashboard = (timeRange = 'today') => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Dashboard',
+      toast.error('Error Loading Dashboard', {
         description: 'Failed to load dashboard statistics. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [timeRange, toast]);
+  }, [timeRange]);
 
   useEffect(() => {
     fetchDashboardStats();
@@ -52,7 +49,6 @@ export const useSalesData = (params = {}) => {
   const [salesData, setSalesData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
 
   const fetchSalesData = useCallback(async () => {
     setLoading(true);
@@ -68,15 +64,13 @@ export const useSalesData = (params = {}) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Sales Data',
+      toast.error('Error Loading Sales Data', {
         description: 'Failed to load sales data. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [params, toast]);
+  }, [params]);
 
   useEffect(() => {
     fetchSalesData();
@@ -99,7 +93,6 @@ export const useRecentActivity = (limit = 10) => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
 
   const fetchRecentActivity = useCallback(async () => {
     setLoading(true);
@@ -115,15 +108,13 @@ export const useRecentActivity = (limit = 10) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Activity',
+      toast.error('Error Loading Activity', {
         description: 'Failed to load recent activity. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [limit, toast]);
+  }, [limit]);
 
   useEffect(() => {
     fetchRecentActivity();
@@ -145,7 +136,6 @@ export const usePopularItems = (timeRange = 'week') => {
   const [popularItems, setPopularItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
 
   const fetchPopularItems = useCallback(async () => {
     setLoading(true);
@@ -161,15 +151,13 @@ export const usePopularItems = (timeRange = 'week') => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Popular Items',
+      toast.error('Error Loading Popular Items', {
         description: 'Failed to load popular items. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [timeRange, toast]);
+  }, [timeRange]);
 
   useEffect(() => {
     fetchPopularItems();

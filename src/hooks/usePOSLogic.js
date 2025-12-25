@@ -28,6 +28,16 @@ const createFallbackOrderIdentifiers = () => {
   };
 };
 
+const normalizeCollageImages = (value = []) =>
+  Array.isArray(value)
+    ? value.filter((src) => typeof src === 'string' && src.trim()).slice(0, 3)
+    : [];
+
+const normalizeIngredients = (item) => {
+  const raw = item?.ingredients ?? item?.ingredientIds ?? item?.ingredient_ids;
+  return Array.isArray(raw) ? raw : [];
+};
+
 const normalizeOrderReference = (value) => {
   if (!value) return '';
   const trimmed = String(value).trim().replace(/^#/, '');
@@ -96,8 +106,23 @@ export const usePOSLogic = () => {
     return { id, orderNumber: orderNumber || null };
   };
 
-  const addToOrder = (menuItem) => {
+  const addToOrder = (menuItem, options = {}) => {
     setCurrentOrder((prevOrder) => {
+      const ingredients =
+        Array.isArray(options.ingredients) && options.ingredients.length > 0
+          ? options.ingredients
+          : normalizeIngredients(menuItem);
+      const collageImages = normalizeCollageImages(
+        options.collageImages || options.collage || menuItem?.collageImages
+      );
+      const heroImage =
+        options.heroImage ||
+        collageImages[0] ||
+        menuItem.image ||
+        menuItem.imageUrl ||
+        menuItem.thumbnail ||
+        menuItem.photo ||
+        null;
       const existingItemIndex = prevOrder.findIndex(
         (item) => item.menuItemId === menuItem.id
       );
@@ -105,18 +130,20 @@ export const usePOSLogic = () => {
       if (existingItemIndex !== -1) {
         const updatedOrder = [...prevOrder];
         const target = updatedOrder[existingItemIndex];
+        const nextCollageImages =
+          collageImages.length > 0 ? collageImages : target.collageImages;
+        const nextIngredients =
+          ingredients.length > 0 ? ingredients : target.ingredients;
         updatedOrder[existingItemIndex] = {
           ...target,
           quantity: (target.quantity || 0) + 1,
+          image: heroImage || target.image,
+          collageImages: nextCollageImages,
+          ingredients: nextIngredients,
         };
         return updatedOrder;
       } else {
-        const imageSource =
-          menuItem.image ||
-          menuItem.imageUrl ||
-          menuItem.thumbnail ||
-          menuItem.photo ||
-          null;
+        const imageSource = heroImage;
         return [
           ...prevOrder,
           {
@@ -126,6 +153,8 @@ export const usePOSLogic = () => {
             price: menuItem.price,
             quantity: 1,
             image: imageSource,
+            collageImages,
+            ingredients,
           },
         ];
       }

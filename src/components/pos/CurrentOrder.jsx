@@ -55,6 +55,22 @@ const CurrentOrderSections = ({
     <>
       <div className={listClasses}>
         {currentOrder.map((item) => {
+          const collageImages = Array.isArray(item.collageImages)
+            ? item.collageImages.filter(Boolean)
+            : [];
+          const ingredients = Array.isArray(item.ingredients)
+            ? item.ingredients
+            : [];
+          const baseImage = item.image || null;
+          const collageSources = collageImages.slice(0, 3);
+          if (collageSources.length === 0 && baseImage) {
+            collageSources.push(baseImage);
+          }
+          const collageSlots = [...collageSources];
+          while (collageSlots.length < 3) collageSlots.push(null);
+          const showCollage =
+            ingredients.length > 0 || collageImages.length > 0;
+          const heroImage = collageSources[0] || baseImage;
           const lineTotal = formatCurrency(item.price * item.quantity);
           const unitPrice = formatCurrency(item.price);
           return (
@@ -62,10 +78,10 @@ const CurrentOrderSections = ({
               key={item.id}
               className="group relative flex items-center gap-2 overflow-hidden rounded-md border border-border/60 bg-background/80 p-1.5 shadow-sm"
             >
-              {item.image ? (
+              {heroImage ? (
                 <div
                   className="pointer-events-none absolute inset-0 z-0 scale-110 bg-cover bg-center opacity-25 blur-sm transition-opacity duration-300 group-hover:opacity-35"
-                  style={{ backgroundImage: `url(${item.image})` }}
+                  style={{ backgroundImage: `url(${heroImage})` }}
                 />
               ) : (
                 <div className="pointer-events-none absolute inset-0 z-0 bg-muted/40" />
@@ -73,9 +89,33 @@ const CurrentOrderSections = ({
               <div className="pointer-events-none absolute inset-0 z-0 bg-background/70 backdrop-blur-[2px]" />
 
               <div className="relative z-10 flex h-10 w-10 flex-shrink-0 overflow-hidden rounded border border-border/40 bg-background/60">
-                {item.image ? (
+                {showCollage ? (
+                  <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-[2px] overflow-hidden">
+                    {collageSlots.map((src, slotIndex) => (
+                      <div
+                        key={`${item.id}-${slotIndex}`}
+                        className={`relative overflow-hidden ${
+                          slotIndex === 0 ? 'row-span-2' : ''
+                        }`}
+                      >
+                        {src ? (
+                          <img
+                            src={src}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                            <ImageIcon className="h-3 w-3" aria-hidden="true" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : baseImage ? (
                   <img
-                    src={item.image}
+                    src={baseImage}
                     alt={item.name}
                     className="h-full w-full object-cover"
                     loading="lazy"

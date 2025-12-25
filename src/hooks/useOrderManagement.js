@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import orderService from '@/api/services/orderService';
 import { createRealtime } from '@/lib/realtime';
 
@@ -8,7 +8,6 @@ export const useOrderManagement = (params = {}) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState(null);
-  const { toast } = useToast();
 
   // Stable param key to avoid infinite effects when callers pass inline objects
   const ordersParamKey = JSON.stringify(
@@ -42,15 +41,13 @@ export const useOrderManagement = (params = {}) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Orders',
+      toast.error('Error Loading Orders', {
         description: 'Failed to load orders. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [ordersParamKey, toast]);
+  }, [ordersParamKey]);
 
   useEffect(() => {
     fetchOrders();
@@ -62,8 +59,7 @@ export const useOrderManagement = (params = {}) => {
 
       if (response.success) {
         setOrders((prev) => [...prev, response.data]);
-        toast({
-          title: 'Order Created',
+        toast.success('Order Created', {
           description: `Order ${response.data.orderNumber} has been created successfully.`,
         });
         return response.data;
@@ -71,10 +67,8 @@ export const useOrderManagement = (params = {}) => {
         throw new Error('Failed to create order');
       }
     } catch (error) {
-      toast({
-        title: 'Error Creating Order',
+      toast.error('Error Creating Order', {
         description: error.message,
-        variant: 'destructive',
       });
       throw error;
     }
@@ -99,8 +93,7 @@ export const useOrderManagement = (params = {}) => {
           cancelled: 'cancelled',
         }[status];
 
-        toast({
-          title: 'Order Status Updated',
+        toast.success('Order Status Updated', {
           description: `Order is now ${statusText}.`,
         });
         return response.data;
@@ -108,10 +101,8 @@ export const useOrderManagement = (params = {}) => {
         throw new Error('Failed to update order status');
       }
     } catch (error) {
-      toast({
-        title: 'Error Updating Status',
+      toast.error('Error Updating Status', {
         description: error.message,
-        variant: 'destructive',
       });
       throw error;
     }
@@ -127,20 +118,16 @@ export const useOrderManagement = (params = {}) => {
             order.id === orderId ? { ...order, status: 'cancelled' } : order
           )
         );
-        toast({
-          title: 'Order Cancelled',
+        toast.success('Order Cancelled', {
           description: 'Order has been cancelled successfully.',
-          variant: 'destructive',
         });
         return true;
       } else {
         throw new Error('Failed to cancel order');
       }
     } catch (error) {
-      toast({
-        title: 'Error Cancelling Order',
+      toast.error('Error Cancelling Order', {
         description: error.message,
-        variant: 'destructive',
       });
       throw error;
     }
@@ -163,8 +150,7 @@ export const useOrderManagement = (params = {}) => {
               : order
           )
         );
-        toast({
-          title: 'Payment Processed',
+        toast.success('Payment Processed', {
           description: `Payment of ₱${paymentData.amount.toFixed(2)} processed successfully.`,
         });
         return response.data;
@@ -172,10 +158,8 @@ export const useOrderManagement = (params = {}) => {
         throw new Error('Failed to process payment');
       }
     } catch (error) {
-      toast({
-        title: 'Payment Failed',
+      toast.error('Payment Failed', {
         description: error.message,
-        variant: 'destructive',
       });
       throw error;
     }
@@ -202,7 +186,6 @@ export const useOrderQueue = (params = {}) => {
   const [orderQueue, setOrderQueue] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
   const pollRef = useRef(null);
   const rtRef = useRef(null);
 
@@ -236,15 +219,13 @@ export const useOrderQueue = (params = {}) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Queue',
+      toast.error('Error Loading Queue', {
         description: 'Failed to load order queue. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [queueParamKey, toast]);
+  }, [queueParamKey]);
 
   useEffect(() => {
     fetchOrderQueue();
@@ -316,10 +297,8 @@ export const useOrderQueue = (params = {}) => {
         throw new Error('Failed to update order status');
       }
     } catch (error) {
-      toast({
-        title: 'Error Updating Status',
+      toast.error('Error Updating Status', {
         description: error.message,
-        variant: 'destructive',
       });
       throw error;
     }
@@ -343,7 +322,6 @@ export const useOrderHistory = (params = {}, options = {}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState(null);
-  const { toast } = useToast();
   const auto = options?.auto !== false; // default to true
   const fetchRef = useRef(false);
 
@@ -391,16 +369,14 @@ export const useOrderHistory = (params = {}, options = {}) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading History',
+      toast.error('Error Loading History', {
         description: 'Failed to load order history. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
       fetchRef.current = false;
     }
-  }, [historyParamKey, toast]);
+  }, [historyParamKey]);
 
   useEffect(() => {
     if (auto) fetchOrderHistory();

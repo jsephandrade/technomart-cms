@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import inventoryService from '@/api/services/inventoryService';
 
 export const useInventoryManagement = (params = {}) => {
@@ -7,7 +7,6 @@ export const useInventoryManagement = (params = {}) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState(null);
-  const { toast } = useToast();
 
   const fetchInventoryItems = useCallback(async () => {
     setLoading(true);
@@ -24,10 +23,8 @@ export const useInventoryManagement = (params = {}) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Inventory',
+      toast.error('Error Loading Inventory', {
         description: 'Failed to load inventory items. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -38,138 +35,119 @@ export const useInventoryManagement = (params = {}) => {
     fetchInventoryItems();
   }, [fetchInventoryItems]);
 
-  const createInventoryItem = useCallback(
-    async (itemData) => {
-      const tempId = `temp-${Date.now()}`;
-      const optimisticItem = { ...itemData, id: tempId };
-      setItems((prev) => [...prev, optimisticItem]);
+  const createInventoryItem = useCallback(async (itemData) => {
+    const tempId = `temp-${Date.now()}`;
+    const optimisticItem = { ...itemData, id: tempId };
+    setItems((prev) => [...prev, optimisticItem]);
 
-      try {
-        const response = await inventoryService.createInventoryItem(itemData);
+    try {
+      const response = await inventoryService.createInventoryItem(itemData);
 
-        if (response.success) {
-          setItems((prev) =>
-            prev.map((item) =>
-              item.id === tempId ? { ...item, ...response.data } : item
-            )
-          );
-          toast({
-            title: 'Inventory Item Created',
-            description: `${itemData.name} has been added to inventory.`,
-          });
-          return response.data;
-        }
-        throw new Error('Failed to create inventory item');
-      } catch (error) {
-        setItems((prev) => prev.filter((item) => item.id !== tempId));
-        toast({
-          title: 'Error Creating Item',
-          description: error.message,
-          variant: 'destructive',
+      if (response.success) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === tempId ? { ...item, ...response.data } : item
+          )
+        );
+        toast.success('Inventory Item Created', {
+          description: `${itemData.name} has been added to inventory.`,
         });
-        throw error;
+        return response.data;
       }
-    },
-    [toast]
-  );
+      throw new Error('Failed to create inventory item');
+    } catch (error) {
+      setItems((prev) => prev.filter((item) => item.id !== tempId));
+      toast.error('Error Creating Item', {
+        description: error.message,
+      });
+      throw error;
+    }
+  }, []);
 
-  const updateInventoryItem = useCallback(
-    async (itemId, updates) => {
-      let previousItem = null;
-      setItems((prev) =>
-        prev.map((item) => {
-          if (item.id === itemId) {
-            previousItem = item;
-            return { ...item, ...updates };
-          }
-          return item;
-        })
+  const updateInventoryItem = useCallback(async (itemId, updates) => {
+    let previousItem = null;
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          previousItem = item;
+          return { ...item, ...updates };
+        }
+        return item;
+      })
+    );
+
+    try {
+      const response = await inventoryService.updateInventoryItem(
+        itemId,
+        updates
       );
 
-      try {
-        const response = await inventoryService.updateInventoryItem(
-          itemId,
-          updates
+      if (response.success) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === itemId ? { ...item, ...response.data } : item
+          )
         );
-
-        if (response.success) {
-          setItems((prev) =>
-            prev.map((item) =>
-              item.id === itemId ? { ...item, ...response.data } : item
-            )
-          );
-          toast({
-            title: 'Inventory Item Updated',
-            description: 'Inventory item has been updated successfully.',
-          });
-          return response.data;
-        }
-        throw new Error('Failed to update inventory item');
-      } catch (error) {
-        if (previousItem) {
-          setItems((prev) =>
-            prev.map((item) => (item.id === itemId ? previousItem : item))
-          );
-        }
-        toast({
-          title: 'Error Updating Item',
-          description: error.message,
-          variant: 'destructive',
+        toast.success('Inventory Item Updated', {
+          description: 'Inventory item has been updated successfully.',
         });
-        throw error;
+        return response.data;
       }
-    },
-    [toast]
-  );
-
-  const deleteInventoryItem = useCallback(
-    async (itemId) => {
-      let removedItem = null;
-      let removedIndex = -1;
-      setItems((prev) => {
-        const next = [...prev];
-        removedIndex = next.findIndex((item) => item.id === itemId);
-        if (removedIndex !== -1) {
-          removedItem = next[removedIndex];
-          next.splice(removedIndex, 1);
-        }
-        return next;
+      throw new Error('Failed to update inventory item');
+    } catch (error) {
+      if (previousItem) {
+        setItems((prev) =>
+          prev.map((item) => (item.id === itemId ? previousItem : item))
+        );
+      }
+      toast.error('Error Updating Item', {
+        description: error.message,
       });
+      throw error;
+    }
+  }, []);
 
-      try {
-        const response = await inventoryService.deleteInventoryItem(itemId);
-
-        if (response.success) {
-          toast({
-            title: 'Inventory Item Deleted',
-            description: 'Inventory item has been removed.',
-            variant: 'destructive',
-          });
-          return true;
-        }
-        throw new Error('Failed to delete inventory item');
-      } catch (error) {
-        if (removedItem) {
-          setItems((prev) => {
-            const next = [...prev];
-            const insertIndex =
-              removedIndex >= 0 && removedIndex <= next.length
-                ? removedIndex
-                : next.length;
-            next.splice(insertIndex, 0, removedItem);
-            return next;
-          });
-        }
-        toast({
-          title: 'Error Deleting Item',
-          description: error.message,
-          variant: 'destructive',
-        });
-        throw error;
+  const deleteInventoryItem = useCallback(async (itemId) => {
+    let removedItem = null;
+    let removedIndex = -1;
+    setItems((prev) => {
+      const next = [...prev];
+      removedIndex = next.findIndex((item) => item.id === itemId);
+      if (removedIndex !== -1) {
+        removedItem = next[removedIndex];
+        next.splice(removedIndex, 1);
       }
-    },
-    [toast]
-  );
+      return next;
+    });
+
+    try {
+      const response = await inventoryService.deleteInventoryItem(itemId);
+
+      if (response.success) {
+        toast.success('Inventory Item Deleted', {
+          description: 'Inventory item has been removed.',
+        });
+        return true;
+      }
+      throw new Error('Failed to delete inventory item');
+    } catch (error) {
+      if (removedItem) {
+        setItems((prev) => {
+          const next = [...prev];
+          const insertIndex =
+            removedIndex >= 0 && removedIndex <= next.length
+              ? removedIndex
+              : next.length;
+          next.splice(insertIndex, 0, removedItem);
+          return next;
+        });
+      }
+      toast.error('Error Deleting Item', {
+        description: error.message,
+      });
+      throw error;
+    }
+  }, []);
 
   const updateStock = useCallback(
     async (itemId, quantity, operation = 'set') => {
@@ -221,8 +199,7 @@ export const useInventoryManagement = (params = {}) => {
             set: 'updated',
           }[operation];
 
-          toast({
-            title: 'Stock Updated',
+          toast.success('Stock Updated', {
             description: `Stock has been ${operationText} successfully.`,
           });
           return response.data;
@@ -234,15 +211,13 @@ export const useInventoryManagement = (params = {}) => {
             prev.map((item) => (item.id === itemId ? previousItem : item))
           );
         }
-        toast({
-          title: 'Error Updating Stock',
+        toast.error('Error Updating Stock', {
           description: error.message,
-          variant: 'destructive',
         });
         throw error;
       }
     },
-    [toast]
+    []
   );
 
   const refetch = useCallback(
@@ -267,7 +242,6 @@ export const useLowStockItems = (threshold) => {
   const [lowStockItems, setLowStockItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
 
   const fetchLowStockItems = useCallback(async () => {
     setLoading(true);
@@ -283,15 +257,13 @@ export const useLowStockItems = (threshold) => {
       }
     } catch (error) {
       setError(error.message);
-      toast({
-        title: 'Error Loading Low Stock Items',
+      toast.error('Error Loading Low Stock Items', {
         description: 'Failed to load low stock items. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [threshold, toast]);
+  }, [threshold]);
 
   useEffect(() => {
     if (threshold !== undefined) {
@@ -328,7 +300,6 @@ export const useInventoryActivities = (params = {}, options = {}) => {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { toast } = useToast();
   const { auto = false, debounceMs = 500, cacheTtlMs = 30000 } = options || {};
   const debounceRef = useRef(null);
 
@@ -356,16 +327,14 @@ export const useInventoryActivities = (params = {}, options = {}) => {
         }
       } catch (err) {
         setError(err.message);
-        toast({
-          title: 'Error Loading Activities',
+        toast.error('Error Loading Activities', {
           description: 'Failed to load inventory activities. Please try again.',
-          variant: 'destructive',
         });
       } finally {
         setLoading(false);
       }
     },
-    [params, key, cacheTtlMs, toast]
+    [params, key, cacheTtlMs]
   );
 
   // Debounced refetch

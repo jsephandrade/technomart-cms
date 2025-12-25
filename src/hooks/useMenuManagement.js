@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import menuService from '@/api/services/menuService';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -17,7 +17,6 @@ const resolvePollIntervalMs = () => {
 };
 
 export const useMenuManagement = (params = {}) => {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const pollIntervalMs = resolvePollIntervalMs();
   const pendingImagesRef = useRef({});
@@ -208,10 +207,8 @@ export const useMenuManagement = (params = {}) => {
     refetchOnWindowFocus: pollIntervalMs ? false : true,
     refetchInterval: pollIntervalMs || false,
     onError: () => {
-      toast({
-        title: 'Error Loading Menu',
+      toast.error('Error Loading Menu', {
         description: 'Failed to load menu items. Please try again.',
-        variant: 'destructive',
       });
     },
   });
@@ -234,17 +231,14 @@ export const useMenuManagement = (params = {}) => {
     onSuccess: (res, variables) => {
       upsertItem(res.data);
       broadcastMenuEvent({ type: 'create', item: res.data });
-      toast({
-        title: 'Menu Item Created',
+      toast.success('Menu Item Created', {
         description: `${variables.name || 'Item'} has been added to the menu.`,
       });
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Creating Item',
+      toast.error('Error Creating Item', {
         description: error?.message || 'Failed to create menu item',
-        variant: 'destructive',
       });
     },
   });
@@ -259,17 +253,14 @@ export const useMenuManagement = (params = {}) => {
         id: variables.itemId,
         updates: res.data,
       });
-      toast({
-        title: 'Menu Item Updated',
+      toast.success('Menu Item Updated', {
         description: 'Menu item has been updated successfully.',
       });
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Updating Item',
+      toast.error('Error Updating Item', {
         description: error?.message || 'Failed to update menu item',
-        variant: 'destructive',
       });
     },
   });
@@ -278,18 +269,15 @@ export const useMenuManagement = (params = {}) => {
     mutationFn: (itemId) => menuService.deleteMenuItem(itemId),
     onSuccess: (_, itemId) => {
       removeItemFromCaches(itemId);
-      toast({
-        title: 'Menu Item Archived',
+      toast.success('Menu Item Archived', {
         description: 'The item has been moved to the archive.',
       });
       broadcastMenuEvent({ type: 'archive', id: itemId });
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Archiving Item',
+      toast.error('Error Archiving Item', {
         description: error?.message || 'Failed to archive menu item',
-        variant: 'destructive',
       });
     },
   });
@@ -299,18 +287,15 @@ export const useMenuManagement = (params = {}) => {
     onSuccess: (res, itemId) => {
       const restored = (res.data && res.data.data) || res.data || null;
       if (restored) upsertItem(restored);
-      toast({
-        title: 'Menu Item Restored',
+      toast.success('Menu Item Restored', {
         description: 'The item has been moved back to the active menu.',
       });
       broadcastMenuEvent({ type: 'restore', id: itemId });
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Restoring Item',
+      toast.error('Error Restoring Item', {
         description: error?.message || 'Failed to restore menu item',
-        variant: 'destructive',
       });
     },
   });
@@ -319,19 +304,15 @@ export const useMenuManagement = (params = {}) => {
     mutationFn: (itemId) => menuService.hardDeleteMenuItem(itemId),
     onSuccess: (_, itemId) => {
       removeItemFromCaches(itemId);
-      toast({
-        title: 'Menu Item Deleted',
+      toast.success('Menu Item Deleted', {
         description: 'The item has been permanently deleted from the database.',
-        variant: 'destructive',
       });
       broadcastMenuEvent({ type: 'hard-delete', id: itemId });
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Deleting Item',
+      toast.error('Error Deleting Item', {
         description: error?.message || 'Failed to delete menu item',
-        variant: 'destructive',
       });
     },
   });
@@ -341,8 +322,7 @@ export const useMenuManagement = (params = {}) => {
       menuService.updateItemAvailability(itemId, available),
     onSuccess: (_, variables) => {
       upsertItem({ id: variables.itemId, available: variables.available });
-      toast({
-        title: 'Availability Updated',
+      toast.success('Availability Updated', {
         description: `Menu item is now ${
           variables.available ? 'available' : 'unavailable'
         }.`,
@@ -355,10 +335,8 @@ export const useMenuManagement = (params = {}) => {
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Updating Availability',
+      toast.error('Error Updating Availability', {
         description: error?.message || 'Failed to update availability',
-        variant: 'destructive',
       });
     },
   });
@@ -391,17 +369,14 @@ export const useMenuManagement = (params = {}) => {
           );
         }
       } else {
-        toast({
-          title: 'Image Uploaded',
+        toast.success('Image Uploaded', {
           description: 'Menu item image has been updated successfully.',
         });
       }
     },
     onError: (error) => {
-      toast({
-        title: 'Error Uploading Image',
+      toast.error('Error Uploading Image', {
         description: error?.message || 'Failed to upload image',
-        variant: 'destructive',
       });
     },
   });
@@ -411,18 +386,15 @@ export const useMenuManagement = (params = {}) => {
     onSuccess: (_, itemId) => {
       clearPendingImage(itemId);
       upsertItem({ id: itemId, image: null, imageUrl: null });
-      toast({
-        title: 'Image Removed',
+      toast.success('Image Removed', {
         description: 'Menu item image has been deleted.',
       });
       broadcastMenuEvent({ type: 'image-delete', id: itemId });
       invalidateMenu();
     },
     onError: (error) => {
-      toast({
-        title: 'Error Removing Image',
+      toast.error('Error Removing Image', {
         description: error?.message || 'Failed to delete image',
-        variant: 'destructive',
       });
     },
   });
@@ -525,7 +497,6 @@ export const useMenuManagement = (params = {}) => {
 };
 
 export const useMenuCategories = () => {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const pollIntervalMs = resolvePollIntervalMs();
 
@@ -542,10 +513,8 @@ export const useMenuCategories = () => {
     refetchInterval: pollIntervalMs || false,
     keepPreviousData: true,
     onError: () => {
-      toast({
-        title: 'Error Loading Categories',
+      toast.error('Error Loading Categories', {
         description: 'Failed to load menu categories. Please try again.',
-        variant: 'destructive',
       });
     },
   });

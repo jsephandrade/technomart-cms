@@ -15,14 +15,13 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import CameraCapture from '@/components/face-registration/CameraCapture';
 import verificationService from '@/api/services/verificationService';
 import { ShieldCheck, ArrowLeft } from 'lucide-react';
 
 const VerifyIdentityPage = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const cameraRef = useRef(null);
 
   const [pendingUser, setPendingUser] = useState(null);
@@ -106,8 +105,7 @@ const VerifyIdentityPage = () => {
       });
       if (res?.success) {
         setStep('done');
-        toast({
-          title: 'Verification submitted',
+        toast.success('Verification submitted', {
           description: 'Your request is pending admin review.',
         });
       } else {

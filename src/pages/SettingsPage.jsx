@@ -14,14 +14,13 @@ import { Separator } from '@/components/ui/separator';
 import { Settings, User, Shield, Scan } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import authService from '@/api/services/authService';
 import userService from '@/api/services/userService';
 // Minimal password rule only (no strength meter)
 const SettingsPage = () => {
   const { user, updateProfile } = useAuth();
   const [faceEnabled, setFaceEnabled] = useState(false);
-  const { toast } = useToast();
 
   // Change Password state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -106,27 +105,22 @@ const SettingsPage = () => {
         newPassword
       );
       if (res?.success) {
-        toast({
-          title: 'Password updated',
+        toast.success('Password updated', {
           description: 'Your password has been changed.',
         });
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
       } else {
-        toast({
-          title: 'Change password failed',
+        toast.error('Change password failed', {
           description:
             res?.message ||
             'Please verify your current password and try again.',
-          variant: 'destructive',
         });
       }
     } catch (err) {
-      toast({
-        title: 'Change password failed',
+      toast.error('Change password failed', {
         description: err?.message || 'Something went wrong. Please try again.',
-        variant: 'destructive',
       });
     } finally {
       setPending(false);
@@ -142,15 +136,12 @@ const SettingsPage = () => {
       const res = await userService.updateUser(user.id, updates);
       if (!res?.success) throw new Error(res?.message || 'Update failed');
       await updateProfile({ ...updates });
-      toast({
-        title: 'Profile updated',
+      toast.success('Profile updated', {
         description: 'Your account details have been saved.',
       });
     } catch (err) {
-      toast({
-        title: 'Update failed',
+      toast.error('Update failed', {
         description: err?.message || 'Could not save profile changes.',
-        variant: 'destructive',
       });
     } finally {
       setProfilePending(false);
@@ -171,15 +162,12 @@ const SettingsPage = () => {
       } catch {}
       await updateProfile({ faceEnabled: false });
       setFaceEnabled(false);
-      toast({
-        title: 'Face login disabled',
+      toast.success('Face login disabled', {
         description: 'Your face data has been removed.',
       });
     } catch (err) {
-      toast({
-        title: 'Failed to disable',
+      toast.error('Failed to disable', {
         description: err?.message || 'Could not disable face login.',
-        variant: 'destructive',
       });
     } finally {
       setDisablePending(false);

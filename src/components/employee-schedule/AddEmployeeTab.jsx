@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUsers } from '@/hooks/useUsers';
+import { useAuth } from '@/components/AuthContext';
 import {
   Popover,
   PopoverContent,
@@ -61,6 +62,58 @@ const getInitials = (name = '') =>
     .join('')
     .slice(0, 2) || '??';
 
+const resolveRoleValues = (user) => {
+  if (!user) return [];
+  const values = new Set();
+  const addValue = (value) => {
+    if (!value) return;
+    const normalized = String(value).trim().toLowerCase();
+    if (normalized) values.add(normalized);
+  };
+  addValue(user.role);
+  addValue(user.roleName);
+  addValue(user.role_name);
+  addValue(user.userRole);
+  addValue(user.user_role);
+  addValue(user.primaryRole);
+  addValue(user.primary_role);
+  const listCandidates = [
+    user.roles,
+    user.roleList,
+    user.role_list,
+    user.userRoles,
+    user.user_roles,
+  ];
+  listCandidates.forEach((entry) => {
+    if (!Array.isArray(entry)) return;
+    entry.forEach((roleEntry) => {
+      if (!roleEntry) return;
+      if (typeof roleEntry === 'string') {
+        addValue(roleEntry);
+        return;
+      }
+      addValue(roleEntry.value);
+      addValue(roleEntry.role);
+      addValue(roleEntry.name);
+      addValue(roleEntry.label);
+    });
+  });
+  return Array.from(values);
+};
+
+const resolvePrimaryRole = (user) => {
+  const values = resolveRoleValues(user);
+  if (values.includes('manager')) return 'manager';
+  if (values.includes('staff')) return 'staff';
+  if (values.includes('admin')) return 'admin';
+  return user?.role || user?.roleName || user?.role_name || '';
+};
+
+const isStaffEligible = (user) => {
+  const values = resolveRoleValues(user);
+  return values.some((value) => value === 'staff' || value === 'manager');
+};
+
 const AddEmployeeTab = ({
   quickAdd,
   setQuickAdd,
@@ -77,15 +130,54 @@ const AddEmployeeTab = ({
   onOpenArchivedEmployees,
 }) => {
   const { users = [] } = useUsers();
+  const { user: currentUser } = useAuth();
   const [copyFromOpen, setCopyFromOpen] = useState(false);
   const [copyFromSelection, setCopyFromSelection] = useState('');
   const [teamSearch, setTeamSearch] = useState('');
+  const appUsers = useMemo(() => {
+    const map = new Map();
+    const addUser = (entry) => {
+      if (!entry) return;
+      const id =
+        entry.id ||
+        entry.userId ||
+        entry.user_id ||
+        entry.email ||
+        entry.name ||
+        null;
+      if (!id) return;
+      const key = String(id);
+      if (map.has(key)) return;
+      map.set(key, { ...entry, id: key });
+    };
+    (users || []).forEach(addUser);
+    if (currentUser) {
+      addUser({
+        ...currentUser,
+        id:
+          currentUser.id ||
+          currentUser.userId ||
+          currentUser.user_id ||
+          currentUser.email ||
+          currentUser.name,
+        name:
+          currentUser.name ||
+          currentUser.fullName ||
+          currentUser.email ||
+          currentUser.username,
+        email: currentUser.email,
+        role:
+          currentUser.role ||
+          currentUser.roleName ||
+          currentUser.role_name ||
+          resolvePrimaryRole(currentUser),
+      });
+    }
+    return Array.from(map.values());
+  }, [users, currentUser]);
   const staffUsers = useMemo(
-    () =>
-      users.filter((user) =>
-        ['staff', 'manager'].includes((user.role || '').toLowerCase())
-      ),
-    [users]
+    () => appUsers.filter((user) => isStaffEligible(user)),
+    [appUsers]
   );
   const normalizedTeamSearch = teamSearch.trim().toLowerCase();
   const filteredEmployees = normalizedTeamSearch
@@ -119,7 +211,8 @@ const AddEmployeeTab = ({
     if (type === 'user') {
       const match = staffUsers.find((user) => user.id === id);
       if (match) {
-        return `${match.name || 'Staff member'} · ${match.role || 'Staff'}`;
+        const roleLabel = match.role || resolvePrimaryRole(match) || 'Staff';
+        return `${match.name || 'Staff member'} · ${roleLabel}`;
       }
     }
     return 'Start with blank profile';
@@ -148,10 +241,11 @@ const AddEmployeeTab = ({
     } else if (type === 'user') {
       const match = staffUsers.find((user) => user.id === id);
       if (match) {
+        const roleLabel = match.role || resolvePrimaryRole(match);
         setQuickAdd((prev) => ({
           ...prev,
           name: match.name || prev.name,
-          position: match.role || prev.position,
+          position: roleLabel || match.role || prev.position,
         }));
       }
     }
@@ -295,10 +389,12 @@ const AddEmployeeTab = ({
                           staffUsers.map((user) => {
                             const value = `user:${user.id}`;
                             const selected = copyFromSelection === value;
+                            const roleLabel =
+                              user.role || resolvePrimaryRole(user) || 'Staff';
                             return (
                               <CommandItem
                                 key={user.id}
-                                value={[user.name, user.role, user.email]
+                                value={[user.name, roleLabel, user.email]
                                   .filter(Boolean)
                                   .join(' ')}
                                 onSelect={() => {
@@ -317,7 +413,7 @@ const AddEmployeeTab = ({
                                   {user.name || 'Staff member'}
                                 </span>
                                 <span className="ml-auto text-xs text-muted-foreground">
-                                  {user.role || 'Staff'}
+                                  {roleLabel}
                                 </span>
                               </CommandItem>
                             );

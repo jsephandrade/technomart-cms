@@ -2,7 +2,9 @@ import React from 'react';
 import { UserCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import UserManagementCard from './UserManagementCard';
+import UserManagementCard, {
+  UserManagementCardDecor,
+} from './UserManagementCard';
 
 export const ActiveUsersList = ({ users, getInitials }) => {
   return (
@@ -13,6 +15,7 @@ export const ActiveUsersList = ({ users, getInitials }) => {
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
       description="Currently active system users"
+      decor={<UserManagementCardDecor />}
       contentClassName="space-y-2"
     >
       <div className="flex flex-wrap gap-2">

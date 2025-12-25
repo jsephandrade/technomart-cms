@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import UserManagementCard from '@/components/users/UserManagementCard';
+import UserManagementCard, {
+  UserManagementCardDecor,
+} from '@/components/users/UserManagementCard';
 import { Button } from '@/components/ui/button';
 import {
   UserPlus,
@@ -153,6 +155,7 @@ const Users = () => {
           titleAccentClassName="px-3 py-1 text-xs md:text-sm"
           titleClassName="text-xs md:text-sm"
           description="Manage system users and access"
+          decor={<UserManagementCardDecor />}
           headerActions={
             hasAnyRole(['admin']) ? (
               <Button
@@ -237,6 +240,7 @@ const Users = () => {
             titleClassName="text-xs md:text-sm"
             description="Configure user roles and permissions"
             contentClassName="space-y-4"
+            decor={<UserManagementCardDecor />}
           >
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => (
@@ -260,6 +264,7 @@ const Users = () => {
             titleAccentClassName="px-3 py-1 text-xs md:text-sm"
             titleClassName="text-xs md:text-sm"
             description="Configure user roles and permissions"
+            decor={<UserManagementCardDecor />}
           >
             <ErrorState message={rolesError} />
           </UserManagementCard>
@@ -275,6 +280,7 @@ const Users = () => {
             titleAccentClassName="px-3 py-1 text-xs md:text-sm"
             titleClassName="text-xs md:text-sm"
             description="Currently active system users"
+            decor={<UserManagementCardDecor />}
           >
             <div className="flex flex-wrap gap-2">
               {[...Array(5)].map((_, i) => (

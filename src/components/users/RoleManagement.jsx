@@ -1,7 +1,9 @@
 import React from 'react';
 import { Edit, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import UserManagementCard from './UserManagementCard';
+import UserManagementCard, {
+  UserManagementCardDecor,
+} from './UserManagementCard';
 
 export const RoleManagement = ({ roles, onConfigureRole }) => {
   return (
@@ -12,6 +14,7 @@ export const RoleManagement = ({ roles, onConfigureRole }) => {
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
       description="Configure user roles and permissions"
+      decor={<UserManagementCardDecor />}
       contentClassName="space-y-4"
     >
       <div className="space-y-4">
@@ -31,7 +34,7 @@ export const RoleManagement = ({ roles, onConfigureRole }) => {
               size="sm"
               onClick={() => onConfigureRole(role)}
             >
-              <Edit className="h-4 w-4 mr-1" /> Configure
+              <Edit className="h-4 w-4" />
             </Button>
           </div>
         ))}

@@ -41,7 +41,9 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import UserManagementCard from './UserManagementCard';
+import UserManagementCard, {
+  UserManagementCardDecor,
+} from './UserManagementCard';
 
 const AUTO_REFRESH_INTERVAL = 20_000;
 
@@ -117,6 +119,7 @@ export const PendingVerifications = () => {
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
       description="Review new account requests and assign roles"
+      decor={<UserManagementCardDecor />}
       headerContent={
         <Badge variant="secondary" className="font-normal">
           {total} pending

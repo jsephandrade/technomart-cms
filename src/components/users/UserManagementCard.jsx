@@ -17,6 +17,13 @@ const headingClasses =
 const baseCardClasses =
   'relative w-full max-w-[420px] sm:max-w-full mx-auto overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow duration-200 hover:shadow-md';
 
+export const UserManagementCardDecor = () => (
+  <div
+    className="pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl"
+    aria-hidden="true"
+  />
+);
+
 const UserManagementCard = ({
   children,
   className,

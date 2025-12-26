@@ -1,3 +1,10 @@
+# Use PyMySQL in environments without mysqlclient binaries.
+try:
+    import pymysql
+    pymysql.install_as_MySQLdb()
+except Exception:
+    pass
+
 # This will make sure the app is always imported when
 # Django starts so that shared_task will use this app.
 try:

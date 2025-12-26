@@ -1,7 +1,9 @@
 import React, { useId } from 'react';
 import PropTypes from 'prop-types';
 
-export const AUTH_PAGE_DEFAULT_BACKGROUND = '/src/assets/admin-MAIN.png';
+import adminMain from '@/assets/admin-MAIN.png';
+
+export const AUTH_PAGE_DEFAULT_BACKGROUND = adminMain;
 const baseWavePrimaryPath = 'M0 0H800V800H0C180 550 320 350 0 160Z';
 const baseWaveSecondaryPath = 'M200 0H800V800H120C340 630 460 330 200 120Z';
 

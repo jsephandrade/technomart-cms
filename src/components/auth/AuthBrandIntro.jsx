@@ -2,7 +2,9 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { cn } from '@/lib/utils';
 
-export const AUTH_BRAND_BADGE_IMAGE = '/src/assets/technomart-logo.png';
+import technomartLogo from '@/assets/technomart-logo.png';
+
+export const AUTH_BRAND_BADGE_IMAGE = technomartLogo;
 
 const AuthBrandIntro = ({
   badgeImageSrc = AUTH_BRAND_BADGE_IMAGE,

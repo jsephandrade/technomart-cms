@@ -4,6 +4,7 @@ These functions create notifications when certain events occur.
 """
 
 import logging
+import os
 from typing import List, Optional
 from datetime import datetime, timedelta
 
@@ -18,11 +19,19 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
+def _celery_enabled() -> bool:
+    if os.getenv("DISABLE_CELERY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    if not os.getenv("CELERY_BROKER_URL"):
+        return False
+    return True
+
+
 # Try to import Celery task, fallback to sync if not available
 try:
-    from .tasks import create_notification
-    USE_CELERY = True
-except ImportError:
+    from .tasks import create_notification, create_notification_sync, CELERY_AVAILABLE
+    USE_CELERY = bool(CELERY_AVAILABLE) and _celery_enabled()
+except Exception:
     from .tasks import create_notification_sync
     create_notification = None
     USE_CELERY = False
@@ -36,7 +45,6 @@ def _create_notification(**kwargs):
         return create_notification.delay(**kwargs)
     else:
         # Use synchronous version
-        from .tasks import create_notification_sync
         return create_notification_sync(**kwargs)
 
 

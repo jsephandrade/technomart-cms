@@ -52,6 +52,7 @@ def get_cors():
                 "content-type",
                 "dnt",
                 "origin",
+                "idempotency-key",
                 "user-agent",
                 "x-csrftoken",
                 "x-requested-with",

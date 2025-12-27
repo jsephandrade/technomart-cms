@@ -35,9 +35,8 @@ import { Edit as EditIcon, Trash2, Loader2 } from 'lucide-react';
 
 export default function LeaveManagement() {
   const { user, hasAnyRole } = useAuth();
-  const isManager = hasAnyRole(['admin', 'manager']);
   const isAdmin = hasAnyRole(['admin']);
-  const canEditLeave = isAdmin;
+  const isRequester = !isAdmin;
   const {
     records,
     loading,
@@ -45,7 +44,7 @@ export default function LeaveManagement() {
     createRecord,
     updateRecord,
     deleteRecord,
-  } = useLeaves({}, { autoFetch: isManager, suppressErrorToast: !isManager });
+  } = useLeaves({}, { autoFetch: isAdmin, suppressErrorToast: !isAdmin });
   const { employees } = useEmployees();
 
   const [filters, setFilters] = useState({
@@ -114,7 +113,7 @@ export default function LeaveManagement() {
         return;
       }
       const payload = { ...editing };
-      if (!isManager) {
+      if (!isAdmin) {
         payload.status = 'pending';
         if (selfEmployee?.id) {
           payload.employeeId = selfEmployee.id;
@@ -162,7 +161,7 @@ export default function LeaveManagement() {
   }, [user?.employeeId, user?.name, employees, user?.email]);
 
   useEffect(() => {
-    if (!isManager && selfEmployee?.id) {
+    if (!isAdmin && selfEmployee?.id) {
       setEditing((prev) => {
         const base = prev || {
           id: null,
@@ -177,13 +176,14 @@ export default function LeaveManagement() {
         return { ...base, employeeId: selfEmployee.id };
       });
     }
-  }, [isManager, selfEmployee?.id]);
+  }, [isAdmin, selfEmployee?.id]);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Staff inline request form */}
-      {!isManager && (
+      {/* Leave request form */}
+      {isRequester && (
         <FeaturePanelCard
+          badgeText="Leave Request"
           description="Submit a leave request for review"
           className="max-w-md"
           contentClassName="space-y-3"
@@ -306,16 +306,14 @@ export default function LeaveManagement() {
         </FeaturePanelCard>
       )}
 
-      {isManager && (
+      {isAdmin && (
         <FeaturePanelCard
           badgeText="Leave Requests"
           description="Request and manage leave"
           headerActions={
-            canEditLeave ? (
-              <Button onClick={onAdd} className="shrink-0">
-                Add Leave
-              </Button>
-            ) : null
+            <Button onClick={onAdd} className="shrink-0">
+              Add Leave
+            </Button>
           }
           contentClassName="space-y-4"
         >
@@ -392,7 +390,7 @@ export default function LeaveManagement() {
                   <TableHead>End</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Reason</TableHead>
-                  {isManager && (
+                  {isAdmin && (
                     <TableHead className="text-right">Actions</TableHead>
                   )}
                 </TableRow>
@@ -401,7 +399,7 @@ export default function LeaveManagement() {
                 {(records || []).length === 0 && !loading && (
                   <TableRow>
                     <TableCell
-                      colSpan={isManager ? 7 : 6}
+                      colSpan={isAdmin ? 7 : 6}
                       className="text-center text-sm text-muted-foreground"
                     >
                       No leave records found.
@@ -435,26 +433,24 @@ export default function LeaveManagement() {
                     <TableCell className="max-w-[280px] truncate">
                       {r.reason || '—'}
                     </TableCell>
-                    {isManager && (
+                    {isAdmin && (
                       <TableCell className="text-right space-x-2">
-                        {canEditLeave ? (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => onEdit(r)}
-                            >
-                              <EditIcon className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => onDelete(r.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        ) : null}
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onEdit(r)}
+                          >
+                            <EditIcon className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => onDelete(r.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
                         {r.status === 'pending' && (
                           <>
                             <Button size="sm" onClick={() => onApprove(r)}>
@@ -485,7 +481,7 @@ export default function LeaveManagement() {
         </FeaturePanelCard>
       )}
 
-      {canEditLeave && (
+      {isAdmin && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogHeader>

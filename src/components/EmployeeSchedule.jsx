@@ -71,7 +71,9 @@ const DEFAULT_EMPLOYEE_FORM = {
 const EmployeeSchedule = () => {
   const { hasAnyRole, user } = useAuth();
   const canManage = hasAnyRole(['manager', 'admin']);
+  const isAdmin = hasAnyRole(['admin']);
   const isStaffOnly = hasAnyRole(['staff']) && !canManage;
+  const leaveTabLabel = isAdmin ? 'Leave Records' : 'Leave Request';
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -675,11 +677,11 @@ const EmployeeSchedule = () => {
             </TabsTrigger>
             <TabsTrigger
               value="leave"
-              aria-label="Leave Records"
+              aria-label={leaveTabLabel}
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <Plane className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">Leave Records</span>
+              <span className="hidden lg:inline">{leaveTabLabel}</span>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="add" className="space-y-6">
@@ -696,7 +698,10 @@ const EmployeeSchedule = () => {
           </TabsContent>
         </Tabs>
       ) : (
-        schedulePane
+        <>
+          {schedulePane}
+          <LeaveManagement />
+        </>
       )}
 
       <EditScheduleDialog

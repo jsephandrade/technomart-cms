@@ -188,7 +188,7 @@ export default function AttendanceAdmin() {
                       size="sm"
                       onClick={() => setEditing({ ...r })}
                     >
-                      <EditIcon className="mr-1 h-3.5 w-3.5" /> Edit
+                      <EditIcon className="h-3.5 w-3.5" />
                     </Button>
                     {isAdmin ? (
                       <Button
@@ -203,7 +203,7 @@ export default function AttendanceAdmin() {
                           }
                         }}
                       >
-                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     ) : null}
                   </TableCell>

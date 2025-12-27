@@ -162,14 +162,24 @@ def _employee_for_actor(actor, *, create_if_missing=False, allow_fallback=True):
                 emp_obj = None
             if emp_obj:
                 try:
-                    if AppUser and isinstance(actor, AppUser) and not emp_obj.user_id:
-                        role = (getattr(actor, "role", "") or "").lower()
+                    actor_user = None
+                    if AppUser and isinstance(actor, AppUser):
+                        actor_user = actor
+                    elif AppUser and isinstance(actor, dict):
+                        actor_id = actor.get("id") or actor.get("user_id") or actor.get("userId")
+                        actor_email = (actor.get("email") or "").strip().lower()
+                        if actor_id:
+                            actor_user = AppUser.objects.filter(id=actor_id).first()
+                        if not actor_user and actor_email:
+                            actor_user = AppUser.objects.filter(email=actor_email).first()
+                    if actor_user and not emp_obj.user_id:
+                        role = (getattr(actor_user, "role", "") or "").lower()
                         if role in {"staff", "manager"}:
                             updates = []
-                            emp_obj.user = actor
+                            emp_obj.user = actor_user
                             updates.append("user")
                             if not emp_obj.contact:
-                                email = (getattr(actor, "email", "") or "").strip()
+                                email = (getattr(actor_user, "email", "") or "").strip()
                                 if email:
                                     emp_obj.contact = email
                                     updates.append("contact")
@@ -186,15 +196,27 @@ def _employee_for_actor(actor, *, create_if_missing=False, allow_fallback=True):
     except Exception:
         return None, None
 
-    if not AppUser or not isinstance(actor, AppUser):
+    actor_user = actor if AppUser and isinstance(actor, AppUser) else None
+    if not actor_user and isinstance(actor, dict):
+        actor_id = actor.get("id") or actor.get("user_id") or actor.get("userId")
+        actor_email = (actor.get("email") or "").strip().lower()
+        try:
+            if actor_id:
+                actor_user = AppUser.objects.filter(id=actor_id).first()
+            if not actor_user and actor_email:
+                actor_user = AppUser.objects.filter(email=actor_email).first()
+        except Exception:
+            actor_user = None
+
+    if not actor_user:
         return None, None
 
-    role = (getattr(actor, "role", "") or "").lower()
+    role = (getattr(actor_user, "role", "") or "").lower()
     if role not in {"staff", "manager"}:
         return None, None
 
-    name = (getattr(actor, "name", "") or "").strip()
-    email = (getattr(actor, "email", "") or "").strip()
+    name = (getattr(actor_user, "name", "") or "").strip()
+    email = (getattr(actor_user, "email", "") or "").strip()
     if not name:
         name = email or "Staff"
 
@@ -204,7 +226,7 @@ def _employee_for_actor(actor, *, create_if_missing=False, allow_fallback=True):
             position=role,
             contact=email,
             status="active",
-            user=actor,
+            user=actor_user,
         )
         return emp, str(emp.id)
     except Exception:
@@ -284,7 +306,16 @@ def attendance(request):
         if not can_manage:
             if emp_id:
                 allowed = _identifier_variants(self_employee_id)
-                if emp_id not in allowed and str(emp_id) not in allowed:
+                actor_id = getattr(actor, "id", None)
+                if actor_id is None and isinstance(actor, dict):
+                    actor_id = actor.get("id") or actor.get("user_id") or actor.get("userId")
+                actor_id_variants = _identifier_variants(actor_id)
+                if (
+                    emp_id not in allowed
+                    and str(emp_id) not in allowed
+                    and emp_id not in actor_id_variants
+                    and str(emp_id) not in actor_id_variants
+                ):
                     return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
             emp = self_employee
             emp_id = str(self_employee_id)

@@ -19,6 +19,8 @@ def resolve_employee_ref(actor, *, allow_fallback: bool = True) -> Tuple[Optiona
         actor_id = getattr(actor, "id", None)
     except Exception:
         actor_id = None
+    if actor_id is None and isinstance(actor, dict):
+        actor_id = actor.get("id") or actor.get("user_id") or actor.get("userId")
 
     # Try the direct relation first (works for new UUID-based rows)
     if actor_id:
@@ -51,12 +53,16 @@ def resolve_employee_ref(actor, *, allow_fallback: bool = True) -> Tuple[Optiona
             return None, row["id_str"]
 
     email = (getattr(actor, "email", "") or "").strip().lower()
+    if not email and isinstance(actor, dict):
+        email = (actor.get("email") or "").strip().lower()
     if email:
         row = qs.filter(contact_lower=email).first()
         if row:
             return None, row["id_str"]
 
     name_val = (getattr(actor, "name", "") or "").strip().lower()
+    if not name_val and isinstance(actor, dict):
+        name_val = (actor.get("name") or "").strip().lower()
     if name_val:
         row = qs.filter(name_lower=name_val).first()
         if row:

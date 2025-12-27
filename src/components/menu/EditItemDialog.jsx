@@ -13,6 +13,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,7 +32,14 @@ import {
   UploadCloud,
 } from 'lucide-react';
 
-const EditItemDialog = ({ item, setItem, onSave, onClose, onRemoveImage }) => {
+const EditItemDialog = ({
+  item,
+  setItem,
+  onSave,
+  onClose,
+  onRemoveImage,
+  categories = [],
+}) => {
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef(null);
@@ -40,6 +54,18 @@ const EditItemDialog = ({ item, setItem, onSave, onClose, onRemoveImage }) => {
     () => String(item?.category || '').trim(),
     [item]
   );
+  const categoryOptions = useMemo(() => {
+    const unique = new Set();
+    (Array.isArray(categories) ? categories : []).forEach((entry) => {
+      const name =
+        typeof entry === 'string'
+          ? entry.trim()
+          : String(entry?.name || entry?.label || entry?.title || '').trim();
+      if (name) unique.add(name);
+    });
+    if (categoryValue) unique.add(categoryValue);
+    return Array.from(unique);
+  }, [categories, categoryValue]);
   const nameError = submitted && !nameValue;
   const categoryError = submitted && !categoryValue;
   const itemId = item?.id;
@@ -167,16 +193,33 @@ const EditItemDialog = ({ item, setItem, onSave, onClose, onRemoveImage }) => {
                 >
                   Category <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  id="edit-category"
-                  value={item.category}
-                  onChange={(e) =>
-                    setItem({ ...item, category: e.target.value })
+                <Select
+                  value={categoryValue || undefined}
+                  onValueChange={(value) =>
+                    setItem({ ...item, category: value })
                   }
-                  placeholder="e.g., Rice Meals"
-                  className={cn(categoryError && 'border-destructive')}
                   disabled={saving}
-                />
+                >
+                  <SelectTrigger
+                    id="edit-category"
+                    className={cn(categoryError && 'border-destructive')}
+                  >
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoryOptions.length > 0 ? (
+                      categoryOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value={categoryValue || 'Uncategorized'}>
+                        {categoryValue || 'Uncategorized'}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
                 {categoryError ? (
                   <div className="flex items-center gap-1 text-xs text-destructive">
                     <AlertCircle className="h-3 w-3" />

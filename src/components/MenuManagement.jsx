@@ -298,6 +298,7 @@ const MenuManagement = () => {
       <EditItemDialog
         item={editingItem}
         setItem={setEditingItem}
+        categories={categories}
         onSave={handleEditItem}
         onRemoveImage={async (id) => {
           const targetId = id || editingItem?.id;

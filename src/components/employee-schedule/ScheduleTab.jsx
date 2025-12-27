@@ -16,6 +16,7 @@ const ScheduleTab = ({
   handleScheduleDialogOpenChange,
   defaultScheduleEntry,
   user,
+  showTimeCard = true,
   onOpenManageEmployees,
   onOpenAddSchedule,
 }) => (
@@ -58,7 +59,9 @@ const ScheduleTab = ({
         />
       </div>
     </div>
-    {user ? <AttendanceTimeCard user={user} className="w-full" /> : null}
+    {showTimeCard && user ? (
+      <AttendanceTimeCard user={user} className="w-full" />
+    ) : null}
   </div>
 );
 

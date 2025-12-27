@@ -353,6 +353,7 @@ const AttendanceTimeCard = ({ user, className }) => {
     <FeaturePanelCard
       className={cn('w-full', className)}
       badgeText="Daily Time Record"
+      badgeIcon={Clock}
       badgeClassName="whitespace-nowrap tracking-[0.12em]"
       description="Monitor today's clock-ins and duration."
       contentClassName="space-y-6"

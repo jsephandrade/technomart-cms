@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DAY_LABELS = [
@@ -279,6 +279,7 @@ const ScheduleCalendar = ({
   return (
     <FeaturePanelCard
       badgeText="Shift Calendar"
+      badgeIcon={CalendarClock}
       description="Monthly view of scheduled shifts. Select a day to review assignments."
       className={cn('w-full', className ? className : 'max-w-xs')}
       contentClassName="space-y-4"

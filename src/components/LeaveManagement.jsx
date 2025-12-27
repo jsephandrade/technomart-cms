@@ -35,6 +35,7 @@ import {
   CheckCircle2,
   Edit as EditIcon,
   Loader2,
+  Plane,
   Trash2,
   XCircle,
 } from 'lucide-react';
@@ -190,8 +191,9 @@ export default function LeaveManagement() {
       {isRequester && (
         <FeaturePanelCard
           badgeText="Leave Request"
+          badgeIcon={Plane}
           description="Submit a leave request for review"
-          className="max-w-md"
+          className="w-full"
           contentClassName="space-y-3"
         >
           {/* Compact, left-aligned form */}
@@ -315,6 +317,7 @@ export default function LeaveManagement() {
       {isAdmin && (
         <FeaturePanelCard
           badgeText="Leave Requests"
+          badgeIcon={Plane}
           description="Request and manage leave"
           headerActions={
             <Button onClick={onAdd} className="shrink-0">

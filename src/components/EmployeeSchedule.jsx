@@ -674,7 +674,6 @@ const EmployeeSchedule = () => {
       handleScheduleDialogOpenChange={handleScheduleDialogOpenChange}
       defaultScheduleEntry={DEFAULT_SCHEDULE_ENTRY}
       user={attendanceUser || user}
-      isStaffOnly={isStaffOnly}
       onOpenManageEmployees={handleOpenManageEmployees}
       onOpenAddSchedule={() => {
         if (!canManage) return;

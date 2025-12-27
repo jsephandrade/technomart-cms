@@ -16,7 +16,6 @@ const ScheduleTab = ({
   handleScheduleDialogOpenChange,
   defaultScheduleEntry,
   user,
-  isStaffOnly,
   onOpenManageEmployees,
   onOpenAddSchedule,
 }) => (
@@ -57,11 +56,9 @@ const ScheduleTab = ({
           employeeList={displayEmployees}
           className="w-full max-w-none lg:max-w-sm lg:ml-auto"
         />
-        {user && !isStaffOnly ? (
-          <AttendanceTimeCard user={user} className="w-full" />
-        ) : null}
       </div>
     </div>
+    {user ? <AttendanceTimeCard user={user} className="w-full" /> : null}
   </div>
 );
 

@@ -707,7 +707,7 @@ const EmployeeSchedule = () => {
           <TabsContent value={attendanceTabValue} className="space-y-6">
             {activeTab === attendanceTabValue ? (
               showCombinedAttendanceLeave ? (
-                <div className="grid gap-6 xl:grid-cols-2">
+                <div className="space-y-6">
                   <AttendanceAdmin />
                   <LeaveManagement />
                 </div>

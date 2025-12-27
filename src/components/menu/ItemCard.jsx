@@ -153,7 +153,7 @@ const ItemCard = ({
         };
 
   return (
-    <Card className="group relative h-full overflow-hidden border border-border/50 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
+    <Card className="group relative h-full min-w-0 overflow-hidden border border-border/50 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
       {/* Blurry background image */}
       {showHero && (
         <div

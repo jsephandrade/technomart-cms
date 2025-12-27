@@ -13,7 +13,7 @@ const ItemGrid = ({
   showCategory = false,
 }) => {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2 md:grid-cols-3 md:gap-3 lg:grid-cols-4 lg:gap-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3 sm:gap-2 lg:gap-4">
       {items.map((item) => (
         <ItemCard
           key={item.id}

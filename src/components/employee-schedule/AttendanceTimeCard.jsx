@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Clock, LogOut } from 'lucide-react';
 import { useAttendance } from '@/hooks/useAttendance';
+import { useAuth } from '@/components/AuthContext';
 import FeaturePanelCard from '../shared/FeaturePanelCard';
 import { cn } from '@/lib/utils';
 
@@ -50,6 +51,7 @@ const writeLocalAttendance = (employeeId, date, data) => {
 };
 
 const AttendanceTimeCard = ({ user, className }) => {
+  const { updateProfile } = useAuth();
   const subjectEmployeeId = useMemo(() => {
     if (!user) return null;
     return user.employeeId ?? user.id ?? null;
@@ -69,6 +71,16 @@ const AttendanceTimeCard = ({ user, className }) => {
     watchInitialParams: true,
     suppressErrorToast: true,
   });
+
+  const syncEmployeeId = useCallback(
+    async (employeeId) => {
+      if (!employeeId || user?.employeeId === employeeId) return;
+      if (typeof updateProfile === 'function') {
+        await updateProfile({ employeeId });
+      }
+    },
+    [updateProfile, user?.employeeId]
+  );
 
   const toLocalDateStr = (d) => {
     const y = d.getFullYear();
@@ -111,6 +123,12 @@ const AttendanceTimeCard = ({ user, className }) => {
   }, [records, subjectEmployeeId, today]);
 
   useEffect(() => {
+    if (todayRecord?.employeeId) {
+      syncEmployeeId(todayRecord.employeeId);
+    }
+  }, [todayRecord?.employeeId, syncEmployeeId]);
+
+  useEffect(() => {
     setLocalStatus(readLocalAttendance(subjectEmployeeId, today));
   }, [subjectEmployeeId, today, todayRecord?.checkIn, todayRecord?.checkOut]);
 
@@ -145,14 +163,16 @@ const AttendanceTimeCard = ({ user, className }) => {
 
     try {
       const checkInTime = nowTime();
-      await createRecord({
+      const created = await createRecord({
         employeeId: selectedEmployeeId,
         employeeName: user?.name || '',
         date: todayStr(),
         checkIn: checkInTime,
         status: 'present',
       });
-      writeLocalAttendance(selectedEmployeeId, today, {
+      const resolvedEmployeeId = created?.employeeId || selectedEmployeeId;
+      await syncEmployeeId(created?.employeeId);
+      writeLocalAttendance(resolvedEmployeeId, today, {
         checkIn: true,
         checkOut: Boolean(effectiveRecord?.checkOut),
         checkInAt: checkInTime,
@@ -193,10 +213,50 @@ const AttendanceTimeCard = ({ user, className }) => {
           effectiveRecord.checkIn) ||
         localStatus.checkInAt ||
         null;
-      await updateRecord(effectiveRecord.id, {
-        checkOut: checkOutTime,
-      });
-      writeLocalAttendance(selectedEmployeeId, today, {
+      const recordId = effectiveRecord?.id;
+      const isLocalRecord = !recordId || String(recordId).startsWith('local-');
+      let updated = null;
+      if (isLocalRecord) {
+        const payload = {
+          employeeId: selectedEmployeeId,
+          employeeName: user?.name || '',
+          date: todayStr(),
+          checkOut: checkOutTime,
+          status: 'present',
+        };
+        if (checkInTimeValue) {
+          payload.checkIn = checkInTimeValue;
+        }
+        updated = await createRecord(payload);
+      } else {
+        try {
+          updated = await updateRecord(recordId, {
+            checkOut: checkOutTime,
+          });
+        } catch (error) {
+          if (error?.status === 404) {
+            const payload = {
+              employeeId: selectedEmployeeId,
+              employeeName: user?.name || '',
+              date: todayStr(),
+              checkOut: checkOutTime,
+              status: 'present',
+            };
+            if (checkInTimeValue) {
+              payload.checkIn = checkInTimeValue;
+            }
+            updated = await createRecord(payload);
+          } else {
+            throw error;
+          }
+        }
+      }
+      const resolvedEmployeeId =
+        updated?.employeeId ||
+        effectiveRecord?.employeeId ||
+        selectedEmployeeId;
+      await syncEmployeeId(updated?.employeeId || effectiveRecord?.employeeId);
+      writeLocalAttendance(resolvedEmployeeId, today, {
         checkIn: true,
         checkOut: true,
         checkInAt: checkInTimeValue,
@@ -288,7 +348,6 @@ const AttendanceTimeCard = ({ user, className }) => {
   );
   const canTimeOut =
     Boolean(effectiveRecord?.checkIn) && !effectiveRecord?.checkOut;
-  const selectedEmployeeId = subjectEmployeeId;
 
   return (
     <FeaturePanelCard

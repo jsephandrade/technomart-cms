@@ -36,14 +36,8 @@ import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 export default function AttendanceAdmin() {
   const { hasAnyRole } = useAuth();
   const isManager = hasAnyRole(['admin', 'manager']);
-  const {
-    records,
-    loading,
-    setParams,
-    createRecord,
-    updateRecord,
-    deleteRecord,
-  } = useAttendance();
+  const { records, loading, setParams, updateRecord, deleteRecord } =
+    useAttendance();
   const { employees } = useEmployees();
   const [filters, setFilters] = useState({
     employeeId: '_all',
@@ -229,65 +223,10 @@ export default function AttendanceAdmin() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {editing?.id ? 'Edit Attendance' : 'Add Attendance'}
-            </DialogTitle>
-            <DialogDescription>Update employee attendance.</DialogDescription>
+            <DialogTitle>Edit Attendance</DialogTitle>
+            <DialogDescription>Update status and notes.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Employee</Label>
-              <Select
-                value={editing?.employeeId || ''}
-                onValueChange={(v) =>
-                  setEditing((x) => ({ ...x, employeeId: v }))
-                }
-              >
-                <SelectTrigger className="col-span-3 h-8 text-xs">
-                  <SelectValue placeholder="Select employee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Date</Label>
-              <Input
-                type="date"
-                className="col-span-3 h-8 text-xs"
-                value={editing?.date || ''}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, date: e.target.value }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Check In</Label>
-              <Input
-                type="time"
-                className="col-span-3 h-8 text-xs"
-                value={editing?.checkIn || ''}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, checkIn: e.target.value }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Check Out</Label>
-              <Input
-                type="time"
-                className="col-span-3 h-8 text-xs"
-                value={editing?.checkOut || ''}
-                onChange={(e) =>
-                  setEditing((x) => ({ ...x, checkOut: e.target.value }))
-                }
-              />
-            </div>
             <div className="grid grid-cols-4 items-center gap-3">
               <Label className="text-right">Status</Label>
               <Select
@@ -322,12 +261,14 @@ export default function AttendanceAdmin() {
             <Button
               onClick={async () => {
                 try {
-                  if (!editing.employeeId || !editing.date) {
-                    toast.error('Employee and date are required');
+                  if (!editing?.id) {
+                    toast.error('Select an attendance record to edit');
                     return;
                   }
-                  if (!editing.id) await createRecord(editing);
-                  else await updateRecord(editing.id, editing);
+                  await updateRecord(editing.id, {
+                    status: editing?.status || 'present',
+                    notes: editing?.notes || '',
+                  });
                   setEditing(null);
                   toast.success('Saved');
                 } catch {

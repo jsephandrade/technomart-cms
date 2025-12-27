@@ -2,11 +2,21 @@ import { useEffect, useState, useCallback } from 'react';
 import { attendanceService } from '@/api/services/attendanceService';
 import { toast } from 'sonner';
 
-export function useAttendance(initialParams = {}) {
+export function useAttendance(initialParams = {}, options = {}) {
+  const {
+    autoFetch = true,
+    watchInitialParams = false,
+    suppressErrorToast = false,
+  } = options || {};
   const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(autoFetch));
   const [error, setError] = useState(null);
   const [params, setParams] = useState(initialParams);
+
+  useEffect(() => {
+    if (!watchInitialParams) return;
+    setParams(initialParams || {});
+  }, [initialParams, watchInitialParams]);
 
   const fetchRecords = useCallback(
     async (override = null) => {
@@ -19,17 +29,17 @@ export function useAttendance(initialParams = {}) {
         const msg =
           err instanceof Error ? err.message : 'Failed to load attendance';
         setError(msg);
-        toast.error(msg);
+        if (!suppressErrorToast) toast.error(msg);
       } finally {
         setLoading(false);
       }
     },
-    [params]
+    [params, suppressErrorToast]
   );
 
   useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
+    if (autoFetch) fetchRecords();
+  }, [fetchRecords, autoFetch]);
 
   const createRecord = async (payload) => {
     const created = await attendanceService.createAttendance(payload);

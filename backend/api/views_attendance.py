@@ -128,23 +128,72 @@ def _safe_leave(l):
 
 
 def _employee_for_actor(actor, *, create_if_missing=False, allow_fallback=True):
-    """Resolve the employee profile linked to the authenticated actor."""
+    """Resolve (and optionally create) the employee profile linked to the actor."""
 
     emp, emp_id = resolve_employee_ref(actor, allow_fallback=allow_fallback)
-    if emp or emp_id:
-        return emp, emp_id
+    if emp:
+        return emp, str(emp.id)
 
-    if create_if_missing:
-        import logging
+    if emp_id:
+        try:
+            from .models import Employee, AppUser
+        except Exception:
+            Employee = None
+            AppUser = None
+        if Employee:
+            try:
+                emp_obj = Employee.objects.filter(id=emp_id).first()
+            except Exception:
+                emp_obj = None
+            if emp_obj:
+                try:
+                    if AppUser and isinstance(actor, AppUser) and not emp_obj.user_id:
+                        role = (getattr(actor, "role", "") or "").lower()
+                        if role in {"staff", "manager"}:
+                            updates = []
+                            emp_obj.user = actor
+                            updates.append("user")
+                            if not emp_obj.contact:
+                                email = (getattr(actor, "email", "") or "").strip()
+                                if email:
+                                    emp_obj.contact = email
+                                    updates.append("contact")
+                            emp_obj.save(update_fields=updates)
+                except Exception:
+                    pass
+                return emp_obj, str(emp_obj.id)
 
-        logger = logging.getLogger(__name__)
-        actor_id = getattr(actor, "id", None)
-        logger.info(
-            "Employee lookup requested creation for user %s, but auto-creation is disabled.",
-            actor_id,
+    if not create_if_missing:
+        return None, None
+
+    try:
+        from .models import Employee, AppUser
+    except Exception:
+        return None, None
+
+    if not AppUser or not isinstance(actor, AppUser):
+        return None, None
+
+    role = (getattr(actor, "role", "") or "").lower()
+    if role not in {"staff", "manager"}:
+        return None, None
+
+    name = (getattr(actor, "name", "") or "").strip()
+    email = (getattr(actor, "email", "") or "").strip()
+    if not name:
+        name = email or "Staff"
+
+    try:
+        emp = Employee.objects.create(
+            name=name,
+            position=role,
+            contact=email,
+            status="active",
+            user=actor,
         )
-
-    return None, None
+        return emp, str(emp.id)
+    except Exception:
+        return None, None
 
 
 @require_http_methods(["GET", "POST"])
@@ -200,8 +249,10 @@ def attendance(request):
 
         self_employee = None
         self_employee_id = None
+        self_employee, self_employee_id = _employee_for_actor(
+            actor, create_if_missing=True, allow_fallback=True
+        )
         if not can_manage:
-            self_employee, self_employee_id = _employee_for_actor(actor, create_if_missing=False, allow_fallback=False)
             if not self_employee or not self_employee_id:
                 return JsonResponse({"success": False, "message": "No employee profile found"}, status=403)
 
@@ -224,11 +275,21 @@ def attendance(request):
             emp_id = str(self_employee_id)
 
         else:
-            if not emp_id:
-                return JsonResponse({"success": False, "message": "employeeId is required"}, status=400)
-            emp = Employee.objects.filter(id=emp_id).first()
-            if not emp:
-                return JsonResponse({"success": False, "message": "Employee not found"}, status=404)
+            actor_id = getattr(actor, "id", None)
+            actor_id_variants = _identifier_variants(actor_id)
+            if emp_id:
+                emp = Employee.objects.filter(id=emp_id).first()
+                if not emp:
+                    if self_employee and emp_id in actor_id_variants:
+                        emp = self_employee
+                        emp_id = str(self_employee_id)
+                    else:
+                        return JsonResponse({"success": False, "message": "Employee not found"}, status=404)
+            else:
+                if not self_employee:
+                    return JsonResponse({"success": False, "message": "employeeId is required"}, status=400)
+                emp = self_employee
+                emp_id = str(self_employee_id)
 
         ci = _parse_time(payload.get("checkIn")) if payload.get("checkIn") else None
         co = _parse_time(payload.get("checkOut")) if payload.get("checkOut") else None

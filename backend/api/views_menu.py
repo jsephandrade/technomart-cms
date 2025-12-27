@@ -1133,7 +1133,7 @@ def menu_categories(request):
         return JsonResponse({"success": False, "message": f"Failed to create category: {str(e)}"}, status=500)
 
 
-@require_http_methods(["PUT", "PATCH"])
+@require_http_methods(["PUT", "PATCH", "DELETE"])
 def menu_category_detail(request, category_id):
     actor, err = _actor_from_request(request)
     if not actor:
@@ -1156,6 +1156,34 @@ def menu_category_detail(request, category_id):
         if not category:
             return JsonResponse(
                 {"success": False, "message": "Category not found"}, status=404
+            )
+
+        if request.method == "DELETE":
+            item_count = MenuItem.objects.filter(
+                category__iexact=category.name
+            ).count()
+            if item_count > 0:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Move menu items out of this category before deleting.",
+                    },
+                    status=400,
+                )
+
+            deleted_id = str(category.id)
+            deleted_name = category.name
+            category.delete()
+            _record_menu_audit(
+                request,
+                actor,
+                action="Category deleted",
+                details=f"Deleted category '{deleted_name}'",
+                severity="warning",
+                meta={"id": deleted_id, "name": deleted_name},
+            )
+            return JsonResponse(
+                {"success": True, "data": {"id": deleted_id, "name": deleted_name}}
             )
 
         payload = json.loads(request.body.decode("utf-8") or "{}")

@@ -514,6 +514,15 @@ const CategoryTabs = ({
         category={editingCategory}
         onClose={() => setEditingCategory(null)}
         onUpdated={handleCategoryUpdated}
+        onDeleted={(deleted) => {
+          const deletedName = (deleted?.name || editingCategory?.name || '')
+            .trim()
+            .toLowerCase();
+          if (deletedName && activeTab.toLowerCase() === deletedName) {
+            setActiveTab('all');
+          }
+          onCategoryUpdated?.(deleted);
+        }}
       />
 
       <AlertDialog

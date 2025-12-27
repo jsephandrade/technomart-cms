@@ -9,6 +9,16 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,7 +37,7 @@ const normalizeSortOrderSelection = (value) => {
   return String(parsed);
 };
 
-const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
+const EditCategoryDialog = ({ category, onClose, onUpdated, onDeleted }) => {
   const initial = useMemo(() => {
     if (!category) {
       return { name: '', description: '', sortOrder: '' };
@@ -46,6 +56,8 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
   const [sortOrder, setSortOrder] = useState(initial.sortOrder);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const nameInputRef = useRef(null);
 
   useEffect(() => {
@@ -54,6 +66,8 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
     setSortOrder(initial.sortOrder);
     setSaving(false);
     setSubmitted(false);
+    setDeleteDialogOpen(false);
+    setDeleting(false);
     setTimeout(() => {
       nameInputRef.current?.focus?.();
     }, 100);
@@ -88,6 +102,25 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
       toast.error(error?.message || 'Failed to update category');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!category?.id) {
+      toast.error('Missing category id.');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await menuService.deleteCategory(category.id);
+      toast.success(`Category "${category.name}" deleted`);
+      onDeleted?.({ id: category.id, name: category.name });
+      onClose?.();
+    } catch (error) {
+      toast.error(error?.message || 'Failed to delete category');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -217,6 +250,8 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
               variant="destructive"
               size="icon"
               className="h-9 w-9 sm:mr-auto"
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={saving || deleting}
               aria-label="Delete category"
               title="Delete category"
             >
@@ -226,16 +261,41 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={saving}
+              disabled={saving || deleting}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || deleting}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the category if no menu items are assigned to it.
+              Move items out of this category before deleting.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                handleDelete();
+              }}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };

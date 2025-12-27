@@ -387,8 +387,8 @@ export default function AttendancePanel() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="col-span-1 lg:col-span-2 relative overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all duration-300">
+      <div className="grid grid-cols-1 gap-6">
+        <Card className="relative overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all duration-300">
           <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-3xl" />
           <CardHeader className="pb-3 relative">
             <div className="flex items-center gap-2 mb-1">

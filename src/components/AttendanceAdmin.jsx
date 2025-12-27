@@ -36,6 +36,7 @@ import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 export default function AttendanceAdmin() {
   const { hasAnyRole } = useAuth();
   const isManager = hasAnyRole(['admin', 'manager']);
+  const isAdmin = hasAnyRole(['admin']);
   const { records, loading, setParams, updateRecord, deleteRecord } =
     useAttendance();
   const { employees } = useEmployees();
@@ -189,20 +190,22 @@ export default function AttendanceAdmin() {
                     >
                       <EditIcon className="mr-1 h-3.5 w-3.5" /> Edit
                     </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await deleteRecord(r.id);
-                          toast.success('Deleted');
-                        } catch {
-                          toast.error('Failed to delete');
-                        }
-                      }}
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
-                    </Button>
+                    {isAdmin ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            await deleteRecord(r.id);
+                            toast.success('Deleted');
+                          } catch {
+                            toast.error('Failed to delete');
+                          }
+                        }}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+                      </Button>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}

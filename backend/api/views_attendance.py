@@ -6,6 +6,7 @@ Rules:
 """
 
 import json
+import uuid
 from datetime import datetime, date, time
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -46,6 +47,20 @@ def _parse_time(val):
         return time(hour=int(h), minute=int(m), second=int(s))
     except Exception:
         return None
+
+
+def _normalize_uuid(value):
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return str(uuid.UUID(raw))
+    except Exception:
+        return raw
 
 
 def _time_to_str(val):
@@ -97,8 +112,8 @@ def _safe_att(a):
         created_at = getattr(a, "created_at", None)
         updated_at = getattr(a, "updated_at", None)
     return {
-        "id": str(rid) if rid is not None else None,
-        "employeeId": str(employee_id) if employee_id is not None else None,
+        "id": _normalize_uuid(rid) if rid is not None else None,
+        "employeeId": _normalize_uuid(employee_id) if employee_id is not None else None,
         "employeeName": employee_name or "",
         "date": _iso_or_str(date_v),
         "checkIn": _time_to_str(check_in),

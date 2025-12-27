@@ -36,6 +36,8 @@ import { Edit as EditIcon, Trash2, Loader2 } from 'lucide-react';
 export default function LeaveManagement() {
   const { user, hasAnyRole } = useAuth();
   const isManager = hasAnyRole(['admin', 'manager']);
+  const isAdmin = hasAnyRole(['admin']);
+  const canEditLeave = isAdmin;
   const {
     records,
     loading,
@@ -309,9 +311,11 @@ export default function LeaveManagement() {
           badgeText="Leave Requests"
           description="Request and manage leave"
           headerActions={
-            <Button onClick={onAdd} className="shrink-0">
-              Add Leave
-            </Button>
+            canEditLeave ? (
+              <Button onClick={onAdd} className="shrink-0">
+                Add Leave
+              </Button>
+            ) : null
           }
           contentClassName="space-y-4"
         >
@@ -433,20 +437,24 @@ export default function LeaveManagement() {
                     </TableCell>
                     {isManager && (
                       <TableCell className="text-right space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onEdit(r)}
-                        >
-                          <EditIcon className="h-3.5 w-3.5 mr-1" /> Edit
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => onDelete(r.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                        </Button>
+                        {canEditLeave ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onEdit(r)}
+                            >
+                              <EditIcon className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => onDelete(r.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        ) : null}
                         {r.status === 'pending' && (
                           <>
                             <Button size="sm" onClick={() => onApprove(r)}>
@@ -477,7 +485,7 @@ export default function LeaveManagement() {
         </FeaturePanelCard>
       )}
 
-      {isManager && (
+      {canEditLeave && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogHeader>

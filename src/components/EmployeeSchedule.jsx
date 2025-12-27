@@ -73,7 +73,17 @@ const EmployeeSchedule = () => {
   const canManage = hasAnyRole(['manager', 'admin']);
   const isAdmin = hasAnyRole(['admin']);
   const isStaffOnly = hasAnyRole(['staff']) && !canManage;
-  const leaveTabLabel = isAdmin ? 'Leave Records' : 'Leave Request';
+  const showCombinedAttendanceLeave = canManage && !isAdmin;
+  const attendanceTabValue = showCombinedAttendanceLeave
+    ? 'attendance-leave'
+    : 'attendance';
+  const attendanceTabLabel = showCombinedAttendanceLeave
+    ? 'Attendance & Leave'
+    : 'Attendance Records';
+  const leaveTabLabel = 'Leave Records';
+  const tabsGridCols = showCombinedAttendanceLeave
+    ? 'grid-cols-3'
+    : 'grid-cols-4';
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -648,7 +658,9 @@ const EmployeeSchedule = () => {
           onValueChange={setActiveTab}
           className="w-full space-y-6"
         >
-          <TabsList className="w-full grid grid-cols-4 gap-2 bg-muted/40 p-1 rounded-lg">
+          <TabsList
+            className={`w-full grid ${tabsGridCols} gap-2 bg-muted/40 p-1 rounded-lg`}
+          >
             <TabsTrigger
               value="add"
               aria-label="Add Employee and Schedule"
@@ -668,21 +680,23 @@ const EmployeeSchedule = () => {
               <span className="hidden lg:inline">Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
-              value="attendance"
-              aria-label="Attendance Records"
+              value={attendanceTabValue}
+              aria-label={attendanceTabLabel}
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">Attendance Records</span>
+              <span className="hidden lg:inline">{attendanceTabLabel}</span>
             </TabsTrigger>
-            <TabsTrigger
-              value="leave"
-              aria-label={leaveTabLabel}
-              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
-            >
-              <Plane className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">{leaveTabLabel}</span>
-            </TabsTrigger>
+            {isAdmin ? (
+              <TabsTrigger
+                value="leave"
+                aria-label={leaveTabLabel}
+                className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
+              >
+                <Plane className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden lg:inline">{leaveTabLabel}</span>
+              </TabsTrigger>
+            ) : null}
           </TabsList>
           <TabsContent value="add" className="space-y-6">
             {activeTab === 'add' ? addEmployeeContent : null}
@@ -690,12 +704,23 @@ const EmployeeSchedule = () => {
           <TabsContent value="schedule" className="space-y-6">
             {activeTab === 'schedule' ? schedulePane : null}
           </TabsContent>
-          <TabsContent value="attendance" className="space-y-6">
-            {activeTab === 'attendance' ? <AttendanceAdmin /> : null}
+          <TabsContent value={attendanceTabValue} className="space-y-6">
+            {activeTab === attendanceTabValue ? (
+              showCombinedAttendanceLeave ? (
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <AttendanceAdmin />
+                  <LeaveManagement />
+                </div>
+              ) : (
+                <AttendanceAdmin />
+              )
+            ) : null}
           </TabsContent>
-          <TabsContent value="leave" className="space-y-6">
-            {activeTab === 'leave' ? <LeaveManagement /> : null}
-          </TabsContent>
+          {isAdmin ? (
+            <TabsContent value="leave" className="space-y-6">
+              {activeTab === 'leave' ? <LeaveManagement /> : null}
+            </TabsContent>
+          ) : null}
         </Tabs>
       ) : (
         <>

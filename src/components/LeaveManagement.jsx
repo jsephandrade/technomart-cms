@@ -5,6 +5,7 @@ import { useEmployees } from '@/hooks/useEmployees';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -12,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import {
   Table,
@@ -32,8 +34,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
+  CalendarRange,
+  ClipboardList,
   CheckCircle2,
   Edit as EditIcon,
+  FileText,
   Loader2,
   Plane,
   Trash2,
@@ -194,112 +199,152 @@ export default function LeaveManagement() {
           badgeIcon={Plane}
           description="Submit a leave request for review"
           className="w-full"
-          contentClassName="space-y-3"
+          contentClassName="space-y-5"
         >
-          {/* Compact, left-aligned form */}
-          <div className="grid gap-2 py-1">
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Type</Label>
-              <Select
-                value={editing?.type || 'other'}
-                onValueChange={(v) =>
-                  setEditing((x) => ({
-                    ...(x || {
-                      id: null,
-                      employeeId: '',
-                      startDate: '',
-                      endDate: '',
-                      type: 'other',
-                      status: 'pending',
-                      reason: '',
-                    }),
-                    type: v,
-                  }))
-                }
-              >
-                <SelectTrigger className="col-span-3 max-w-[14rem] h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sick">Sick</SelectItem>
-                  <SelectItem value="vacation">Vacation</SelectItem>
-                  <SelectItem value="emergency">Emergency</SelectItem>
-                  <SelectItem value="bereavement">Bereavement</SelectItem>
-                  <SelectItem value="maternity">Maternity</SelectItem>
-                  <SelectItem value="paternity">Paternity</SelectItem>
-                  <SelectItem value="training">Training</SelectItem>
-                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              <span>Request Details</span>
             </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Start</Label>
-              <Input
-                type="date"
-                className="col-span-3 max-w-[14rem] h-8 text-xs"
-                value={editing?.startDate || ''}
-                onChange={(e) =>
-                  setEditing((x) => ({
-                    ...(x || {
-                      id: null,
-                      employeeId: '',
-                      startDate: '',
-                      endDate: '',
-                      type: 'other',
-                      status: 'pending',
-                      reason: '',
-                    }),
-                    startDate: e.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">End</Label>
-              <Input
-                type="date"
-                className="col-span-3 max-w-[14rem] h-8 text-xs"
-                value={editing?.endDate || ''}
-                onChange={(e) =>
-                  setEditing((x) => ({
-                    ...(x || {
-                      id: null,
-                      employeeId: '',
-                      startDate: '',
-                      endDate: '',
-                      type: 'other',
-                      status: 'pending',
-                      reason: '',
-                    }),
-                    endDate: e.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <Label className="text-right">Reason</Label>
-              <Input
-                className="col-span-3 max-w-[14rem] h-8 text-xs"
-                value={editing?.reason || ''}
-                onChange={(e) =>
-                  setEditing((x) => ({
-                    ...(x || {
-                      id: null,
-                      employeeId: '',
-                      startDate: '',
-                      endDate: '',
-                      type: 'other',
-                      status: 'pending',
-                      reason: '',
-                    }),
-                    reason: e.target.value,
-                  }))
-                }
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="flex items-center h-5">Leave Type</Label>
+                <Select
+                  value={editing?.type || 'other'}
+                  onValueChange={(v) =>
+                    setEditing((x) => ({
+                      ...(x || {
+                        id: null,
+                        employeeId: '',
+                        startDate: '',
+                        endDate: '',
+                        type: 'other',
+                        status: 'pending',
+                        reason: '',
+                      }),
+                      type: v,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select leave type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sick">Sick</SelectItem>
+                    <SelectItem value="vacation">Vacation</SelectItem>
+                    <SelectItem value="emergency">Emergency</SelectItem>
+                    <SelectItem value="bereavement">Bereavement</SelectItem>
+                    <SelectItem value="maternity">Maternity</SelectItem>
+                    <SelectItem value="paternity">Paternity</SelectItem>
+                    <SelectItem value="training">Training</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Helps route your request to the right approver
+                </p>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label className="flex items-center gap-2 h-5">
+                  Reason
+                  <Badge variant="secondary" className="text-xs">
+                    Optional
+                  </Badge>
+                </Label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Textarea
+                    className="min-h-[90px] pl-9"
+                    placeholder="Share a brief reason or notes for your request"
+                    value={editing?.reason || ''}
+                    onChange={(e) =>
+                      setEditing((x) => ({
+                        ...(x || {
+                          id: null,
+                          employeeId: '',
+                          startDate: '',
+                          endDate: '',
+                          type: 'other',
+                          status: 'pending',
+                          reason: '',
+                        }),
+                        reason: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Keep it short so the approver can review quickly
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-1">
+
+          <Separator />
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <CalendarRange className="h-4 w-4" aria-hidden="true" />
+              <span>Leave Schedule</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1 h-5">
+                  Start Date <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={editing?.startDate || ''}
+                  onChange={(e) =>
+                    setEditing((x) => ({
+                      ...(x || {
+                        id: null,
+                        employeeId: '',
+                        startDate: '',
+                        endDate: '',
+                        type: 'other',
+                        status: 'pending',
+                        reason: '',
+                      }),
+                      startDate: e.target.value,
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  First day away from work
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1 h-5">
+                  End Date <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={editing?.endDate || ''}
+                  onChange={(e) =>
+                    setEditing((x) => ({
+                      ...(x || {
+                        id: null,
+                        employeeId: '',
+                        startDate: '',
+                        endDate: '',
+                        type: 'other',
+                        status: 'pending',
+                        reason: '',
+                      }),
+                      endDate: e.target.value,
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Last day covered by the request
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               size="sm"
               variant="outline"
@@ -307,7 +352,8 @@ export default function LeaveManagement() {
             >
               Clear
             </Button>
-            <Button size="sm" onClick={onSave}>
+            <Button size="sm" onClick={onSave} className="gap-2">
+              <Plane className="h-4 w-4" aria-hidden="true" />
               Submit
             </Button>
           </div>

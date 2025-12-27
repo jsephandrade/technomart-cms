@@ -19,6 +19,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { formatOrderNumber } from '@/lib/utils';
+import { ListOrdered, Monitor, ShoppingCart } from 'lucide-react';
 
 const POS = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -194,9 +195,18 @@ const POS = () => {
         className="w-full"
       >
         <TabsList className="w-full grid grid-cols-3">
-          <TabsTrigger value="pos">Point of Sale</TabsTrigger>
-          <TabsTrigger value="queue">Order Queue</TabsTrigger>
-          <TabsTrigger value="display">Claim Monitor</TabsTrigger>
+          <TabsTrigger value="pos" className="gap-2">
+            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">Point of Sale</span>
+          </TabsTrigger>
+          <TabsTrigger value="queue" className="gap-2">
+            <ListOrdered className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">Order Queue</span>
+          </TabsTrigger>
+          <TabsTrigger value="display" className="gap-2">
+            <Monitor className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">Claim Monitor</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pos">

@@ -673,8 +673,6 @@ const EmployeeSchedule = () => {
       setNewScheduleEntry={setNewScheduleEntry}
       handleScheduleDialogOpenChange={handleScheduleDialogOpenChange}
       defaultScheduleEntry={DEFAULT_SCHEDULE_ENTRY}
-      user={attendanceUser || user}
-      showTimeCard={isAdmin}
       onOpenManageEmployees={handleOpenManageEmployees}
       onOpenAddSchedule={() => {
         if (!canManage) return;
@@ -685,12 +683,7 @@ const EmployeeSchedule = () => {
   );
 
   const attendanceLeavePanel =
-    attendanceUser && !isAdmin ? (
-      <div className="grid gap-6 lg:grid-cols-2">
-        <AttendanceTimeCard user={attendanceUser} />
-        <LeaveManagement />
-      </div>
-    ) : null;
+    attendanceUser && !isAdmin ? <LeaveManagement /> : null;
 
   return (
     <div className="space-y-6">

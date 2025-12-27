@@ -1,7 +1,6 @@
 import React from 'react';
 import WeeklyScheduleCard from '@/components/employee-schedule/WeeklyScheduleCard';
 import ScheduleCalendar from '@/components/schedule/ScheduleCalendar';
-import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
 
 const ScheduleTab = ({
   daysOfWeek,
@@ -15,8 +14,6 @@ const ScheduleTab = ({
   setNewScheduleEntry,
   handleScheduleDialogOpenChange,
   defaultScheduleEntry,
-  user,
-  showTimeCard = true,
   onOpenManageEmployees,
   onOpenAddSchedule,
 }) => (
@@ -59,9 +56,6 @@ const ScheduleTab = ({
         />
       </div>
     </div>
-    {showTimeCard && user ? (
-      <AttendanceTimeCard user={user} className="w-full" />
-    ) : null}
   </div>
 );
 

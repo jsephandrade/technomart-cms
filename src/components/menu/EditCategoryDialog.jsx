@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import menuService from '@/api/services/menuService';
 import { toast } from 'sonner';
-import { AlertCircle, ArrowUpDown, Tag } from 'lucide-react';
+import { AlertCircle, ArrowUpDown, Tag, Trash2 } from 'lucide-react';
 
 const normalizeSortOrderSelection = (value) => {
   if (value === '' || value === null || value === undefined) return '';
@@ -212,6 +212,16 @@ const EditCategoryDialog = ({ category, onClose, onUpdated }) => {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="h-9 w-9 sm:mr-auto"
+              aria-label="Delete category"
+              title="Delete category"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
             <Button
               type="button"
               variant="outline"

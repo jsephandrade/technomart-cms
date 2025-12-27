@@ -80,7 +80,7 @@ const EmployeeSchedule = () => {
   const attendanceTabLabel = showCombinedAttendanceLeave
     ? 'Attendance & Leave'
     : 'Attendance Records';
-  const leaveTabLabel = 'Leave Records';
+  const leaveTabLabel = isAdmin ? 'Leave Management' : 'Leave Records';
   const tabsGridCols = showCombinedAttendanceLeave
     ? 'grid-cols-3'
     : 'grid-cols-4';

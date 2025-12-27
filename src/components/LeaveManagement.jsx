@@ -31,7 +31,13 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Edit as EditIcon, Trash2, Loader2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Edit as EditIcon,
+  Loader2,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 
 export default function LeaveManagement() {
   const { user, hasAnyRole } = useAuth();
@@ -435,32 +441,40 @@ export default function LeaveManagement() {
                     </TableCell>
                     {isAdmin && (
                       <TableCell className="text-right space-x-2">
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEdit(r)}
-                          >
-                            <EditIcon className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => onDelete(r.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
+                        {r.status !== 'pending' ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onEdit(r)}
+                            >
+                              <EditIcon className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => onDelete(r.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        ) : null}
                         {r.status === 'pending' && (
                           <>
-                            <Button size="sm" onClick={() => onApprove(r)}>
+                            <Button
+                              size="sm"
+                              onClick={() => onApprove(r)}
+                              className="gap-2 border border-emerald-600 bg-white text-emerald-700 hover:bg-emerald-50"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
                               Approve
                             </Button>
                             <Button
-                              variant="secondary"
                               size="sm"
                               onClick={() => onReject(r)}
+                              className="gap-2 border border-red-600 bg-white text-red-700 hover:bg-red-50"
                             >
+                              <XCircle className="h-4 w-4" />
                               Reject
                             </Button>
                           </>

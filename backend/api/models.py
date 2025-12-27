@@ -424,6 +424,8 @@ class AuditLog(models.Model):
     ip_address = models.CharField(max_length=64, blank=True)
     user_agent = models.CharField(max_length=256, blank=True)
     meta = models.JSONField(default=dict, blank=True)
+    acknowledged_at = models.DateTimeField(blank=True, null=True)
+    dismissed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

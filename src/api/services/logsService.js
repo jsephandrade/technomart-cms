@@ -128,6 +128,41 @@ class LogsService {
       ];
     }
   }
+
+  async acknowledgeAlert(alertId) {
+    if (!alertId) throw new Error('Alert id required');
+    try {
+      const res = await apiClient.post(
+        `/logs/alerts/${alertId}/acknowledge`,
+        {}
+      );
+      if (res && res.success) return res.data;
+      throw new Error('Unexpected response');
+    } catch {
+      await mockDelay(120);
+      return {
+        id: String(alertId),
+        status: 'acknowledged',
+        acknowledgedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  async dismissAlert(alertId) {
+    if (!alertId) throw new Error('Alert id required');
+    try {
+      const res = await apiClient.post(`/logs/alerts/${alertId}/dismiss`, {});
+      if (res && res.success) return res.data;
+      throw new Error('Unexpected response');
+    } catch {
+      await mockDelay(120);
+      return {
+        id: String(alertId),
+        status: 'dismissed',
+        dismissedAt: new Date().toISOString(),
+      };
+    }
+  }
 }
 
 export const logsService = new LogsService();

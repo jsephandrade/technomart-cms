@@ -127,106 +127,116 @@ const Section = ({
   onToggle,
   completedItems,
   onToggleItem,
-}) => (
-  <div
-    className={cn(
-      'flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm',
-      className
-    )}
-  >
-    <div className="flex items-center justify-between">
-      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-        {title}
-      </p>
-      <span
+}) => {
+  const hasTitle = Boolean(title);
+  return (
+    <div
+      className={cn(
+        'flex flex-col gap-3 rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm',
+        className
+      )}
+    >
+      <div
         className={cn(
-          'text-xs font-semibold uppercase tracking-widest',
-          accent
+          'flex items-center',
+          hasTitle ? 'justify-between' : 'justify-end'
         )}
       >
-        {orders.length}
-      </span>
-    </div>
-    <div className="flex flex-col gap-3">
-      {orders.length ? (
-        orders.slice(0, 6).map((order) => {
-          const orderKey = getOrderKey(order);
-          const isExpanded = expandedIds.has(orderKey);
-          const items = Array.isArray(order.items) ? order.items : [];
+        {hasTitle ? (
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+            {title}
+          </p>
+        ) : null}
+        <span
+          className={cn(
+            'text-xs font-semibold uppercase tracking-widest',
+            accent
+          )}
+        >
+          {orders.length}
+        </span>
+      </div>
+      <div className="flex flex-col gap-3">
+        {orders.length ? (
+          orders.slice(0, 6).map((order) => {
+            const orderKey = getOrderKey(order);
+            const isExpanded = expandedIds.has(orderKey);
+            const items = Array.isArray(order.items) ? order.items : [];
 
-          const toggle = () => onToggle(orderKey);
-          const handleKeyDown = (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              toggle();
-            }
-          };
+            const toggle = () => onToggle(orderKey);
+            const handleKeyDown = (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggle();
+              }
+            };
 
-          return (
-            <div
-              key={orderKey}
-              className="rounded-2xl border border-border/60 bg-background px-4 py-4 text-center shadow-sm transition-colors hover:border-primary/60"
-            >
-              <button
-                type="button"
-                className="flex w-full flex-col items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                onClick={toggle}
-                onKeyDown={handleKeyDown}
+            return (
+              <div
+                key={orderKey}
+                className="rounded-2xl border border-border/60 bg-background px-4 py-4 text-center shadow-sm transition-colors hover:border-primary/60"
               >
-                <p className="text-3xl font-black tracking-[0.25em] text-foreground sm:text-4xl">
-                  {getOrderDisplayNumber(order)}
-                </p>
-                <span className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-                  {isExpanded ? 'Hide items' : 'View items'}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  onClick={toggle}
+                  onKeyDown={handleKeyDown}
+                >
+                  <p className="text-3xl font-black tracking-[0.25em] text-foreground sm:text-4xl">
+                    {getOrderDisplayNumber(order)}
+                  </p>
+                  <span className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+                    {isExpanded ? 'Hide items' : 'View items'}
+                  </span>
+                </button>
 
-              {isExpanded && (
-                <div className="mt-3 space-y-2 border-t border-dashed border-border/60 pt-3 text-left">
-                  {items.length ? (
-                    items.map((item, idx) => {
-                      const itemKey = `${orderKey}-item-${idx}`;
-                      const checked = completedItems.has(itemKey);
-                      return (
-                        <label
-                          key={itemKey}
-                          className="flex items-start gap-3 text-sm text-foreground"
-                        >
-                          <span className="flex flex-1 items-center gap-2">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
-                              checked={checked}
-                              onChange={() => onToggleItem(itemKey)}
-                            />
-                            <span className="font-semibold">
-                              {getItemQuantity(item)}x
+                {isExpanded && (
+                  <div className="mt-3 space-y-2 border-t border-dashed border-border/60 pt-3 text-left">
+                    {items.length ? (
+                      items.map((item, idx) => {
+                        const itemKey = `${orderKey}-item-${idx}`;
+                        const checked = completedItems.has(itemKey);
+                        return (
+                          <label
+                            key={itemKey}
+                            className="flex items-start gap-3 text-sm text-foreground"
+                          >
+                            <span className="flex flex-1 items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
+                                checked={checked}
+                                onChange={() => onToggleItem(itemKey)}
+                              />
+                              <span className="font-semibold">
+                                {getItemQuantity(item)}x
+                              </span>
+                              <span className="text-muted-foreground">
+                                {getItemLabel(item)}
+                              </span>
                             </span>
-                            <span className="text-muted-foreground">
-                              {getItemLabel(item)}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      No items available.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })
-      ) : (
-        <div className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
-          {emptyText}
-        </div>
-      )}
+                          </label>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No items available.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
+            {emptyText}
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const CustomerDisplay = ({ queue }) => {
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -299,7 +309,7 @@ const CustomerDisplay = ({ queue }) => {
 
   return (
     <Card className="h-full border border-border/60 bg-card/90 shadow-sm">
-      <CardHeader className="space-y-2">
+      <CardHeader className="hidden space-y-2 lg:block">
         <div className="flex w-full items-center gap-4 text-4xl font-semibold uppercase tracking-[0.4em] text-muted-foreground">
           <span className="flex-1 text-center text-foreground">Preparing</span>
           <span className="flex-1 text-center text-foreground">
@@ -307,30 +317,41 @@ const CustomerDisplay = ({ queue }) => {
           </span>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <div className="grid gap-5 md:grid-cols-2">
-          <Section
-            title=""
-            accent="text-amber-600 dark:text-amber-300"
-            orders={preparingOrders}
-            emptyText="No orders currently in preparation."
-            className="bg-blue-500/10 dark:bg-blue-500/20"
-            expandedIds={expandedIds}
-            onToggle={handleToggle}
-            completedItems={completedItems}
-            onToggleItem={handleToggleItem}
-          />
-          <Section
-            title=""
-            accent="text-emerald-600 dark:text-emerald-300"
-            orders={servingOrders}
-            emptyText="No orders ready for pickup."
-            className="bg-emerald-500/10 dark:bg-emerald-500/20 md:border-l md:border-border/60 md:pl-6"
-            expandedIds={expandedIds}
-            onToggle={handleToggle}
-            completedItems={completedItems}
-            onToggleItem={handleToggleItem}
-          />
+      <CardContent className="flex flex-col gap-6 px-6 pb-8 pt-6 sm:px-8 lg:p-6 lg:pt-0">
+        <div className="flex flex-col gap-10 lg:grid lg:grid-cols-2 lg:gap-5">
+          <div className="flex flex-col items-center gap-4 lg:items-stretch">
+            <p className="text-3xl font-semibold uppercase tracking-[0.4em] text-foreground sm:text-4xl lg:hidden">
+              Preparing
+            </p>
+            <Section
+              title=""
+              accent="text-amber-600 dark:text-amber-300"
+              orders={preparingOrders}
+              emptyText="No orders currently in preparation."
+              className="w-full bg-blue-500/10 dark:bg-blue-500/20"
+              expandedIds={expandedIds}
+              onToggle={handleToggle}
+              completedItems={completedItems}
+              onToggleItem={handleToggleItem}
+            />
+          </div>
+          <div className="flex flex-col items-center gap-4 lg:items-stretch">
+            <p className="text-3xl font-semibold uppercase tracking-[0.4em] text-foreground sm:text-4xl lg:hidden">
+              <span className="block">Now</span>
+              <span className="block">Serving</span>
+            </p>
+            <Section
+              title=""
+              accent="text-emerald-600 dark:text-emerald-300"
+              orders={servingOrders}
+              emptyText="No orders ready for pickup."
+              className="w-full bg-emerald-500/10 dark:bg-emerald-500/20 lg:border-l lg:border-border/60 lg:pl-6"
+              expandedIds={expandedIds}
+              onToggle={handleToggle}
+              completedItems={completedItems}
+              onToggleItem={handleToggleItem}
+            />
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -7,7 +7,6 @@ import {
   Ban,
   BellOff,
   CheckCircle2,
-  Search,
   ShieldAlert,
   ShieldCheck,
   XCircle,
@@ -158,7 +157,6 @@ const SecurityAlertsCard = ({
   onBlockIP,
   onDismiss,
   onAcknowledge,
-  onInvestigate,
   onEscalate,
   onMute,
   headerActions,
@@ -390,17 +388,6 @@ const SecurityAlertsCard = ({
                     ) : null}
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {severity.level >= 2 ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onInvestigate?.(alert)}
-                          aria-label="Investigate"
-                        >
-                          <Search className="mr-2 h-4 w-4" />
-                          <span className="hidden lg:inline">Investigate</span>
-                        </Button>
-                      ) : null}
                       {severity.level >= 3 ? (
                         <Button
                           size="sm"

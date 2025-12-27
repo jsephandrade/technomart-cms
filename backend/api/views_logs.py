@@ -4,13 +4,19 @@ DB-backed when available; falls back to in-memory list when DB is not ready.
 """
 
 import json
+import uuid
 from datetime import timedelta, datetime
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone as dj_timezone
 
-from .views_common import _actor_from_request, _require_admin_or_manager, _client_meta
+from .views_common import (
+    _actor_from_request,
+    _require_admin_or_manager,
+    _client_meta,
+    _identifier_variants,
+)
 
 
 LOGS_MEM = []  # in-memory fallback: list of dicts
@@ -70,6 +76,76 @@ def _parse_timerange(val: str):
     if val == "30d":
         return now - timedelta(days=30)
     return None
+
+
+def _resolve_alert_status_db(log):
+    if getattr(log, "dismissed_at", None):
+        return "dismissed"
+    if getattr(log, "acknowledged_at", None):
+        return "acknowledged"
+    return ""
+
+
+def _resolve_alert_status_mem(entry):
+    meta = entry.get("meta") or {}
+    raw = (
+        entry.get("status")
+        or entry.get("state")
+        or meta.get("alertStatus")
+        or meta.get("status")
+        or ""
+    )
+    normalized = str(raw).strip().lower()
+    if normalized in {"dismissed", "dismiss"}:
+        return "dismissed"
+    if normalized in {"acknowledged", "ack", "resolved"}:
+        return "acknowledged"
+    if meta.get("dismissedAt") or entry.get("dismissedAt"):
+        return "dismissed"
+    if meta.get("acknowledgedAt") or entry.get("acknowledgedAt"):
+        return "acknowledged"
+    return ""
+
+
+def _parse_alert_uuid(alert_id):
+    try:
+        return uuid.UUID(str(alert_id))
+    except Exception:
+        return None
+
+
+def _find_mem_alert(alert_id):
+    variants = _identifier_variants(alert_id)
+    for entry in LOGS_MEM:
+        entry_id = str(entry.get("id") or "")
+        if entry_id in variants or entry_id.lower() in variants:
+            return entry
+    return None
+
+
+def _update_mem_alert_status(alert_id, status):
+    entry = _find_mem_alert(alert_id)
+    if not entry:
+        return None
+    meta = entry.get("meta") or {}
+    now_iso = dj_timezone.now().isoformat()
+    if status == "acknowledged":
+        meta["alertStatus"] = "acknowledged"
+        meta["acknowledgedAt"] = now_iso
+        entry["status"] = "acknowledged"
+        entry["acknowledgedAt"] = now_iso
+    elif status == "dismissed":
+        meta["alertStatus"] = "dismissed"
+        meta["dismissedAt"] = now_iso
+        entry["status"] = "dismissed"
+        entry["dismissedAt"] = now_iso
+    entry["meta"] = meta
+    return {
+        "id": str(entry.get("id") or alert_id),
+        "status": entry.get("status") or status,
+        "acknowledgedAt": entry.get("acknowledgedAt") or meta.get("acknowledgedAt"),
+        "dismissedAt": entry.get("dismissedAt") or meta.get("dismissedAt"),
+    }
 
 
 @require_http_methods(["GET", "POST"]) 
@@ -319,13 +395,17 @@ def logs_alerts(request):
 
     try:
         from .models import AuditLog
-        qs = AuditLog.objects.filter(type="security").order_by("-created_at")[:20]
+        qs = (
+            AuditLog.objects.filter(type="security", dismissed_at__isnull=True)
+            .order_by("-created_at")[:20]
+        )
         out = []
         for l in qs:
             sev = (l.severity or "").lower()
             if sev not in {"warning", "critical"}:
                 continue
             item = _serialize_db(l)
+            status = _resolve_alert_status_db(l)
             out.append(
                 {
                     "id": item.get("id") or str(l.id),
@@ -337,6 +417,12 @@ def logs_alerts(request):
                     "user": item.get("user") or "",
                     "userId": item.get("userId") or "",
                     "ip": item.get("ip") or "",
+                    "status": status,
+                    "acknowledgedAt": (
+                        l.acknowledged_at.isoformat()
+                        if getattr(l, "acknowledged_at", None)
+                        else None
+                    ),
                     "meta": item.get("meta") or {},
                 }
             )
@@ -352,6 +438,9 @@ def logs_alerts(request):
         sev = (e.get("severity") or "").lower()
         if sev not in {"warning", "critical"}:
             continue
+        status = _resolve_alert_status_mem(e)
+        if status == "dismissed":
+            continue
         item = _serialize_mem(e)
         out.append(
             {
@@ -366,10 +455,125 @@ def logs_alerts(request):
                 "user": item.get("user") or "",
                 "userId": item.get("userId") or "",
                 "ip": item.get("ip") or "",
+                "status": status,
+                "acknowledgedAt": (
+                    e.get("acknowledgedAt")
+                    or item.get("meta", {}).get("acknowledgedAt")
+                ),
                 "meta": item.get("meta") or {},
             }
         )
     return JsonResponse({"success": True, "data": out})
 
 
-__all__ = ["logs", "logs_summary", "logs_alerts"]
+@require_http_methods(["POST"])
+def logs_alert_acknowledge(request, alert_id):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    is_mgr = False
+    try:
+        from .models import AppUser
+        if hasattr(actor, "id"):
+            is_mgr = _require_admin_or_manager(actor)
+        else:
+            role = (actor.get("role") or "").lower()
+            is_mgr = role in {"admin", "manager"}
+    except Exception:
+        is_mgr = False
+    if not is_mgr:
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    now = dj_timezone.now()
+    try:
+        from .models import AuditLog
+        alert_uuid = _parse_alert_uuid(alert_id)
+        if not alert_uuid:
+            return JsonResponse({"success": False, "message": "Alert not found"}, status=404)
+        log = AuditLog.objects.filter(id=alert_uuid, type="security").first()
+        if not log:
+            return JsonResponse({"success": False, "message": "Alert not found"}, status=404)
+        log.acknowledged_at = now
+        log.save(update_fields=["acknowledged_at"])
+        return JsonResponse(
+            {
+                "success": True,
+                "data": {
+                    "id": str(log.id),
+                    "status": "acknowledged",
+                    "acknowledgedAt": log.acknowledged_at.isoformat()
+                    if log.acknowledged_at
+                    else None,
+                },
+            }
+        )
+    except (OperationalError, ProgrammingError):
+        updated = _update_mem_alert_status(alert_id, "acknowledged")
+        if not updated:
+            return JsonResponse({"success": False, "message": "Alert not found"}, status=404)
+        return JsonResponse({"success": True, "data": updated})
+    except Exception:
+        return JsonResponse(
+            {"success": False, "message": "Failed to acknowledge alert"}, status=500
+        )
+
+
+@require_http_methods(["POST"])
+def logs_alert_dismiss(request, alert_id):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    is_mgr = False
+    try:
+        from .models import AppUser
+        if hasattr(actor, "id"):
+            is_mgr = _require_admin_or_manager(actor)
+        else:
+            role = (actor.get("role") or "").lower()
+            is_mgr = role in {"admin", "manager"}
+    except Exception:
+        is_mgr = False
+    if not is_mgr:
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    now = dj_timezone.now()
+    try:
+        from .models import AuditLog
+        alert_uuid = _parse_alert_uuid(alert_id)
+        if not alert_uuid:
+            return JsonResponse({"success": False, "message": "Alert not found"}, status=404)
+        log = AuditLog.objects.filter(id=alert_uuid, type="security").first()
+        if not log:
+            return JsonResponse({"success": False, "message": "Alert not found"}, status=404)
+        log.dismissed_at = now
+        log.save(update_fields=["dismissed_at"])
+        return JsonResponse(
+            {
+                "success": True,
+                "data": {
+                    "id": str(log.id),
+                    "status": "dismissed",
+                    "dismissedAt": log.dismissed_at.isoformat()
+                    if log.dismissed_at
+                    else None,
+                },
+            }
+        )
+    except (OperationalError, ProgrammingError):
+        updated = _update_mem_alert_status(alert_id, "dismissed")
+        if not updated:
+            return JsonResponse({"success": False, "message": "Alert not found"}, status=404)
+        return JsonResponse({"success": True, "data": updated})
+    except Exception:
+        return JsonResponse(
+            {"success": False, "message": "Failed to dismiss alert"}, status=500
+        )
+
+
+__all__ = [
+    "logs",
+    "logs_summary",
+    "logs_alerts",
+    "logs_alert_acknowledge",
+    "logs_alert_dismiss",
+]

@@ -96,6 +96,16 @@ urlpatterns = [
     path("logs", logs_views.logs, name="logs"),
     path("logs/summary", logs_views.logs_summary, name="logs_summary"),
     path("logs/alerts", logs_views.logs_alerts, name="logs_alerts"),
+    path(
+        "logs/alerts/<str:alert_id>/acknowledge",
+        logs_views.logs_alert_acknowledge,
+        name="logs_alert_acknowledge",
+    ),
+    path(
+        "logs/alerts/<str:alert_id>/dismiss",
+        logs_views.logs_alert_dismiss,
+        name="logs_alert_dismiss",
+    ),
 
     # Notifications
     path("notifications", notif_views.notifications, name="notifications"),

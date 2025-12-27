@@ -15,6 +15,7 @@ import SecurityAlertsCard from './user-logs/SecurityAlertsCard';
 import LogSummaryCard from './user-logs/LogSummaryCard';
 import LogDetailsDialog from './user-logs/LogDetailsDialog';
 import { useLogs } from '@/hooks/useLogs';
+import { logsService } from '@/api/services/logsService';
 import { muteUserFor24Hours } from '@/lib/mutedUsers';
 
 const DEMO_ALERTS_STORAGE_KEY = 'ui.demoSecurityAlerts';
@@ -121,15 +122,17 @@ const UserLogs = () => {
   const [selectedLog, setSelectedLog] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const { logs, filters, setFilters, alerts, summary } = useLogs({
+  const { logs, filters, setFilters, alerts, setAlerts, summary } = useLogs({
     timeRange: '24h',
     limit: 100,
   });
-  const [securityAlerts, setSecurityAlerts] = useState([]);
-  const [dismissedAlertIds, setDismissedAlertIds] = useState([]);
-  const [acknowledgedAlertIds, setAcknowledgedAlertIds] = useState([]);
   const [demoAlerts, setDemoAlerts] = useState([]);
   const [useDemoAlerts, setUseDemoAlerts] = useState(false);
+  const securityAlerts = Array.isArray(useDemoAlerts ? demoAlerts : alerts)
+    ? useDemoAlerts
+      ? demoAlerts
+      : alerts
+    : [];
 
   useEffect(() => {
     const stored = loadDemoAlerts();
@@ -138,25 +141,6 @@ const UserLogs = () => {
       setUseDemoAlerts(true);
     }
   }, []);
-
-  useEffect(() => {
-    const sourceAlerts = useDemoAlerts ? demoAlerts : alerts;
-    const nextAlerts = (sourceAlerts || [])
-      .filter((alert) => !dismissedAlertIds.includes(alert.id))
-      .map((alert) => {
-        if (acknowledgedAlertIds.includes(alert.id)) {
-          return { ...alert, status: 'acknowledged' };
-        }
-        return alert;
-      });
-    setSecurityAlerts(nextAlerts);
-  }, [
-    alerts,
-    dismissedAlertIds,
-    acknowledgedAlertIds,
-    useDemoAlerts,
-    demoAlerts,
-  ]);
 
   // Sync UI controls to backend filters
   useEffect(() => {
@@ -207,57 +191,84 @@ const UserLogs = () => {
     }
   };
 
-  const recordDismissedAlert = (alertId) => {
-    setDismissedAlertIds((prev) =>
-      prev.includes(alertId) ? prev : [...prev, alertId]
-    );
+  const persistDemoAlerts = (nextAlerts) => {
+    try {
+      window.localStorage.setItem(
+        DEMO_ALERTS_STORAGE_KEY,
+        JSON.stringify(nextAlerts)
+      );
+    } catch {}
   };
 
-  const recordAcknowledgedAlert = (alertId) => {
-    setAcknowledgedAlertIds((prev) =>
-      prev.includes(alertId) ? prev : [...prev, alertId]
-    );
-  };
-
-  const handleBlockIP = (alertId) => {
-    toast.success('IP Address Blocked', {
-      description: 'The suspicious IP address has been blocked successfully.',
-    });
-    recordDismissedAlert(alertId);
-    setAcknowledgedAlertIds((prev) =>
-      prev.filter((entry) => entry !== alertId)
-    );
-    setSecurityAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
-  };
-
-  const handleDismissAlert = (alertId) => {
-    recordDismissedAlert(alertId);
-    setAcknowledgedAlertIds((prev) =>
-      prev.filter((entry) => entry !== alertId)
-    );
-    setSecurityAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
-    toast.success('Alert Dismissed', {
-      description: 'Security alert has been dismissed.',
+  const updateAlertList = (updater) => {
+    if (useDemoAlerts) {
+      setDemoAlerts((prev) => {
+        const base = Array.isArray(prev) ? prev : [];
+        const next = updater(base);
+        persistDemoAlerts(next);
+        return next;
+      });
+      return;
+    }
+    setAlerts((prev) => {
+      const base = Array.isArray(prev) ? prev : [];
+      return updater(base);
     });
   };
 
-  const handleAcknowledgeAlert = (alert) => {
+  const handleBlockIP = async (alertId) => {
+    if (!alertId) return;
+    try {
+      if (!useDemoAlerts) {
+        await logsService.dismissAlert(alertId);
+      }
+      updateAlertList((prev) => prev.filter((alert) => alert.id !== alertId));
+      toast.success('IP Address Blocked', {
+        description: 'The suspicious IP address has been blocked successfully.',
+      });
+    } catch (err) {
+      toast.error('Failed to block IP', {
+        description: err?.message || 'Please try again.',
+      });
+    }
+  };
+
+  const handleDismissAlert = async (alertId) => {
+    if (!alertId) return;
+    try {
+      if (!useDemoAlerts) {
+        await logsService.dismissAlert(alertId);
+      }
+      updateAlertList((prev) => prev.filter((alert) => alert.id !== alertId));
+      toast.success('Alert Dismissed', {
+        description: 'Security alert has been dismissed.',
+      });
+    } catch (err) {
+      toast.error('Failed to dismiss alert', {
+        description: err?.message || 'Please try again.',
+      });
+    }
+  };
+
+  const handleAcknowledgeAlert = async (alert) => {
     if (!alert?.id) return;
-    recordAcknowledgedAlert(alert.id);
-    setSecurityAlerts((prev) =>
-      prev.map((entry) =>
-        entry.id === alert.id ? { ...entry, status: 'acknowledged' } : entry
-      )
-    );
-    toast.success('Alert Acknowledged', {
-      description: 'Security alert marked as reviewed.',
-    });
-  };
-
-  const handleInvestigateAlert = (alert) => {
-    toast('Investigation Started', {
-      description: `Investigation queued for ${alert?.title || 'this alert'}.`,
-    });
+    try {
+      if (!useDemoAlerts) {
+        await logsService.acknowledgeAlert(alert.id);
+      }
+      updateAlertList((prev) =>
+        prev.map((entry) =>
+          entry.id === alert.id ? { ...entry, status: 'acknowledged' } : entry
+        )
+      );
+      toast.success('Alert Acknowledged', {
+        description: 'Security alert marked as reviewed.',
+      });
+    } catch (err) {
+      toast.error('Failed to acknowledge alert', {
+        description: err?.message || 'Please try again.',
+      });
+    }
   };
 
   const handleEscalateAlert = (alert) => {
@@ -270,7 +281,7 @@ const UserLogs = () => {
     const userEmail = extractAlertEmail(alert);
     if (!userEmail) return;
     const mutedUntil = muteUserFor24Hours(userEmail);
-    setSecurityAlerts((prev) =>
+    updateAlertList((prev) =>
       prev.map((entry) =>
         entry.id === alert?.id ? { ...entry, status: 'muted' } : entry
       )
@@ -286,8 +297,6 @@ const UserLogs = () => {
     const seeded = buildDemoAlerts();
     setDemoAlerts(seeded);
     setUseDemoAlerts(true);
-    setDismissedAlertIds([]);
-    setAcknowledgedAlertIds([]);
     try {
       window.localStorage.setItem(
         DEMO_ALERTS_STORAGE_KEY,
@@ -302,8 +311,6 @@ const UserLogs = () => {
   const handleClearDemoAlerts = () => {
     setDemoAlerts([]);
     setUseDemoAlerts(false);
-    setDismissedAlertIds([]);
-    setAcknowledgedAlertIds([]);
     try {
       window.localStorage.removeItem(DEMO_ALERTS_STORAGE_KEY);
     } catch {}
@@ -369,7 +376,6 @@ const UserLogs = () => {
           onBlockIP={handleBlockIP}
           onDismiss={handleDismissAlert}
           onAcknowledge={handleAcknowledgeAlert}
-          onInvestigate={handleInvestigateAlert}
           onEscalate={handleEscalateAlert}
           onMute={handleMuteAlert}
         />

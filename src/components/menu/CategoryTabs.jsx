@@ -34,7 +34,7 @@ import ItemGrid from './ItemGrid';
 import ItemList from './ItemList';
 import EditCategoryDialog from './EditCategoryDialog';
 
-const MAX_VISIBLE_MENU_CATEGORIES = 4;
+const MAX_VISIBLE_MENU_CATEGORIES = 8;
 
 const CategoryTabs = ({
   items = [],
@@ -280,7 +280,7 @@ const CategoryTabs = ({
           <TabsList
             ref={tabsListRef}
             onWheel={handleTabsListWheel}
-            className={`grid w-full grid-flow-col auto-cols-[minmax(160px,1fr)] items-center justify-start overflow-x-auto overflow-y-hidden scrollbar-hide ${
+            className={`flex h-auto w-full flex-nowrap items-center justify-start gap-1 overflow-x-auto overflow-y-hidden scrollbar-hide sm:gap-2 ${
               tabsHasOverflow ? 'pl-9 pr-9' : ''
             }`}
           >

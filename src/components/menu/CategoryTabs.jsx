@@ -7,8 +7,17 @@ import React, {
   useState,
 } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +33,7 @@ import {
   CircleSlash,
   ChevronLeft,
   ChevronRight,
+  Grip,
   LayoutGrid,
   List,
   Loader2,
@@ -358,66 +368,62 @@ const CategoryTabs = ({
           ) : null}
         </div>
         <div className="flex items-center gap-2 self-end md:self-auto">
-          <ToggleGroup
-            type="single"
-            value={view}
-            onValueChange={(v) => {
-              if (!v) return;
-              if (showArchived) {
-                setArchivedView(v);
-              } else {
-                setActiveView(v);
-              }
-            }}
-            variant="outline"
-            size="sm"
-            aria-label="View mode"
-          >
-            <ToggleGroupItem value="grid" aria-label="Grid view">
-              <LayoutGrid className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="list" aria-label="List view">
-              <List className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-          <Button
-            variant={showUnavailable ? 'default' : 'outline'}
-            size="icon"
-            onClick={() =>
-              setActiveTab((prev) =>
-                prev === 'unavailable' ? 'all' : 'unavailable'
-              )
-            }
-            aria-pressed={showUnavailable}
-            aria-label={
-              showUnavailable
-                ? 'Show all menu items'
-                : 'Show unavailable menu items'
-            }
-            title={
-              showUnavailable ? 'Show all menu items' : 'Show unavailable items'
-            }
-          >
-            <CircleSlash className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={showArchived ? 'default' : 'outline'}
-            size="icon"
-            onClick={() =>
-              setActiveTab((prev) => (prev === 'archived' ? 'all' : 'archived'))
-            }
-            aria-pressed={showArchived}
-            aria-label={
-              showArchived
-                ? 'Show active menu items'
-                : 'Show archived menu items'
-            }
-            title={
-              showArchived ? 'Show active menu items' : 'Show archived items'
-            }
-          >
-            <Archive className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full"
+                aria-label="Menu view options"
+                title="Menu view options"
+              >
+                <Grip className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>View</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={view}
+                onValueChange={(next) => {
+                  if (!next) return;
+                  if (showArchived) {
+                    setArchivedView(next);
+                  } else {
+                    setActiveView(next);
+                  }
+                }}
+              >
+                <DropdownMenuRadioItem value="grid">
+                  <LayoutGrid className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Grid
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="list">
+                  <List className="mr-2 h-4 w-4" aria-hidden="true" />
+                  List
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Filters</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={showUnavailable}
+                onCheckedChange={(checked) =>
+                  setActiveTab(checked ? 'unavailable' : 'all')
+                }
+              >
+                <CircleSlash className="mr-2 h-4 w-4" aria-hidden="true" />
+                Unavailable
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={showArchived}
+                onCheckedChange={(checked) =>
+                  setActiveTab(checked ? 'archived' : 'all')
+                }
+              >
+                <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
+                Archived
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

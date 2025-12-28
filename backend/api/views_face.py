@@ -22,6 +22,8 @@ from .views_common import (
     _issue_jwt,
     _issue_refresh_token_db,
     _issue_verify_token_from_db,
+    _get_request_auth_token,
+    _set_auth_cookies,
 )
 from .utils_audit import record_audit
 
@@ -193,10 +195,9 @@ def face_register(request):
 
     Stores DeepFace embedding and optional reference image.
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
 
     import jwt
     try:
@@ -463,7 +464,12 @@ def face_login(request):
         except Exception:
             pass
 
-        return JsonResponse({
+        refresh_ttl = (
+            getattr(settings, "JWT_REFRESH_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
+            if remember
+            else getattr(settings, "JWT_REFRESH_EXP_SECONDS", 7 * 24 * 60 * 60)
+        )
+        resp = JsonResponse({
             "success": True,
             "user": _safe_user_from_db(user),
             "token": token,
@@ -474,6 +480,13 @@ def face_login(request):
                 "model": model_name
             }
         })
+        return _set_auth_cookies(
+            resp,
+            access_token=token,
+            refresh_token=refresh_token,
+            access_max_age=exp_seconds,
+            refresh_max_age=refresh_ttl,
+        )
 
     except Exception as e:
         try:
@@ -496,10 +509,9 @@ def face_unregister(request):
     Requires Authorization: Bearer <jwt>.
     Accepts POST or DELETE for convenience.
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
 
     import jwt
     try:

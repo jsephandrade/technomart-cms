@@ -19,6 +19,7 @@ from .views_common import (
     _require_admin_or_manager,
     _actor_from_request,
     _has_permission,
+    _get_request_auth_token,
 )
 from .emails import (
     notify_admins_verification_submitted,
@@ -30,10 +31,7 @@ from .emails import (
 
 @require_http_methods(["GET"]) 
 def verify_status(request):
-    token = None
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if auth.startswith("Bearer "):
-        token = auth.split(" ", 1)[1]
+    token = _get_request_auth_token(request)
     if not token:
         token = request.GET.get("token") or ""
     if not token:
@@ -154,10 +152,9 @@ def verify_resend_token(request):
 
 @require_http_methods(["GET"]) 
 def verify_requests(request):
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:
@@ -222,10 +219,9 @@ def verify_requests(request):
 
 @require_http_methods(["GET"]) 
 def verify_headshot(request, request_id):
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:
@@ -261,10 +257,9 @@ def verify_approve(request):
     except Exception:
         data = {}
 
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:
@@ -323,10 +318,9 @@ def verify_reject(request):
     request_id = (data.get("requestId") or "").strip()
     note = (data.get("note") or "").strip()
 
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:

@@ -37,11 +37,17 @@ class ApiClient {
       retryOnStatuses: [408, 429, 500, 502, 503, 504],
       retryMethods: ['GET', 'HEAD', 'OPTIONS'],
     };
+    const cookieAuthEnabled =
+      typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      (import.meta.env.VITE_AUTH_USE_COOKIES === 'true' ||
+        import.meta.env.VITE_AUTH_USE_COOKIES === '1');
     this.sendCredentials = Boolean(
       typeof import.meta !== 'undefined' &&
         import.meta.env &&
         (import.meta.env.VITE_SEND_CREDENTIALS === 'true' ||
-          import.meta.env.VITE_SEND_CREDENTIALS === '1')
+          import.meta.env.VITE_SEND_CREDENTIALS === '1' ||
+          cookieAuthEnabled)
     );
     this.csrf = {
       // Right-size default: enable CSRF only when using cookie-based auth

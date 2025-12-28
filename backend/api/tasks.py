@@ -97,6 +97,27 @@ def send_email_notification(self, user_id: int, title: str, message: str):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def send_login_otp_email(
+    self, user_id: str, code: str, expires_minutes: int = 5
+):
+    """Send a login OTP email to a user."""
+    try:
+        User = get_user_model()
+        user = User.objects.get(id=user_id)
+        from .emails import email_user_login_otp
+
+        email_user_login_otp(user, code, expires_minutes=expires_minutes)
+        logger.info(f"Login OTP email enqueued for user {user_id}")
+        return True
+    except User.DoesNotExist:
+        logger.warning(f"Login OTP email skipped; user {user_id} not found")
+        return False
+    except Exception as exc:
+        logger.error(f"Failed to send login OTP email for user {user_id}: {exc}")
+        raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_push_notification(self, user_id: int, title: str, message: str, notification_type: str = 'info'):
     """
     Send push notification to all user's subscribed devices.

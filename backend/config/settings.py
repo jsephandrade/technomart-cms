@@ -163,6 +163,20 @@ JWT_REMEMBER_EXP_SECONDS = _jwt["JWT_REMEMBER_EXP_SECONDS"]
 JWT_REFRESH_EXP_SECONDS = _jwt["JWT_REFRESH_EXP_SECONDS"]
 JWT_REFRESH_REMEMBER_EXP_SECONDS = _jwt["JWT_REFRESH_REMEMBER_EXP_SECONDS"]
 
+# Auth cookie support (httpOnly JWT storage)
+AUTH_COOKIE_ENABLED = (
+    os.getenv("DJANGO_AUTH_COOKIE_ENABLED", "1" if not DEBUG else "0")
+    in {"1", "true", "True", "yes", "on"}
+)
+AUTH_COOKIE_ACCESS_NAME = os.getenv("DJANGO_AUTH_COOKIE_ACCESS_NAME", "authToken")
+AUTH_COOKIE_REFRESH_NAME = os.getenv("DJANGO_AUTH_COOKIE_REFRESH_NAME", "refreshToken")
+AUTH_COOKIE_SAMESITE = os.getenv("DJANGO_AUTH_COOKIE_SAMESITE", "Lax")
+AUTH_COOKIE_DOMAIN = os.getenv("DJANGO_AUTH_COOKIE_DOMAIN", "")
+AUTH_COOKIE_PATH = os.getenv("DJANGO_AUTH_COOKIE_PATH", "/")
+AUTH_COOKIE_SECURE = os.getenv(
+    "DJANGO_AUTH_COOKIE_SECURE", "0" if DEBUG else "1"
+) in {"1", "true", "True", "yes", "on"}
+
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()

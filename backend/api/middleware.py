@@ -115,10 +115,12 @@ class PendingUserGateMiddleware:
         return False
 
     def _user_from_jwt(self, request):
-        auth = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth.startswith("Bearer "):
-            return None
-        token = auth.split(" ", 1)[1].strip()
+        try:
+            from .views_common import _get_request_auth_token
+        except Exception:
+            _get_request_auth_token = None
+
+        token = _get_request_auth_token(request) if _get_request_auth_token else None
         if not token:
             return None
         try:

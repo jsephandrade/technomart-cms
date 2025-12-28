@@ -11,6 +11,12 @@ import authService from '@/api/services/authService';
 import apiClient from '@/api/client';
 import { effectivePermissions } from '@/lib/permissions';
 
+const USE_AUTH_COOKIES =
+  typeof import.meta !== 'undefined' &&
+  import.meta.env &&
+  (import.meta.env.VITE_AUTH_USE_COOKIES === 'true' ||
+    import.meta.env.VITE_AUTH_USE_COOKIES === '1');
+
 // Context shape
 const AuthContext = createContext({
   user: null,
@@ -35,6 +41,9 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const loadFromStores = (key, parseJson = false) => {
+    if (USE_AUTH_COOKIES && (key === 'auth_token' || key === 'refresh_token')) {
+      return null;
+    }
     try {
       const lsv = localStorage.getItem(key);
       const ssv = sessionStorage.getItem(key);
@@ -111,8 +120,8 @@ export function AuthProvider({ children }) {
         typeof remember === 'boolean' ? remember : Boolean(rememberPref);
 
       setUser(nextUser);
-      setToken(nextToken);
-      setRefreshTokenValue(nextRefreshToken);
+      setToken(USE_AUTH_COOKIES ? null : nextToken);
+      setRefreshTokenValue(USE_AUTH_COOKIES ? null : nextRefreshToken);
 
       try {
         // Choose storage target
@@ -126,21 +135,31 @@ export function AuthProvider({ children }) {
           other.removeItem('refresh_token');
         } catch {}
 
+        // Always remove tokens from both stores when using cookie auth
+        if (USE_AUTH_COOKIES) {
+          try {
+            store.removeItem('auth_token');
+            store.removeItem('refresh_token');
+          } catch {}
+        }
+
         // Persist to target store
         if (nextUser) {
           store.setItem('user', JSON.stringify(nextUser));
         } else {
           store.removeItem('user');
         }
-        if (nextToken) {
-          store.setItem('auth_token', nextToken);
-        } else {
-          store.removeItem('auth_token');
-        }
-        if (nextRefreshToken) {
-          store.setItem('refresh_token', nextRefreshToken);
-        } else {
-          store.removeItem('refresh_token');
+        if (!USE_AUTH_COOKIES) {
+          if (nextToken) {
+            store.setItem('auth_token', nextToken);
+          } else {
+            store.removeItem('auth_token');
+          }
+          if (nextRefreshToken) {
+            store.setItem('refresh_token', nextRefreshToken);
+          } else {
+            store.removeItem('refresh_token');
+          }
         }
 
         // Persist preference for next logins
@@ -282,7 +301,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await authService.logout(refreshTokenValue);
+      await authService.logout(USE_AUTH_COOKIES ? null : refreshTokenValue);
     } catch {}
     // Clear from both storages on logout
     try {
@@ -299,13 +318,17 @@ export function AuthProvider({ children }) {
   }, [refreshTokenValue]);
 
   const refreshToken = useCallback(async () => {
-    if (!refreshTokenValue) {
+    if (!refreshTokenValue && !USE_AUTH_COOKIES) {
       // No refresh token available; nothing to do
       return false;
     }
     try {
-      const res = await authService.refreshToken(refreshTokenValue);
-      if (res?.success && res?.token) {
+      const res = await authService.refreshToken(
+        USE_AUTH_COOKIES ? undefined : refreshTokenValue
+      );
+      if (!res?.success) return false;
+      if (!USE_AUTH_COOKIES) {
+        if (!res?.token) return false;
         setToken(res.token);
         setRefreshTokenValue(res.refreshToken || null);
         try {
@@ -319,9 +342,11 @@ export function AuthProvider({ children }) {
             } catch {}
           });
         } catch {}
-        return true;
+      } else {
+        setToken(null);
+        setRefreshTokenValue(null);
       }
-      return false;
+      return true;
     } catch (err) {
       await logout();
       return false;

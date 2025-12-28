@@ -425,14 +425,13 @@ def _actor_from_token(token: str):
     return None
 
 def _actor_from_request(request):
-    """Extract the authenticated actor from Authorization header.
+    """Extract the authenticated actor from Authorization header or auth cookie.
 
     Returns (actor, error_response) where actor is either AppUser instance or a
     dict from USERS fallback. If not authorized/invalid, returns (None, JsonResponse).
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "") or ""
-    if auth.startswith("Bearer "):
-        token = auth.split(" ", 1)[1].strip()
+    token = _get_request_auth_token(request)
+    if token:
         actor = _actor_from_token(token)
         if actor:
             return actor, None
@@ -448,6 +447,84 @@ def _actor_from_request(request):
         pass
 
     return None, JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+
+def _auth_cookie_enabled() -> bool:
+    return bool(getattr(settings, "AUTH_COOKIE_ENABLED", False))
+
+
+def _get_request_auth_token(request):
+    auth = request.META.get("HTTP_AUTHORIZATION", "") or ""
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+
+    if not _auth_cookie_enabled():
+        return None
+
+    cookie_name = getattr(settings, "AUTH_COOKIE_ACCESS_NAME", "authToken")
+    token = request.COOKIES.get(cookie_name) or ""
+    return token or None
+
+
+def _set_auth_cookies(
+    response,
+    *,
+    access_token: str | None = None,
+    refresh_token: str | None = None,
+    access_max_age: int | None = None,
+    refresh_max_age: int | None = None,
+):
+    if not _auth_cookie_enabled():
+        return response
+
+    secure = bool(getattr(settings, "AUTH_COOKIE_SECURE", False))
+    samesite = getattr(settings, "AUTH_COOKIE_SAMESITE", "Lax")
+    domain = getattr(settings, "AUTH_COOKIE_DOMAIN", "") or None
+    path = getattr(settings, "AUTH_COOKIE_PATH", "/") or "/"
+
+    access_name = getattr(settings, "AUTH_COOKIE_ACCESS_NAME", "authToken")
+    refresh_name = getattr(settings, "AUTH_COOKIE_REFRESH_NAME", "refreshToken")
+
+    if access_token:
+        response.set_cookie(
+            access_name,
+            access_token,
+            max_age=access_max_age,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+            domain=domain,
+            path=path,
+        )
+
+    if refresh_token:
+        response.set_cookie(
+            refresh_name,
+            refresh_token,
+            max_age=refresh_max_age,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+            domain=domain,
+            path=path,
+        )
+
+    return response
+
+
+def _clear_auth_cookies(response):
+    if not _auth_cookie_enabled():
+        return response
+
+    domain = getattr(settings, "AUTH_COOKIE_DOMAIN", "") or None
+    path = getattr(settings, "AUTH_COOKIE_PATH", "/") or "/"
+
+    access_name = getattr(settings, "AUTH_COOKIE_ACCESS_NAME", "authToken")
+    refresh_name = getattr(settings, "AUTH_COOKIE_REFRESH_NAME", "refreshToken")
+
+    response.delete_cookie(access_name, domain=domain, path=path)
+    response.delete_cookie(refresh_name, domain=domain, path=path)
+    return response
 
 
 # JWT and token helpers
@@ -681,7 +758,11 @@ def _rotate_refresh_token_mem(raw, request=None):
     new_raw = _issue_refresh_token_mem(user_dict, remember=entry.get("remember", False), request=request)
     access_ttl = getattr(settings, "JWT_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60) if entry.get("remember") else getattr(settings, "JWT_EXP_SECONDS", 3600)
     new_access = _issue_jwt_from_dict(user_dict, exp_seconds=access_ttl)
-    return {"token": new_access, "refreshToken": new_raw}
+    return {
+        "token": new_access,
+        "refreshToken": new_raw,
+        "remember": bool(entry.get("remember")),
+    }
 
 
 def _revoke_refresh_token(request, raw):

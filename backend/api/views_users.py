@@ -10,7 +10,15 @@ from django.conf import settings
 import jwt
 from django.contrib.auth.hashers import make_password
 
-from .views_common import USERS, _paginate, _maybe_seed_from_memory, _safe_user_from_db, _now_iso, DEFAULT_ROLE_PERMISSIONS
+from .views_common import (
+    USERS,
+    _paginate,
+    _maybe_seed_from_memory,
+    _safe_user_from_db,
+    _now_iso,
+    DEFAULT_ROLE_PERMISSIONS,
+    _get_request_auth_token,
+)
 from .utils_audit import record_audit
 
 
@@ -55,10 +63,9 @@ def _log_user_action(request, actor, target_user, action: str, *, details: str =
 @require_http_methods(["GET", "POST"]) 
 def users(request):
     # For any access to the users collection, require Admin role
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
     try:
         tp = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:
@@ -251,10 +258,9 @@ def user_detail(request, user_id):
         from .models import AppUser
         _maybe_seed_from_memory()
         # Require admin for all operations in user management, including viewing details
-        auth = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth.startswith("Bearer "):
+        token = _get_request_auth_token(request)
+        if not token:
             return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-        token = auth.split(" ", 1)[1].strip()
         try:
             tp = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         except Exception:
@@ -375,10 +381,9 @@ def user_status(request, user_id):
         from .models import AppUser
         _maybe_seed_from_memory()
         # Only admin can change status
-        auth = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth.startswith("Bearer "):
+        token = _get_request_auth_token(request)
+        if not token:
             return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-        token = auth.split(" ", 1)[1].strip()
         try:
             tp = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         except Exception:
@@ -443,10 +448,9 @@ def user_role(request, user_id):
         from .models import AppUser
         _maybe_seed_from_memory()
         # Admin only
-        auth = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth.startswith("Bearer "):
+        token = _get_request_auth_token(request)
+        if not token:
             return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-        token = auth.split(" ", 1)[1].strip()
         try:
             tp = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         except Exception:
@@ -509,11 +513,10 @@ def user_role_config(request, value):
     except Exception:
         payload = {}
     # Admin only can change role configs
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
     try:
-        token = auth.split(" ", 1)[1].strip()
         tp = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         from .models import AppUser
         actor = AppUser.objects.filter(email=(tp.get("email") or "").lower()).first()

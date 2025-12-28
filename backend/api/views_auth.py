@@ -17,6 +17,23 @@ import requests as _requests
 
 logger = logging.getLogger(__name__)
 
+
+def _celery_enabled() -> bool:
+    if os.getenv("DISABLE_CELERY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    if not os.getenv("CELERY_BROKER_URL"):
+        return False
+    return True
+
+
+try:
+    from .tasks import send_login_otp_email, CELERY_AVAILABLE
+
+    USE_CELERY_LOGIN_OTP = bool(CELERY_AVAILABLE) and _celery_enabled()
+except Exception:
+    send_login_otp_email = None
+    USE_CELERY_LOGIN_OTP = False
+
 from .views_common import (
     rate_limit,
     _login_rate_key,
@@ -38,6 +55,8 @@ from .views_common import (
     _revoke_all_refresh_tokens_mem,
     _issue_verify_token_from_db,
     _issue_verify_token_from_dict,
+    _set_auth_cookies,
+    _clear_auth_cookies,
 )
 from .utils_audit import record_audit
 from .utils_login_otp import (
@@ -46,6 +65,19 @@ from .utils_login_otp import (
     get_login_otp_ttl_seconds,
 )
 from .emails import email_user_login_otp
+
+
+def _dispatch_login_otp_email(user, code: str, expires_minutes: int) -> None:
+    if USE_CELERY_LOGIN_OTP and send_login_otp_email:
+        try:
+            send_login_otp_email.delay(str(user.id), code, int(expires_minutes))
+            return
+        except Exception:
+            pass
+    try:
+        email_user_login_otp(user, code, expires_minutes=int(expires_minutes))
+    except Exception:
+        pass
 
 
 @require_http_methods(["GET"]) 
@@ -252,10 +284,9 @@ def auth_login(request):
                 )
 
             ttl_seconds = get_login_otp_ttl_seconds()
-            try:
-                email_user_login_otp(db_user, code, expires_minutes=max(1, int(ttl_seconds / 60)))
-            except Exception:
-                pass
+            _dispatch_login_otp_email(
+                db_user, code, expires_minutes=max(1, int(ttl_seconds / 60))
+            )
 
             _lockout_check_and_touch(email, ip, success=True)
             try:
@@ -360,7 +391,19 @@ def auth_login(request):
             )
         except Exception:
             pass
-        return JsonResponse(payload)
+        refresh_ttl = (
+            getattr(settings, "JWT_REFRESH_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
+            if remember
+            else getattr(settings, "JWT_REFRESH_EXP_SECONDS", 7 * 24 * 60 * 60)
+        )
+        resp = JsonResponse(payload)
+        return _set_auth_cookies(
+            resp,
+            access_token=payload.get("token"),
+            refresh_token=rtoken,
+            access_max_age=exp_seconds,
+            refresh_max_age=refresh_ttl,
+        )
 
     # Record failed attempt and maybe lock
     locked, retry_after = _lockout_check_and_touch(email, ip, success=False)
@@ -472,13 +515,25 @@ def auth_login_verify_otp(request):
     except Exception:
         pass
 
-    return JsonResponse(
+    refresh_ttl = (
+        getattr(settings, "JWT_REFRESH_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
+        if remember
+        else getattr(settings, "JWT_REFRESH_EXP_SECONDS", 7 * 24 * 60 * 60)
+    )
+    resp = JsonResponse(
         {
             "success": True,
             "user": safe_user,
             "token": token,
             "refreshToken": refresh_token,
         }
+    )
+    return _set_auth_cookies(
+        resp,
+        access_token=token,
+        refresh_token=refresh_token,
+        access_max_age=exp_seconds,
+        refresh_max_age=refresh_ttl,
     )
 
 
@@ -545,14 +600,11 @@ def auth_login_resend_otp(request):
         return JsonResponse({"success": False, "message": "Could not resend code. Try again."}, status=500)
 
     ttl_seconds = get_login_otp_ttl_seconds()
-    try:
-        email_user_login_otp(
-            user,
-            code,
-            expires_minutes=max(1, int(ttl_seconds / 60)),
-        )
-    except Exception:
-        pass
+    _dispatch_login_otp_email(
+        user,
+        code,
+        expires_minutes=max(1, int(ttl_seconds / 60)),
+    )
 
     try:
         record_audit(
@@ -583,6 +635,9 @@ def auth_logout(request):
     except Exception:
         data = {}
     rtoken = (data.get("refreshToken") or "").strip()
+    if not rtoken:
+        cookie_name = getattr(settings, "AUTH_COOKIE_REFRESH_NAME", "refreshToken")
+        rtoken = (request.COOKIES.get(cookie_name) or "").strip()
     if rtoken:
         _revoke_refresh_token(request, rtoken)
     # Audit: best-effort capture of actor
@@ -608,15 +663,17 @@ def auth_logout(request):
         )
     except Exception:
         pass
-    return JsonResponse({"success": True})
+    resp = JsonResponse({"success": True})
+    return _clear_auth_cookies(resp)
 
 
 @require_http_methods(["GET"]) 
 def auth_me(request):
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    from .views_common import _get_request_auth_token
+
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Missing token"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
@@ -803,7 +860,18 @@ def auth_google(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": True, "user": safe_user, "token": token, "refreshToken": rtok})
+        access_ttl = getattr(settings, "JWT_EXP_SECONDS", 3600)
+        refresh_ttl = getattr(settings, "JWT_REFRESH_EXP_SECONDS", 7 * 24 * 60 * 60)
+        resp = JsonResponse(
+            {"success": True, "user": safe_user, "token": token, "refreshToken": rtok}
+        )
+        return _set_auth_cookies(
+            resp,
+            access_token=token,
+            refresh_token=rtok,
+            access_max_age=access_ttl,
+            refresh_max_age=refresh_ttl,
+        )
     except (OperationalError, ProgrammingError):
         pass
 
@@ -874,7 +942,19 @@ def auth_google(request):
         )
     except Exception:
         pass
-    return JsonResponse({"success": True, "user": safe_user, "token": _issue_jwt_from_dict(safe_user), "refreshToken": rtok})
+    access_ttl = getattr(settings, "JWT_EXP_SECONDS", 3600)
+    refresh_ttl = getattr(settings, "JWT_REFRESH_EXP_SECONDS", 7 * 24 * 60 * 60)
+    token = _issue_jwt_from_dict(safe_user, exp_seconds=access_ttl)
+    resp = JsonResponse(
+        {"success": True, "user": safe_user, "token": token, "refreshToken": rtok}
+    )
+    return _set_auth_cookies(
+        resp,
+        access_token=token,
+        refresh_token=rtok,
+        access_max_age=access_ttl,
+        refresh_max_age=refresh_ttl,
+    )
 
 
 from .views_common import _decode_emailverify_token
@@ -1285,6 +1365,9 @@ def refresh_token(request):
         data = {}
     rtoken = (data.get("refreshToken") or "").strip()
     if not rtoken:
+        cookie_name = getattr(settings, "AUTH_COOKIE_REFRESH_NAME", "refreshToken")
+        rtoken = (request.COOKIES.get(cookie_name) or "").strip()
+    if not rtoken:
         return JsonResponse({"success": False, "message": "Missing refresh token"}, status=400)
 
     try:
@@ -1323,7 +1406,18 @@ def refresh_token(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": True, "token": new_access, "refreshToken": new_refresh})
+        resp = JsonResponse({"success": True, "token": new_access, "refreshToken": new_refresh})
+        return _set_auth_cookies(
+            resp,
+            access_token=new_access,
+            refresh_token=new_refresh,
+            access_max_age=access_ttl,
+            refresh_max_age=(
+                settings.JWT_REFRESH_REMEMBER_EXP_SECONDS
+                if rt.remember
+                else settings.JWT_REFRESH_EXP_SECONDS
+            ),
+        )
     except (OperationalError, ProgrammingError):
         pass
     except Exception:
@@ -1346,15 +1440,27 @@ def refresh_token(request):
         )
     except Exception:
         pass
-    return JsonResponse({"success": True, "token": out["token"], "refreshToken": out["refreshToken"]})
+    resp = JsonResponse({"success": True, "token": out["token"], "refreshToken": out["refreshToken"]})
+    return _set_auth_cookies(
+        resp,
+        access_token=out["token"],
+        refresh_token=out["refreshToken"],
+        access_max_age=getattr(settings, "JWT_EXP_SECONDS", 3600),
+        refresh_max_age=(
+            getattr(settings, "JWT_REFRESH_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
+            if out.get("remember")
+            else getattr(settings, "JWT_REFRESH_EXP_SECONDS", 7 * 24 * 60 * 60)
+        ),
+    )
 
 
 @require_http_methods(["POST"]) 
 def change_password(request):
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
+    from .views_common import _get_request_auth_token
+
+    token = _get_request_auth_token(request)
+    if not token:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:

@@ -145,5 +145,10 @@ class EventStreamConsumer(AsyncJsonWebsocketConsumer):
             except Exception:
                 logger.exception("Failed to parse Authorization header for websocket connection")
         cookies = self.scope.get("cookies") or {}
-        token = cookies.get("authToken")
+        try:
+            from django.conf import settings as dj_settings
+            cookie_name = getattr(dj_settings, "AUTH_COOKIE_ACCESS_NAME", "authToken")
+        except Exception:
+            cookie_name = "authToken"
+        token = cookies.get(cookie_name)
         return token

@@ -369,7 +369,8 @@ class AuthService {
       await mockDelay(300);
       return { success: true };
     }
-    const res = await apiClient.post('/auth/logout', { refreshToken });
+    const payload = refreshToken ? { refreshToken } : {};
+    const res = await apiClient.post('/auth/logout', payload);
     return res?.data || { success: true };
   }
 
@@ -492,7 +493,8 @@ class AuthService {
         refreshToken: 'mock-rtok-' + Date.now(),
       };
     }
-    const res = await apiClient.post('/auth/refresh-token', { refreshToken });
+    const payload = refreshToken ? { refreshToken } : {};
+    const res = await apiClient.post('/auth/refresh-token', payload);
     const data = res?.data || res;
     return {
       success: true,

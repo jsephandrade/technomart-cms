@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -28,8 +28,11 @@ const PaymentModal = ({
   onPaymentSubmit,
   totals,
   isSyncing = false,
+  disableDeposit = false,
 }) => {
-  const [paymentType, setPaymentType] = useState('deposit'); // 'deposit' or 'full'
+  const [paymentType, setPaymentType] = useState(() =>
+    disableDeposit ? 'full' : 'deposit'
+  ); // 'deposit' or 'full'
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash', 'card', 'mobile'
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -49,11 +52,6 @@ const PaymentModal = ({
     return total * 0.5;
   }, [event, total]);
 
-  const depositPercentage = useMemo(() => {
-    if (total === 0) return 50;
-    return Math.round((depositAmount / total) * 100);
-  }, [depositAmount, total]);
-
   const amountToPay = useMemo(() => {
     return paymentType === 'deposit' ? depositAmount : total;
   }, [paymentType, depositAmount, total]);
@@ -62,6 +60,12 @@ const PaymentModal = ({
     if (paymentType === 'full') return 0;
     return total - depositAmount;
   }, [paymentType, total, depositAmount]);
+
+  useEffect(() => {
+    if (disableDeposit && paymentType === 'deposit') {
+      setPaymentType('full');
+    }
+  }, [disableDeposit, paymentType]);
 
   const handlePayment = async () => {
     if (isSyncing) return;
@@ -124,28 +128,52 @@ const PaymentModal = ({
           {/* Payment Type Selection */}
           <div className="space-y-3">
             <Label className="text-base font-semibold">Payment Type</Label>
-            <RadioGroup value={paymentType} onValueChange={setPaymentType}>
+            <RadioGroup
+              value={paymentType}
+              onValueChange={(value) => {
+                if (value === 'deposit' && disableDeposit) return;
+                setPaymentType(value);
+              }}
+            >
               {/* Deposit Option */}
               <div
                 className={cn(
-                  'relative cursor-pointer rounded-xl border-2 p-4 transition-all',
+                  'relative rounded-xl border-2 p-4 transition-all',
                   paymentType === 'deposit'
                     ? 'border-primary bg-primary/5 shadow-md shadow-primary/10'
-                    : 'border-border bg-card hover:border-primary/50 hover:bg-muted/50'
+                    : 'border-border bg-card',
+                  disableDeposit
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer hover:border-primary/50 hover:bg-muted/50'
                 )}
-                onClick={() => setPaymentType('deposit')}
+                onClick={() => {
+                  if (disableDeposit) return;
+                  setPaymentType('deposit');
+                }}
+                aria-disabled={disableDeposit}
+                title={
+                  disableDeposit
+                    ? '50% deposit is disabled for saved orders.'
+                    : undefined
+                }
               >
                 <div className="flex items-start gap-4">
                   <RadioGroupItem
                     value="deposit"
                     id="deposit"
                     className="mt-1"
+                    disabled={disableDeposit}
                   />
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
                       <Label
                         htmlFor="deposit"
-                        className="text-lg font-semibold cursor-pointer"
+                        className={cn(
+                          'text-lg font-semibold',
+                          disableDeposit
+                            ? 'cursor-not-allowed'
+                            : 'cursor-pointer'
+                        )}
                       >
                         50% Deposit
                       </Label>

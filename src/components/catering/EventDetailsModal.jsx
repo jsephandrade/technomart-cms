@@ -136,6 +136,17 @@ export const EventDetailsModal = ({
     setLocalEvent(event);
   }, [event]);
 
+  const currentEvent = localEvent || event;
+  const hasSavedOrder =
+    Array.isArray(currentEvent?.items) && currentEvent.items.length > 0;
+  const disableDeposit = hasSavedOrder;
+
+  useEffect(() => {
+    if (disableDeposit && paymentType === 'deposit') {
+      setPaymentType('full');
+    }
+  }, [disableDeposit, paymentType]);
+
   if (!event) return null;
 
   const initialDate = normalizeDateInput(event.date);
@@ -237,7 +248,6 @@ export const EventDetailsModal = ({
   };
 
   // Payment calculations
-  const currentEvent = localEvent || event;
   const total = Number(
     currentEvent?.estimatedTotal || currentEvent?.total || 0
   );
@@ -315,7 +325,7 @@ export const EventDetailsModal = ({
     setIsEditingPayment((prev) => !prev);
     // Reset to defaults when opening
     if (!isEditingPayment) {
-      setPaymentType('deposit');
+      setPaymentType(disableDeposit ? 'full' : 'deposit');
       setPaymentMethod('cash');
     }
   };
@@ -676,29 +686,50 @@ export const EventDetailsModal = ({
                       </Label>
                       <RadioGroup
                         value={paymentType}
-                        onValueChange={setPaymentType}
+                        onValueChange={(value) => {
+                          if (value === 'deposit' && disableDeposit) return;
+                          setPaymentType(value);
+                        }}
                       >
                         {/* Deposit Option */}
                         <div
                           className={cn(
-                            'relative cursor-pointer rounded-lg border-2 p-3 transition-all',
+                            'relative rounded-lg border-2 p-3 transition-all',
                             paymentType === 'deposit'
                               ? 'border-primary bg-primary/5 shadow-sm'
-                              : 'border-border bg-card hover:border-primary/50'
+                              : 'border-border bg-card',
+                            disableDeposit
+                              ? 'cursor-not-allowed opacity-60'
+                              : 'cursor-pointer hover:border-primary/50'
                           )}
-                          onClick={() => setPaymentType('deposit')}
+                          onClick={() => {
+                            if (disableDeposit) return;
+                            setPaymentType('deposit');
+                          }}
+                          aria-disabled={disableDeposit}
+                          title={
+                            disableDeposit
+                              ? '50% deposit is disabled for saved orders.'
+                              : undefined
+                          }
                         >
                           <div className="flex items-start gap-3">
                             <RadioGroupItem
                               value="deposit"
                               id="deposit"
                               className="mt-0.5"
+                              disabled={disableDeposit}
                             />
                             <div className="flex-1 space-y-1">
                               <div className="flex items-center gap-2">
                                 <Label
                                   htmlFor="deposit"
-                                  className="text-sm font-semibold cursor-pointer"
+                                  className={cn(
+                                    'text-sm font-semibold',
+                                    disableDeposit
+                                      ? 'cursor-not-allowed'
+                                      : 'cursor-pointer'
+                                  )}
                                 >
                                   50% Deposit
                                 </Label>

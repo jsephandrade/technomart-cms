@@ -39,6 +39,8 @@ const CateringMenuPage = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
   const [isSyncingPayment, setIsSyncingPayment] = useState(false);
+  const [hasSavedOrder, setHasSavedOrder] = useState(false);
+  const initialSavedOrderRef = useRef(null);
   const autoSaveTimeout = useRef(null);
   const savePromiseRef = useRef(null);
 
@@ -67,6 +69,14 @@ const CateringMenuPage = () => {
     }
   }, []);
 
+  const seedInitialSavedOrder = useCallback((eventData) => {
+    if (initialSavedOrderRef.current !== null) return;
+    const hasItems =
+      Array.isArray(eventData?.items) && eventData.items.length > 0;
+    initialSavedOrderRef.current = hasItems;
+    setHasSavedOrder(hasItems);
+  }, []);
+
   const fetchEventData = useCallback(
     async (options = { populate: true }) => {
       if (!eventId) return null;
@@ -76,12 +86,13 @@ const CateringMenuPage = () => {
       if (!res?.success)
         throw new Error(res?.message || 'Failed to load event');
       setEvent(res.data);
+      seedInitialSavedOrder(res.data);
       if (options.populate) {
         populateFromEvent(res.data);
       }
       return res.data;
     },
-    [eventId, populateFromEvent]
+    [eventId, populateFromEvent, seedInitialSavedOrder]
   );
 
   // Fetch event data
@@ -104,6 +115,11 @@ const CateringMenuPage = () => {
     };
     run();
   }, [eventId, navigate, fetchEventData]);
+
+  useEffect(() => {
+    initialSavedOrderRef.current = null;
+    setHasSavedOrder(false);
+  }, [eventId]);
 
   const handleAddToOrder = useCallback((item) => {
     setSelectedItems((prev) => {
@@ -155,7 +171,7 @@ const CateringMenuPage = () => {
   const handleClearAll = useCallback(() => {
     setSelectedItems({});
     setDiscount('0');
-  }, [selectedItems]);
+  }, []);
 
   const handleSaveOrder = useCallback(
     async ({ withToast = false } = {}) => {
@@ -458,6 +474,7 @@ const CateringMenuPage = () => {
         totals={paymentTotals}
         isSyncing={isSyncingPayment}
         onPaymentSubmit={handlePaymentSubmit}
+        disableDeposit={hasSavedOrder}
       />
     </div>
   );

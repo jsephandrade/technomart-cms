@@ -43,13 +43,6 @@ const CateringMenuPage = () => {
   const initialSavedOrderRef = useRef(null);
   const autoSaveTimeout = useRef(null);
   const savePromiseRef = useRef(null);
-  const additionsCount =
-    Number(event?.menuAdditions ?? event?.menu_additions_count ?? 0) || 0;
-  const additionsLocked = additionsCount >= 1;
-
-  const notifyMenuLocked = useCallback(() => {
-    toast.error('Menu items can only be updated once after the initial order.');
-  }, []);
 
   const itemsArray = useMemo(() => {
     return Object.values(selectedItems);
@@ -128,82 +121,57 @@ const CateringMenuPage = () => {
     setHasSavedOrder(false);
   }, [eventId]);
 
-  const handleAddToOrder = useCallback(
-    (item) => {
-      if (additionsLocked) {
-        notifyMenuLocked();
-        return;
-      }
-      setSelectedItems((prev) => {
-        const existing = prev[item.id];
-        if (existing) {
-          return {
-            ...prev,
-            [item.id]: {
-              ...existing,
-              quantity: existing.quantity + 1,
-            },
-          };
-        }
+  const handleAddToOrder = useCallback((item) => {
+    setSelectedItems((prev) => {
+      const existing = prev[item.id];
+      if (existing) {
         return {
           ...prev,
           [item.id]: {
-            id: item.id,
-            name: item.name,
-            price: item.price,
-            quantity: 1,
-            category: item.category || '',
+            ...existing,
+            quantity: existing.quantity + 1,
           },
         };
-      });
-    },
-    [additionsLocked, notifyMenuLocked]
-  );
-
-  const handleUpdateQuantity = useCallback(
-    (itemId, newQuantity) => {
-      if (additionsLocked) {
-        notifyMenuLocked();
-        return;
       }
-      setSelectedItems((prev) => {
-        const item = prev[itemId];
-        if (!item) return prev;
-        return {
-          ...prev,
-          [itemId]: {
-            ...item,
-            quantity: Math.max(1, newQuantity),
-          },
-        };
-      });
-    },
-    [additionsLocked, notifyMenuLocked]
-  );
+      return {
+        ...prev,
+        [item.id]: {
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: 1,
+          category: item.category || '',
+        },
+      };
+    });
+  }, []);
 
-  const handleRemoveItem = useCallback(
-    (itemId) => {
-      if (additionsLocked) {
-        notifyMenuLocked();
-        return;
-      }
-      setSelectedItems((prev) => {
-        const newItems = { ...prev };
-        delete newItems[itemId];
-        return newItems;
-      });
-    },
-    [additionsLocked, notifyMenuLocked]
-  );
+  const handleUpdateQuantity = useCallback((itemId, newQuantity) => {
+    setSelectedItems((prev) => {
+      const item = prev[itemId];
+      if (!item) return prev;
+      return {
+        ...prev,
+        [itemId]: {
+          ...item,
+          quantity: Math.max(1, newQuantity),
+        },
+      };
+    });
+  }, []);
+
+  const handleRemoveItem = useCallback((itemId) => {
+    setSelectedItems((prev) => {
+      const newItems = { ...prev };
+      delete newItems[itemId];
+      return newItems;
+    });
+  }, []);
 
   const handleClearAll = useCallback(() => {
-    if (additionsLocked) {
-      notifyMenuLocked();
-      return;
-    }
     setSelectedItems({});
     setDiscount('0');
-  }, [additionsLocked, notifyMenuLocked]);
+  }, []);
 
   const handleSaveOrder = useCallback(
     async ({ withToast = false } = {}) => {
@@ -469,7 +437,6 @@ const CateringMenuPage = () => {
                 onDiscountChange={setDiscount}
                 onDiscountTypeChange={setDiscountType}
                 canProcessPayment={paymentEnabled}
-                disableEdits={additionsLocked}
                 onProcessPayment={handleOpenPayment}
                 itemCount={itemCount}
               />
@@ -508,7 +475,6 @@ const CateringMenuPage = () => {
               onDiscountChange={setDiscount}
               onDiscountTypeChange={setDiscountType}
               canProcessPayment={paymentEnabled}
-              disableEdits={additionsLocked}
               onProcessPayment={() => {
                 setIsMobileOrderSheetOpen(false);
                 handleOpenPayment();
@@ -528,7 +494,6 @@ const CateringMenuPage = () => {
         isSyncing={isSyncingPayment}
         onPaymentSubmit={handlePaymentSubmit}
         disableDeposit={hasSavedOrder}
-        forceFullPayment={additionsLocked}
       />
     </div>
   );

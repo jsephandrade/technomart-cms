@@ -139,12 +139,7 @@ export const EventDetailsModal = ({
   const currentEvent = localEvent || event;
   const hasSavedOrder =
     Array.isArray(currentEvent?.items) && currentEvent.items.length > 0;
-  const menuAdditions =
-    Number(
-      currentEvent?.menuAdditions ?? currentEvent?.menu_additions_count ?? 0
-    ) || 0;
-  const additionsLocked = menuAdditions >= 1;
-  const disableDeposit = hasSavedOrder || additionsLocked;
+  const disableDeposit = hasSavedOrder;
 
   useEffect(() => {
     if (disableDeposit && paymentType === 'deposit') {

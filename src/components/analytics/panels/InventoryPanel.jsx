@@ -310,13 +310,13 @@ export default function InventoryPanel() {
                 <Package className="h-4 w-4 text-primary" />
               </div>
               <CardTitle className="text-base font-bold">
-                Inventory Coverage Heatmap
+                Inventory Coverage Bar Chart
               </CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Sorted by coverage ratio (quantity / minimum). Showing{' '}
-              {Math.min(coverageLimit, inventoryData.length)} of {totalItems}{' '}
-              items.
+              Sorted by coverage ratio (quantity / minimum) in a horizontal bar
+              chart. Showing {Math.min(coverageLimit, inventoryData.length)} of{' '}
+              {totalItems} items.
             </CardDescription>
           </CardHeader>
           <CardContent className="relative space-y-3">

@@ -31,6 +31,21 @@ import { useForm, Controller } from 'react-hook-form';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+const NON_INTEGER_KEYS = new Set(['e', 'E', '+', '-', '.']);
+
+const handleNonIntegerKeyDown = (event) => {
+  if (NON_INTEGER_KEYS.has(event.key)) {
+    event.preventDefault();
+  }
+};
+
+const handleNonIntegerPaste = (event) => {
+  const text = event.clipboardData.getData('text');
+  if (/[^\d]/.test(text)) {
+    event.preventDefault();
+  }
+};
+
 const AddItemModal = ({ open, onOpenChange, onAddItem }) => {
   const {
     register,
@@ -192,10 +207,17 @@ const AddItemModal = ({ open, onOpenChange, onAddItem }) => {
                 <Input
                   id="currentStock"
                   type="number"
-                  step="0.01"
+                  step="1"
+                  min="0"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  onKeyDown={handleNonIntegerKeyDown}
+                  onPaste={handleNonIntegerPaste}
                   {...register('currentStock', {
                     required: 'Current stock is required',
                     min: { value: 0, message: 'Stock cannot be negative' },
+                    validate: (value) =>
+                      /^\d+$/.test(String(value ?? '')) || 'Whole numbers only',
                   })}
                   placeholder="0"
                   className={cn(errors.currentStock && 'border-destructive')}
@@ -222,13 +244,20 @@ const AddItemModal = ({ open, onOpenChange, onAddItem }) => {
                 <Input
                   id="minThreshold"
                   type="number"
-                  step="0.01"
+                  step="1"
+                  min="0"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  onKeyDown={handleNonIntegerKeyDown}
+                  onPaste={handleNonIntegerPaste}
                   {...register('minThreshold', {
                     required: 'Minimum threshold is required',
                     min: {
                       value: 0,
                       message: 'Threshold cannot be negative',
                     },
+                    validate: (value) =>
+                      /^\d+$/.test(String(value ?? '')) || 'Whole numbers only',
                   })}
                   placeholder="0"
                   className={cn(errors.minThreshold && 'border-destructive')}

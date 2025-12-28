@@ -1,20 +1,13 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn, formatOrderNumber } from '@/lib/utils';
-
-const LS_COMPLETED_ITEMS_KEY = 'pos_customer_display_completed_items';
-
-const loadCompletedItems = () => {
-  try {
-    const raw = localStorage.getItem(LS_COMPLETED_ITEMS_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((value) => typeof value === 'string'));
-  } catch {
-    return new Set();
-  }
-};
+import {
+  buildOrderChecklistItemKeys,
+  getOrderChecklist,
+  isOrderChecklistItemChecked,
+  subscribeOrderChecklist,
+  toggleOrderChecklistItem,
+} from '@/lib/orderChecklist';
 
 const STATUS_CANONICAL_MAP = {
   pending: 'new',
@@ -194,11 +187,18 @@ const Section = ({
                   <div className="mt-3 space-y-2 border-t border-dashed border-border/60 pt-3 text-left">
                     {items.length ? (
                       items.map((item, idx) => {
-                        const itemKey = `${orderKey}-item-${idx}`;
-                        const checked = completedItems.has(itemKey);
+                        const keys = buildOrderChecklistItemKeys(
+                          order,
+                          item,
+                          idx
+                        );
+                        const checked = isOrderChecklistItemChecked(
+                          completedItems,
+                          keys
+                        );
                         return (
                           <label
-                            key={itemKey}
+                            key={keys.stable}
                             className="flex items-start gap-3 text-sm text-foreground"
                           >
                             <span className="flex flex-1 items-center gap-2">
@@ -206,7 +206,7 @@ const Section = ({
                                 type="checkbox"
                                 className="h-4 w-4 cursor-pointer rounded border-border/70 accent-primary"
                                 checked={checked}
-                                onChange={() => onToggleItem(itemKey)}
+                                onChange={() => onToggleItem(keys)}
                               />
                               <span className="font-semibold">
                                 {getItemQuantity(item)}x
@@ -240,20 +240,11 @@ const Section = ({
 
 const CustomerDisplay = ({ queue }) => {
   const [expandedIds, setExpandedIds] = useState(new Set());
-  const [completedItems, setCompletedItems] = useState(loadCompletedItems);
+  const [completedItems, setCompletedItems] = useState(() =>
+    getOrderChecklist()
+  );
 
-  useEffect(() => {
-    try {
-      if (!completedItems.size) {
-        localStorage.removeItem(LS_COMPLETED_ITEMS_KEY);
-        return;
-      }
-      localStorage.setItem(
-        LS_COMPLETED_ITEMS_KEY,
-        JSON.stringify(Array.from(completedItems))
-      );
-    } catch {}
-  }, [completedItems]);
+  useEffect(() => subscribeOrderChecklist(setCompletedItems), []);
 
   const orders = useMemo(() => {
     if (!queue) return [];
@@ -295,16 +286,8 @@ const CustomerDisplay = ({ queue }) => {
     });
   }, []);
 
-  const handleToggleItem = useCallback((itemKey) => {
-    setCompletedItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemKey)) {
-        next.delete(itemKey);
-      } else {
-        next.add(itemKey);
-      }
-      return next;
-    });
+  const handleToggleItem = useCallback((keys) => {
+    toggleOrderChecklistItem(keys);
   }, []);
 
   return (

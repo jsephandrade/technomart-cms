@@ -26,21 +26,15 @@ import {
 import { useAuth } from '@/components/AuthContext';
 import { formatOrderNumber } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  buildOrderChecklistItemKeys,
+  getOrderChecklist,
+  isOrderChecklistItemChecked,
+  subscribeOrderChecklist,
+  toggleOrderChecklistItem,
+} from '@/lib/orderChecklist';
 
-const LS_ORDER_QUEUE_CHECKED_ITEMS_KEY = 'pos_order_queue_checked_items';
 const CHECKLIST_AUTO_PAUSE_REASON = 'checklist_incomplete';
-
-const loadCheckedItems = () => {
-  try {
-    const raw = localStorage.getItem(LS_ORDER_QUEUE_CHECKED_ITEMS_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((value) => typeof value === 'string'));
-  } catch {
-    return new Set();
-  }
-};
 
 const truthyValues = new Set([true, 'true', 1, '1']);
 const falsyValues = new Set([false, 'false', 0, '0']);
@@ -218,7 +212,7 @@ const formatCountdown = (seconds) => {
 const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
   const { can } = useAuth();
   const [statusUpdating, setStatusUpdating] = useState({});
-  const [checkedItems, setCheckedItems] = useState(loadCheckedItems);
+  const [checkedItems, setCheckedItems] = useState(() => getOrderChecklist());
   const autoFlowInFlightRef = useRef(new Set());
   const queueOrders = useMemo(() => {
     if (!orderQueue) return [];
@@ -227,16 +221,15 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
     return Array.isArray(nested) ? nested : [];
   }, [orderQueue]);
 
-  const getItemKeys = useCallback((orderId, item, idx) => {
-    const stablePart = item?.id ? String(item.id) : String(idx);
-    return {
-      stable: `${orderId}-item-${stablePart}`,
-      legacy: `${orderId}-item-${idx}`,
-    };
-  }, []);
+  useEffect(() => subscribeOrderChecklist(setCheckedItems), []);
+
+  const getItemKeys = useCallback(
+    (order, item, idx) => buildOrderChecklistItemKeys(order, item, idx),
+    []
+  );
 
   const isItemChecked = useCallback(
-    (keys) => checkedItems.has(keys.stable) || checkedItems.has(keys.legacy),
+    (keys) => isOrderChecklistItemChecked(checkedItems, keys),
     [checkedItems]
   );
 
@@ -245,37 +238,14 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
       const items = Array.isArray(order?.items) ? order.items : [];
       if (items.length === 0) return true;
       return items.every((item, idx) =>
-        isItemChecked(getItemKeys(order.id, item, idx))
+        isItemChecked(getItemKeys(order, item, idx))
       );
     },
     [getItemKeys, isItemChecked]
   );
 
-  useEffect(() => {
-    try {
-      if (!checkedItems.size) {
-        localStorage.removeItem(LS_ORDER_QUEUE_CHECKED_ITEMS_KEY);
-        return;
-      }
-      localStorage.setItem(
-        LS_ORDER_QUEUE_CHECKED_ITEMS_KEY,
-        JSON.stringify(Array.from(checkedItems))
-      );
-    } catch {}
-  }, [checkedItems]);
-
   const toggleItemChecked = useCallback((keys) => {
-    setCheckedItems((prev) => {
-      const next = new Set(prev);
-      const currentlyChecked = next.has(keys.stable) || next.has(keys.legacy);
-      if (currentlyChecked) {
-        next.delete(keys.stable);
-        next.delete(keys.legacy);
-      } else {
-        next.add(keys.stable);
-      }
-      return next;
-    });
+    toggleOrderChecklistItem(keys);
   }, []);
 
   const visibleOrders = useMemo(() => {
@@ -590,7 +560,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(
                         (item, idx) => {
-                          const keys = getItemKeys(order.id, item, idx);
+                          const keys = getItemKeys(order, item, idx);
                           const checked = isItemChecked(keys);
                           return (
                             <label
@@ -817,7 +787,7 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(
                         (item, idx) => {
-                          const keys = getItemKeys(order.id, item, idx);
+                          const keys = getItemKeys(order, item, idx);
                           const checked = isItemChecked(keys);
                           return (
                             <label

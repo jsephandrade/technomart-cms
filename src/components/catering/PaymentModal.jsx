@@ -43,6 +43,15 @@ const PaymentModal = ({
     return Number(event?.estimatedTotal || event?.total || 0);
   }, [event, totals]);
 
+  const paymentStatus = String(
+    event?.paymentStatus || event?.payment_status || ''
+  )
+    .trim()
+    .toLowerCase();
+  const depositPaid = Boolean(event?.depositPaid || event?.deposit_paid);
+  const hasPartial = depositPaid || paymentStatus === 'partial';
+  const isPaid = paymentStatus === 'paid';
+
   const depositAmount = useMemo(() => {
     const backendDeposit = Number(event?.depositAmount || event?.deposit || 0);
     // If backend doesn't provide deposit amount, calculate 50% of total
@@ -52,9 +61,19 @@ const PaymentModal = ({
     return total * 0.5;
   }, [event, total]);
 
+  const paidAmount = useMemo(() => {
+    if (isPaid) return total;
+    if (hasPartial) return depositAmount;
+    return 0;
+  }, [isPaid, hasPartial, depositAmount, total]);
+
+  const remainingDue = useMemo(() => {
+    return Math.max(0, total - paidAmount);
+  }, [total, paidAmount]);
+
   const amountToPay = useMemo(() => {
-    return paymentType === 'deposit' ? depositAmount : total;
-  }, [paymentType, depositAmount, total]);
+    return paymentType === 'deposit' ? depositAmount : remainingDue;
+  }, [paymentType, depositAmount, remainingDue]);
 
   const remainingBalance = useMemo(() => {
     if (paymentType === 'full') return 0;
@@ -227,7 +246,7 @@ const PaymentModal = ({
                     </p>
                     <div className="flex items-baseline gap-2 pt-2">
                       <span className="text-3xl font-bold text-primary">
-                        ₱{total.toFixed(2)}
+                        ₱{remainingDue.toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -292,8 +311,8 @@ const PaymentModal = ({
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Event Total</span>
-                <span className="font-medium">₱{total.toFixed(2)}</span>
+                <span className="text-muted-foreground">Remaining Balance</span>
+                <span className="font-medium">₱{remainingDue.toFixed(2)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t-2 border-primary/20">
                 <span className="font-semibold">Amount to Pay</span>

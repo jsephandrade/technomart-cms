@@ -168,7 +168,6 @@ export const EventDetailsModal = ({
     'Rescheduling is unavailable within 5 days of the event.';
 
   const contactPerson = event.contactPerson || { name: '', phone: '' };
-  const totalValue = Number(event.total ?? 0);
   const attendeesCount = Number(event.attendees ?? 0);
 
   const handleScheduleSubmit = async (e) => {
@@ -259,7 +258,21 @@ export const EventDetailsModal = ({
     depositAmount = total * 0.5;
   }
 
-  const amountToPay = paymentType === 'deposit' ? depositAmount : total;
+  const paymentStatus = String(
+    currentEvent?.paymentStatus || currentEvent?.payment_status || ''
+  )
+    .trim()
+    .toLowerCase();
+  const depositPaid = Boolean(
+    currentEvent?.depositPaid || currentEvent?.deposit_paid
+  );
+  const hasPartial = depositPaid || paymentStatus === 'partial';
+  const isPaid = paymentStatus === 'paid';
+
+  const paidAmount = isPaid ? total : hasPartial ? depositAmount : 0;
+  const remainingDue = Math.max(0, total - paidAmount);
+
+  const amountToPay = paymentType === 'deposit' ? depositAmount : remainingDue;
   const remainingBalance = paymentType === 'full' ? 0 : total - depositAmount;
 
   const paymentMethods = [
@@ -787,7 +800,7 @@ export const EventDetailsModal = ({
                               </p>
                               <div className="flex items-baseline gap-2 pt-1">
                                 <span className="text-xl font-bold text-primary">
-                                  ₱{total.toFixed(2)}
+                                  ₱{remainingDue.toFixed(2)}
                                 </span>
                               </div>
                             </div>
@@ -863,10 +876,10 @@ export const EventDetailsModal = ({
                       <div className="space-y-1.5 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground text-xs">
-                            Event Total
+                            Remaining Balance
                           </span>
                           <span className="font-medium">
-                            ₱{total.toFixed(2)}
+                            ₱{remainingDue.toFixed(2)}
                           </span>
                         </div>
                         <div className="flex justify-between pt-1.5 border-t-2 border-primary/20">
@@ -940,11 +953,11 @@ export const EventDetailsModal = ({
                       <div className="flex items-center gap-1.5 mb-1">
                         <TrendingUp className="h-3 w-3 text-primary" />
                         <span className="text-xs font-semibold text-primary">
-                          Total Amount
+                          Remaining Balance
                         </span>
                       </div>
                       <p className="text-2xl font-bold text-primary">
-                        ₱{totalValue.toFixed(2)}
+                        ₱{remainingDue.toFixed(2)}
                       </p>
                     </div>
                     <div className="space-y-1">
@@ -954,7 +967,7 @@ export const EventDetailsModal = ({
                         </span>
                         <span className="font-semibold text-sm">
                           {attendeesCount > 0
-                            ? `₱${(totalValue / attendeesCount).toFixed(2)}`
+                            ? `₱${(remainingDue / attendeesCount).toFixed(2)}`
                             : '₱0.00'}
                         </span>
                       </div>

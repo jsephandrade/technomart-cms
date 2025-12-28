@@ -563,7 +563,16 @@ def catering_event_payment(request, event_id):
     if payment_type == "deposit":
         expected_amount = event.deposit_amount
     else:  # full payment
-        expected_amount = event.estimated_total
+        status = (event.payment_status or "").strip().lower()
+        has_partial = bool(event.deposit_paid) or status == "partial"
+        if status == "paid":
+            expected_amount = Decimal("0")
+        elif has_partial:
+            expected_amount = event.estimated_total - event.deposit_amount
+        else:
+            expected_amount = event.estimated_total
+        if expected_amount < 0:
+            expected_amount = Decimal("0")
 
     # Validate amount (allow small floating point differences)
     if abs(amount - expected_amount) > Decimal("0.01"):

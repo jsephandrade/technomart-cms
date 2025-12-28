@@ -1,16 +1,29 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import inventoryService from '@/api/services/inventoryService';
+import {
+  subscribeInventoryMutations,
+  trackInventoryMutation,
+} from '@/lib/inventoryMutations';
 
 export const useInventoryManagement = (params = {}) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState(null);
+  const isFetchingRef = useRef(false);
+  const pendingRefetchRef = useRef(false);
+  const lastFetchCompletedRef = useRef(0);
 
   const fetchInventoryItems = useCallback(async () => {
+    if (isFetchingRef.current) {
+      pendingRefetchRef.current = true;
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    isFetchingRef.current = true;
 
     try {
       const response = await inventoryService.getInventoryItems(params);
@@ -18,6 +31,7 @@ export const useInventoryManagement = (params = {}) => {
       if (response.success) {
         setItems(response.data);
         setPagination(response.pagination);
+        lastFetchCompletedRef.current = Date.now();
       } else {
         throw new Error('Failed to fetch inventory items');
       }
@@ -28,11 +42,33 @@ export const useInventoryManagement = (params = {}) => {
       });
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
+      if (pendingRefetchRef.current) {
+        pendingRefetchRef.current = false;
+        setTimeout(() => {
+          fetchInventoryItems();
+        }, 0);
+      }
     }
   }, [params, toast]);
 
   useEffect(() => {
     fetchInventoryItems();
+  }, [fetchInventoryItems]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeInventoryMutations(
+      ({ pendingCount, lastMutationAt }) => {
+        if (pendingCount > 0) return;
+        if (lastMutationAt <= lastFetchCompletedRef.current) return;
+        if (isFetchingRef.current) {
+          pendingRefetchRef.current = true;
+          return;
+        }
+        fetchInventoryItems();
+      }
+    );
+    return unsubscribe;
   }, [fetchInventoryItems]);
 
   const createInventoryItem = useCallback(async (itemData) => {
@@ -41,7 +77,9 @@ export const useInventoryManagement = (params = {}) => {
     setItems((prev) => [...prev, optimisticItem]);
 
     try {
-      const response = await inventoryService.createInventoryItem(itemData);
+      const response = await trackInventoryMutation(
+        inventoryService.createInventoryItem(itemData)
+      );
 
       if (response.success) {
         setItems((prev) =>
@@ -77,9 +115,8 @@ export const useInventoryManagement = (params = {}) => {
     );
 
     try {
-      const response = await inventoryService.updateInventoryItem(
-        itemId,
-        updates
+      const response = await trackInventoryMutation(
+        inventoryService.updateInventoryItem(itemId, updates)
       );
 
       if (response.success) {
@@ -121,7 +158,9 @@ export const useInventoryManagement = (params = {}) => {
     });
 
     try {
-      const response = await inventoryService.deleteInventoryItem(itemId);
+      const response = await trackInventoryMutation(
+        inventoryService.deleteInventoryItem(itemId)
+      );
 
       if (response.success) {
         toast.success('Inventory Item Deleted', {
@@ -180,10 +219,8 @@ export const useInventoryManagement = (params = {}) => {
       );
 
       try {
-        const response = await inventoryService.updateStock(
-          itemId,
-          quantity,
-          operation
+        const response = await trackInventoryMutation(
+          inventoryService.updateStock(itemId, quantity, operation)
         );
 
         if (response.success) {

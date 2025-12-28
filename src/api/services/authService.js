@@ -1,12 +1,11 @@
 import apiClient from '../client';
 
 const mockDelay = (ms = 600) => new Promise((r) => setTimeout(r, ms));
-const USE_MOCKS = !(
+const USE_MOCKS =
   typeof import.meta !== 'undefined' &&
   import.meta.env &&
-  (import.meta.env.VITE_ENABLE_MOCKS === 'false' ||
-    import.meta.env.VITE_ENABLE_MOCKS === '0')
-);
+  (import.meta.env.VITE_ENABLE_MOCKS === 'true' ||
+    import.meta.env.VITE_ENABLE_MOCKS === '1');
 
 const mockLoginOtps = new Map();
 

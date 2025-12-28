@@ -73,6 +73,26 @@ class AppUser(models.Model):
     def check_password(self, raw_password):
         """Check a raw password against the stored hash."""
         return check_password(raw_password, self.password_hash)
+
+
+class RoleConfig(models.Model):
+    """Configurable permissions for built-in roles."""
+
+    value = models.CharField(max_length=32, unique=True)
+    label = models.CharField(max_length=64)
+    description = models.TextField(blank=True)
+    permissions = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "role_config"
+        indexes = [
+            models.Index(fields=["value"], name="role_config_value_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.value})"
 def _headshot_upload_path(instance, filename):
     # Store under a per-user folder with a random filename; keep extension if present
     base, ext = os.path.splitext(filename or "")

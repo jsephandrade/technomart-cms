@@ -10,30 +10,22 @@ from django.conf import settings
 import jwt
 from django.contrib.auth.hashers import make_password
 
-from .views_common import USERS, _paginate, _maybe_seed_from_memory, _safe_user_from_db, _now_iso, DEFAULT_ROLE_PERMISSIONS
+from .views_common import (
+    USERS,
+    _paginate,
+    _maybe_seed_from_memory,
+    _safe_user_from_db,
+    _now_iso,
+    get_role_configs,
+    role_permissions_for_role,
+    normalize_role_permissions,
+    _set_role_config_override,
+    _invalidate_role_config_cache,
+)
 from .utils_audit import record_audit
 
 
-ROLES = {
-    "admin": {
-        "label": "Admin",
-        "value": "admin",
-        "description": "Full access to all settings and functions",
-        "permissions": ["all"],
-    },
-    "manager": {
-        "label": "Manager",
-        "value": "manager",
-        "description": "Manages inventory/menu, queue, refunds, and sees reports",
-        "permissions": sorted(list(DEFAULT_ROLE_PERMISSIONS.get("manager", set()))),
-    },
-    "staff": {
-        "label": "Staff",
-        "value": "staff",
-        "description": "Handles orders, inventory updates, and payments",
-        "permissions": sorted(list(DEFAULT_ROLE_PERMISSIONS.get("staff", set()))),
-    },
-}
+ALLOWED_ROLES = {"admin", "manager", "staff"}
 
 
 def _log_user_action(request, actor, target_user, action: str, *, details: str = "", meta=None):
@@ -320,6 +312,17 @@ def user_detail(request, user_id):
                 if before_snapshot.get(k) != new_val:
                     changes[k] = {"from": before_snapshot.get(k), "to": new_val}
                 changed = True
+        if "role" in changes and "permissions" not in payload:
+            old_defaults = set(role_permissions_for_role(before_snapshot.get("role") or ""))
+            explicit = set(db_user.permissions or [])
+            cleaned = sorted(list(explicit - old_defaults))
+            if cleaned != (db_user.permissions or []):
+                db_user.permissions = cleaned
+                changes["permissions"] = {
+                    "from": before_snapshot.get("permissions"),
+                    "to": cleaned,
+                }
+                changed = True
         if changed:
             db_user.save()
             changed_fields = sorted(list(changes.keys()))
@@ -462,13 +465,16 @@ def user_role(request, user_id):
         except Exception:
             payload = {}
         role = (payload.get("role") or "").lower()
-        if role not in ROLES:
+        if role not in ALLOWED_ROLES:
             return JsonResponse({"success": False, "message": "Invalid role"}, status=400)
-        previous_role = db_user.role
+        previous_role = (db_user.role or "").lower()
+        old_defaults = set(role_permissions_for_role(previous_role))
+        explicit = set(db_user.permissions or [])
+        cleaned = sorted(list(explicit - old_defaults))
+
         db_user.role = role
-        # Initialize permissions to role defaults if empty/not set
-        if not (db_user.permissions or []):
-            db_user.permissions = sorted(list(DEFAULT_ROLE_PERMISSIONS.get(role, set())))
+        if cleaned != (db_user.permissions or []):
+            db_user.permissions = cleaned
             db_user.save(update_fields=["role", "permissions"])
         else:
             db_user.save(update_fields=["role"])
@@ -491,7 +497,7 @@ def user_role(request, user_id):
     except Exception:
         payload = {}
     role = (payload.get("role") or "").lower()
-    if role not in ROLES:
+    if role not in ALLOWED_ROLES:
         return JsonResponse({"success": False, "message": "Invalid role"}, status=400)
     USERS[idx]["role"] = role
     return JsonResponse({"success": True, "data": USERS[idx]})
@@ -499,7 +505,27 @@ def user_role(request, user_id):
 
 @require_http_methods(["GET"]) 
 def user_roles(request):
-    return JsonResponse({"success": True, "data": list(ROLES.values())})
+    auth = request.META.get("HTTP_AUTHORIZATION", "")
+    if not auth.startswith("Bearer "):
+        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+    token = auth.split(" ", 1)[1].strip()
+    try:
+        tp = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except Exception:
+        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Admin-only role config visibility
+    actor_role = None
+    try:
+        from .models import AppUser
+        actor = AppUser.objects.filter(email=(tp.get("email") or "").lower()).first()
+        actor_role = (actor.role or "").lower() if actor else None
+    except Exception:
+        actor_role = (tp.get("role") or "").lower()
+    if actor_role != "admin":
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    return JsonResponse({"success": True, "data": get_role_configs()})
 
 
 @require_http_methods(["PUT"]) 
@@ -525,16 +551,55 @@ def user_role_config(request, value):
     if not role_value:
         return JsonResponse({"success": False, "message": "Missing role value"}, status=400)
     # Restrict to the built-in roles only
-    if role_value not in {"admin", "manager", "staff"}:
+    if role_value not in ALLOWED_ROLES:
         return JsonResponse({"success": False, "message": "Invalid role"}, status=400)
+
+    existing = next((r for r in get_role_configs() if r.get("value") == role_value), None) or {}
+    label = payload.get("label") or existing.get("label") or role_value.capitalize()
+    description = payload.get("description") or existing.get("description") or ""
+    if "permissions" in payload:
+        permissions = normalize_role_permissions(role_value, payload.get("permissions"))
+    else:
+        permissions = normalize_role_permissions(role_value, existing.get("permissions") or [])
+
     cfg = {
-        "label": payload.get("label") or role_value.capitalize(),
+        "label": label,
         "value": role_value,
-        "description": payload.get("description") or "",
-        "permissions": payload.get("permissions") or [],
+        "description": description,
+        "permissions": permissions,
     }
-    ROLES[role_value] = cfg
-    return JsonResponse({"success": True, "data": cfg})
+
+    old_defaults = set(role_permissions_for_role(role_value))
+    try:
+        from .models import RoleConfig, AppUser
+        RoleConfig.objects.update_or_create(
+            value=role_value,
+            defaults={
+                "label": label,
+                "description": description,
+                "permissions": permissions,
+            },
+        )
+        _set_role_config_override(role_value, None)
+        _invalidate_role_config_cache()
+
+        # Normalize per-user explicit permissions so role changes apply immediately.
+        if old_defaults:
+            for user in AppUser.objects.filter(role=role_value):
+                explicit = set(user.permissions or [])
+                cleaned = sorted(list(explicit - old_defaults))
+                if cleaned != (user.permissions or []):
+                    user.permissions = cleaned
+                    user.save(update_fields=["permissions"])
+        return JsonResponse({"success": True, "data": cfg})
+    except (OperationalError, ProgrammingError):
+        if getattr(settings, "DISABLE_INMEM_FALLBACK", False):
+            return JsonResponse(
+                {"success": False, "message": "Service temporarily unavailable"},
+                status=503,
+            )
+        _set_role_config_override(role_value, cfg)
+        return JsonResponse({"success": True, "data": cfg})
 
 
 __all__ = [

@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.utils import timezone as dj_timezone
 from django.core.files.base import ContentFile
+from django.db.utils import OperationalError, ProgrammingError
 import jwt
 import base64
 import re
@@ -179,6 +180,13 @@ def _safe_user_from_db(db_user):
         # If employee_profile doesn't exist or there's an error, leave as None
         employee_id = None
 
+    explicit_permissions = getattr(db_user, "permissions", []) or []
+    role_permissions = sorted(list(_role_permissions_from_config(role)))
+    if role == "admin" or "all" in explicit_permissions or "all" in role_permissions:
+        effective_permissions = ["all"]
+    else:
+        effective_permissions = sorted(list(set(role_permissions) | set(explicit_permissions)))
+
     return {
         "id": str(db_user.id),
         "employeeId": employee_id,
@@ -188,7 +196,9 @@ def _safe_user_from_db(db_user):
         "status": db_user.status,
         "createdAt": (db_user.created_at or dj_timezone.now()).isoformat(),
         "lastLogin": db_user.last_login.isoformat() if db_user.last_login else None,
-        "permissions": getattr(db_user, "permissions", []) or [],
+        "permissions": explicit_permissions,
+        "rolePermissions": role_permissions,
+        "effectivePermissions": effective_permissions,
         "avatar": getattr(db_user, "avatar", None) or None,
         "emailVerified": bool(getattr(db_user, "email_verified", False)),
         "phone": getattr(db_user, "phone", "") or "",
@@ -319,10 +329,131 @@ DEFAULT_ROLE_PERMISSIONS = {
     },
 }
 
+ROLE_ORDER = ["admin", "manager", "staff"]
+ROLE_DEFINITIONS = {
+    "admin": {
+        "label": "Admin",
+        "description": "Full access to all settings and functions",
+    },
+    "manager": {
+        "label": "Manager",
+        "description": "Manages inventory/menu, queue, refunds, and sees reports",
+    },
+    "staff": {
+        "label": "Staff",
+        "description": "Handles orders, inventory updates, and payments",
+    },
+}
+
+_ROLE_CONFIG_CACHE = {"ts": 0, "data": None}
+_ROLE_CONFIG_TTL_SECONDS = 30
+_ROLE_CONFIG_OVERRIDES_MEM = {}
+
+
+def _default_role_config_map():
+    cfg = {}
+    for role in ROLE_ORDER:
+        meta = ROLE_DEFINITIONS.get(role, {})
+        cfg[role] = {
+            "label": meta.get("label") or role.capitalize(),
+            "value": role,
+            "description": meta.get("description") or "",
+            "permissions": sorted(list(DEFAULT_ROLE_PERMISSIONS.get(role, set()))),
+        }
+    return cfg
+
+
+def normalize_role_permissions(role_value, permissions):
+    items = permissions if isinstance(permissions, (list, tuple, set)) else []
+    clean = [p for p in items if isinstance(p, str)]
+    if role_value == "admin":
+        return ["all"]
+    clean = [p for p in clean if p != "all"]
+    return sorted(set(clean))
+
+
+def _invalidate_role_config_cache():
+    _ROLE_CONFIG_CACHE["ts"] = 0
+    _ROLE_CONFIG_CACHE["data"] = None
+
+
+def _set_role_config_override(role_value, cfg):
+    if cfg is None:
+        _ROLE_CONFIG_OVERRIDES_MEM.pop(role_value, None)
+    else:
+        _ROLE_CONFIG_OVERRIDES_MEM[role_value] = cfg
+    _invalidate_role_config_cache()
+
+
+def _load_role_config_map():
+    now = time.time()
+    cached = _ROLE_CONFIG_CACHE.get("data")
+    cached_ts = _ROLE_CONFIG_CACHE.get("ts", 0)
+    if cached and (now - cached_ts) < _ROLE_CONFIG_TTL_SECONDS:
+        return cached
+
+    cfg_map = _default_role_config_map()
+    db_ok = False
+    try:
+        from .models import RoleConfig
+        rows = RoleConfig.objects.all()
+        db_ok = True
+        for rc in rows:
+            role_value = (rc.value or "").lower()
+            if role_value not in cfg_map:
+                continue
+            base = cfg_map[role_value]
+            perms = normalize_role_permissions(role_value, rc.permissions)
+            cfg_map[role_value] = {
+                "label": rc.label or base["label"],
+                "value": role_value,
+                "description": rc.description or base["description"],
+                "permissions": perms,
+            }
+    except (OperationalError, ProgrammingError):
+        db_ok = False
+    except Exception:
+        db_ok = False
+
+    if not db_ok and _ROLE_CONFIG_OVERRIDES_MEM:
+        for role_value, cfg in _ROLE_CONFIG_OVERRIDES_MEM.items():
+            if role_value not in cfg_map:
+                continue
+            base = cfg_map[role_value]
+            cfg_map[role_value] = {
+                "label": cfg.get("label") or base["label"],
+                "value": role_value,
+                "description": cfg.get("description") or base["description"],
+                "permissions": normalize_role_permissions(role_value, cfg.get("permissions")),
+            }
+
+    _ROLE_CONFIG_CACHE["data"] = cfg_map
+    _ROLE_CONFIG_CACHE["ts"] = now
+    return cfg_map
+
+
+def get_role_configs():
+    cfg_map = _load_role_config_map()
+    return [cfg_map[role] for role in ROLE_ORDER if role in cfg_map]
+
+
+def _role_permissions_from_config(role: str):
+    role_l = (role or "").lower()
+    cfg_map = _load_role_config_map()
+    cfg = cfg_map.get(role_l)
+    perms = cfg.get("permissions") if cfg else []
+    perms = normalize_role_permissions(role_l, perms)
+    if role_l == "admin" or "all" in perms:
+        return {"all"}
+    return set(perms)
+
+
+def role_permissions_for_role(role: str):
+    return sorted(list(_role_permissions_from_config(role)))
+
 
 def _effective_permissions_from_role(role: str):
-    role_l = (role or "").lower()
-    return set(DEFAULT_ROLE_PERMISSIONS.get(role_l, set()))
+    return _role_permissions_from_config(role)
 
 
 def _effective_permissions(user_or_dict):

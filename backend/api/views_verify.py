@@ -297,12 +297,7 @@ def verify_approve(request):
         u.status = "active"
         # Assign default permissions for the role if none set
         try:
-            from .views_common import DEFAULT_ROLE_PERMISSIONS
-            if not (u.permissions or []):
-                u.permissions = sorted(list(DEFAULT_ROLE_PERMISSIONS.get(role, set())))
-                u.save(update_fields=["role", "status", "permissions"])
-            else:
-                u.save(update_fields=["role", "status"])
+            u.save(update_fields=["role", "status"])
         except Exception:
             u.save(update_fields=["role", "status"])
         try:

@@ -6,16 +6,16 @@ import {
   userModelToCreatePayload,
   userModelToUpdatePayload,
 } from '@/api/mappers';
+import { DEFAULT_ROLE_PERMISSIONS } from '@/lib/permissions';
 
 // Mock delay for realistic API simulation
 const mockDelay = (ms = 800) =>
   new Promise((resolve) => setTimeout(resolve, ms));
-const USE_MOCKS = !(
+const USE_MOCKS =
   typeof import.meta !== 'undefined' &&
   import.meta.env &&
-  (import.meta.env.VITE_ENABLE_MOCKS === 'false' ||
-    import.meta.env.VITE_ENABLE_MOCKS === '0')
-);
+  (import.meta.env.VITE_ENABLE_MOCKS === 'true' ||
+    import.meta.env.VITE_ENABLE_MOCKS === '1');
 
 function applyListParams(list, params = {}) {
   const {
@@ -148,13 +148,20 @@ class UserService {
   async createUser(userData) {
     const payload = userModelToCreatePayload(userData);
     if (!USE_MOCKS) {
-      const res = await apiClient.post('/users', payload, {
-        retry: { retries: 1 },
-      });
-      const data = userApiToModel(res?.data || res);
-      return { success: true, data };
+      try {
+        const res = await apiClient.post('/users', payload, {
+          retry: { retries: 1 },
+        });
+        const data = userApiToModel(res?.data || res);
+        return { success: true, data };
+      } catch (e) {
+        console.warn(
+          'createUser API failed, falling back to mocks:',
+          e?.message
+        );
+      }
     }
-    // Mock implementation (only runs when USE_MOCKS is enabled)
+    // Mock implementation (fallback when mocks are enabled or API unavailable)
     await mockDelay(400);
     const newUser = {
       id: Date.now().toString(),
@@ -256,19 +263,19 @@ class UserService {
           label: 'Admin',
           value: 'admin',
           description: 'Full access to all settings and functions',
-          permissions: ['all'],
+          permissions: [...DEFAULT_ROLE_PERMISSIONS.admin],
         },
         {
           label: 'Manager',
           value: 'manager',
           description: 'Can manage most settings and view reports',
-          permissions: ['menu', 'inventory', 'reports', 'users:read'],
+          permissions: [...DEFAULT_ROLE_PERMISSIONS.manager],
         },
         {
           label: 'Staff',
           value: 'staff',
           description: 'Kitchen and service staff access',
-          permissions: ['orders', 'inventory:read'],
+          permissions: [...DEFAULT_ROLE_PERMISSIONS.staff],
         },
       ],
     };

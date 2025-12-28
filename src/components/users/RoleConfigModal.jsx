@@ -12,32 +12,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PERMISSION_CODES, permissionLabel } from '@/lib/permissions';
 
 export const RoleConfigModal = ({ open, onOpenChange, role, onUpdateRole }) => {
+  const normalizePermissions = (roleValue, permissions = []) =>
+    roleValue === 'admin'
+      ? permissions
+      : permissions.filter((permission) => permission !== 'all');
+
   const [formData, setFormData] = useState({
     label: role?.label || '',
     description: role?.description || '',
-    permissions: role?.permissions || [],
+    permissions: normalizePermissions(role?.value, role?.permissions || []),
   });
 
   useEffect(() => {
     setFormData({
       label: role?.label || '',
       description: role?.description || '',
-      permissions: role?.permissions || [],
+      permissions: normalizePermissions(role?.value, role?.permissions || []),
     });
   }, [role]);
 
-  const availablePermissions = [
-    'View Dashboard',
-    'Manage Users',
-    'Manage Menu',
-    'Process Payments',
-    'View Reports',
-    'Manage Inventory',
-    'Handle Catering',
-    'Access Settings',
-  ];
+  const availablePermissions =
+    role?.value === 'admin'
+      ? PERMISSION_CODES
+      : PERMISSION_CODES.filter((permission) => permission !== 'all');
 
   const handlePermissionChange = (permission, checked) => {
     if (checked) {
@@ -117,7 +117,7 @@ export const RoleConfigModal = ({ open, onOpenChange, role, onUpdateRole }) => {
                       htmlFor={permission}
                       className="text-sm font-normal cursor-pointer"
                     >
-                      {permission}
+                      {permissionLabel(permission)}
                     </Label>
                   </div>
                 ))}

@@ -70,6 +70,17 @@ const Inventory = () => {
     'Condiments',
     'Baking',
     'Fruits',
+    'Seafood',
+    'Beverages',
+    'Spices',
+    'Oils',
+    'Frozen',
+    'Canned Goods',
+    'Dry Goods',
+    'Snacks',
+    'Packaging',
+    'Cleaning Supplies',
+    'Ingredients',
   ];
 
   const filteredItems = useMemo(() => {

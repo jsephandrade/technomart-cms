@@ -61,6 +61,17 @@ const EditItemModal = ({ open, onOpenChange, item, onEditItem }) => {
     'Condiments',
     'Baking',
     'Fruits',
+    'Seafood',
+    'Beverages',
+    'Spices',
+    'Oils',
+    'Frozen',
+    'Canned Goods',
+    'Dry Goods',
+    'Snacks',
+    'Packaging',
+    'Cleaning Supplies',
+    'Ingredients',
   ];
 
   const units = [

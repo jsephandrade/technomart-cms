@@ -58,6 +58,32 @@ const formatTimeRange = (startTime, endTime, fallbackLabel) => {
   return '';
 };
 
+const HIDDEN_EVENTS_STORAGE_KEY = 'catering.hiddenEvents';
+
+const loadHiddenEventIds = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = window.sessionStorage.getItem(HIDDEN_EVENTS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const persistHiddenEventIds = (ids) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(
+      HIDDEN_EVENTS_STORAGE_KEY,
+      JSON.stringify(ids)
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
 const mapEventRecord = (record) => {
   if (!record) return null;
   const dateIso = record.date || record.eventDate || '';
@@ -154,6 +180,7 @@ const Catering = () => {
   const [events, setEvents] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [eventsError, setEventsError] = useState(null);
+  const [hiddenEventIds, setHiddenEventIds] = useState(loadHiddenEventIds);
 
   const fetchEvents = useCallback(async () => {
     setIsLoadingEvents(true);
@@ -179,16 +206,23 @@ const Catering = () => {
     fetchEvents();
   }, [fetchEvents]);
 
+  useEffect(() => {
+    persistHiddenEventIds(hiddenEventIds);
+  }, [hiddenEventIds]);
+
   const filteredBySearch = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return events;
-    return events.filter((event) => {
+    const visibleEvents = events.filter(
+      (event) => !hiddenEventIds.includes(event.id)
+    );
+    if (!term) return visibleEvents;
+    return visibleEvents.filter((event) => {
       const nameMatch = event.name.toLowerCase().includes(term);
       const clientMatch = event.client.toLowerCase().includes(term);
       const locationMatch = event.location.toLowerCase().includes(term);
       return nameMatch || clientMatch || locationMatch;
     });
-  }, [events, searchTerm]);
+  }, [events, searchTerm, hiddenEventIds]);
 
   const upcomingEvents = useMemo(
     () =>
@@ -331,6 +365,9 @@ const Catering = () => {
 
   const handleRemoveEvent = useCallback(
     (event) => {
+      setHiddenEventIds((prev) =>
+        prev.includes(event.id) ? prev : [...prev, event.id]
+      );
       setEvents((prev) => prev.filter((item) => item.id !== event.id));
       if (selectedEvent?.id === event.id) {
         setSelectedEvent(null);

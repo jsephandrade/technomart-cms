@@ -335,13 +335,6 @@ const CateringMenuPage = () => {
   }, [selectedItems]);
   const hasItems = itemCount > 0;
   const paymentEnabled = paymentTotals.total > 0 || itemsArray.length > 0;
-  const paymentStatus = String(
-    event?.paymentStatus || event?.payment_status || ''
-  )
-    .trim()
-    .toLowerCase();
-  const isPaid = paymentStatus === 'paid';
-  const processPaymentDisabled = additionsLocked && isPaid;
 
   const handlePaymentSubmit = async (paymentData) => {
     try {
@@ -477,7 +470,6 @@ const CateringMenuPage = () => {
                 onDiscountTypeChange={setDiscountType}
                 canProcessPayment={paymentEnabled}
                 disableEdits={additionsLocked}
-                disablePayment={processPaymentDisabled}
                 onProcessPayment={handleOpenPayment}
                 itemCount={itemCount}
               />
@@ -517,7 +509,6 @@ const CateringMenuPage = () => {
               onDiscountTypeChange={setDiscountType}
               canProcessPayment={paymentEnabled}
               disableEdits={additionsLocked}
-              disablePayment={processPaymentDisabled}
               onProcessPayment={() => {
                 setIsMobileOrderSheetOpen(false);
                 handleOpenPayment();

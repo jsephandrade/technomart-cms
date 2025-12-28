@@ -17,7 +17,6 @@ const CateringOrderSummary = ({
   onProcessPayment,
   itemCount = 0,
   disableEdits = false,
-  disablePayment = false,
 }) => {
   const itemsArray = useMemo(() => {
     return Object.values(selectedItems).filter(Boolean);
@@ -177,7 +176,7 @@ const CateringOrderSummary = ({
               className="w-full"
               size="sm"
               variant="default"
-              disabled={!canProcessPayment || disablePayment}
+              disabled={!canProcessPayment}
               onClick={onProcessPayment}
             >
               <CreditCard className="mr-2 h-4 w-4" /> Process Payment

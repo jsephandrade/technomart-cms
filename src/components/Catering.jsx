@@ -330,22 +330,13 @@ const Catering = () => {
   );
 
   const handleRemoveEvent = useCallback(
-    async (event) => {
-      try {
-        const res = await cateringService.cancelEvent(event.id);
-        if (!res?.success) throw new Error(res?.message);
-        // Remove from local state (soft deleted in backend)
-        setEvents((prev) => prev.filter((item) => item.id !== event.id));
-        if (selectedEvent?.id === event.id) {
-          setSelectedEvent(null);
-          setShowEventDetailsModal(false);
-        }
-        toast.success(`Event "${event.name}" has been removed.`);
-      } catch (error) {
-        const message =
-          error?.message || error?.details?.message || 'Failed to remove event';
-        toast.error(message);
+    (event) => {
+      setEvents((prev) => prev.filter((item) => item.id !== event.id));
+      if (selectedEvent?.id === event.id) {
+        setSelectedEvent(null);
+        setShowEventDetailsModal(false);
       }
+      toast.success(`Event "${event.name}" has been removed.`);
     },
     [selectedEvent]
   );

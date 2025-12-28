@@ -377,6 +377,7 @@ const PaymentModal = ({
             disabled={
               isProcessing ||
               isSyncing ||
+              remainingDue <= 0 ||
               (shouldForceFullPayment && paymentType !== 'full')
             }
             size="lg"

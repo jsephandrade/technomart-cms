@@ -951,6 +951,7 @@ export const EventDetailsModal = ({
                         disabled={
                           isProcessingPayment ||
                           !total ||
+                          remainingDue <= 0 ||
                           (disableDeposit && paymentType !== 'full')
                         }
                         size="sm"

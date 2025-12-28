@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -11,6 +11,78 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Search, AlertCircle, Image as ImageIcon } from 'lucide-react';
+
+const resolveImageSrc = (item) => {
+  if (!item) return null;
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.photo,
+    item.picture,
+    item.thumbnail,
+    item.img,
+    item?.image?.url,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c;
+  }
+  return null;
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw = item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const resolveIngredientImages = (item, imageById) =>
+  resolveIngredientEntries(item)
+    .map((entry) => {
+      if (!entry) return null;
+      if (typeof entry === 'object') {
+        const direct = resolveImageSrc(entry);
+        if (direct) return direct;
+        const id =
+          entry.id ||
+          entry.menuItemId ||
+          entry.itemId ||
+          entry.menu_item_id ||
+          null;
+        if (id === null || id === undefined) return null;
+        return imageById.get(String(id)) || null;
+      }
+      return imageById.get(String(entry)) || null;
+    })
+    .filter(Boolean);
+
+const isComboMeal = (item, categoryLabel = '') => {
+  if (!item) return false;
+  const category = String(
+    item.category ||
+      item.categoryName ||
+      item.category_label ||
+      categoryLabel ||
+      ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients =
+    item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
 
 const CateringMenuSelection = ({
   categories,
@@ -48,10 +120,44 @@ const CateringMenuSelection = ({
 
   const searchResults = getFilteredItems();
 
+  const imageById = useMemo(() => {
+    const map = new Map();
+    (categories || []).forEach((category) => {
+      (category.items || []).forEach((entry) => {
+        if (entry?.id === undefined || entry?.id === null) return;
+        const src = resolveImageSrc(entry);
+        if (src) map.set(String(entry.id), src);
+      });
+    });
+    return map;
+  }, [categories]);
+
   const ItemListRow = ({ item, showCategoryBadge = false }) => {
-    const imageSrc = item.image || item.imageUrl || null;
+    const imageSrc = resolveImageSrc(item);
     const categoryLabel = item.categoryName || item.category || '';
     const isUnavailable = item.available === false;
+    const isCombo = isComboMeal(item, categoryLabel);
+    const ingredientImages = isCombo
+      ? resolveIngredientImages(item, imageById)
+      : [];
+    const [brokenImages, setBrokenImages] = useState({});
+
+    const markBroken = (src) => {
+      if (!src) return;
+      setBrokenImages((prev) => (prev[src] ? prev : { ...prev, [src]: true }));
+    };
+
+    const baseImage =
+      imageSrc && !brokenImages[String(imageSrc)] ? imageSrc : null;
+    const safeIngredientImages = ingredientImages.filter(
+      (src) => src && !brokenImages[String(src)]
+    );
+    const collageSources = safeIngredientImages.slice(0, 3);
+    if (collageSources.length === 0 && baseImage) {
+      collageSources.push(baseImage);
+    }
+    const collageSlots = [...collageSources];
+    while (collageSlots.length < 3) collageSlots.push(null);
 
     const handleActivate = (event) => {
       if (isUnavailable) return;
@@ -80,12 +186,40 @@ const CateringMenuSelection = ({
       >
         {/* Image Thumbnail */}
         <div className="shrink-0">
-          {imageSrc ? (
+          {isCombo ? (
+            <div className="h-16 w-16 rounded-md border border-border/50 bg-muted/20 p-0.5">
+              <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-1 overflow-hidden rounded-[0.3rem]">
+                {collageSlots.map((src, slotIndex) => (
+                  <div
+                    key={`${item.id || item.name}-${slotIndex}`}
+                    className={`relative overflow-hidden ${
+                      slotIndex === 0 ? 'row-span-2' : ''
+                    }`}
+                  >
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        onError={() => markBroken(src)}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground">
+                        <ImageIcon className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : baseImage ? (
             <img
-              src={imageSrc}
+              src={baseImage}
               alt={item.name}
               className="h-16 w-16 rounded-md object-cover border border-border/50"
               loading="lazy"
+              onError={() => markBroken(baseImage)}
             />
           ) : (
             <div className="h-16 w-16 rounded-md bg-muted/50 border border-border/50 flex items-center justify-center">

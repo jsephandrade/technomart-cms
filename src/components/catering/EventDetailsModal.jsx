@@ -276,6 +276,12 @@ export const EventDetailsModal = ({
 
   const paidAmount = isPaid ? total : hasPartial ? depositAmount : 0;
   const remainingDue = Math.max(0, total - paidAmount);
+  const firstPaymentIssued =
+    paymentStatus === 'paid' && !depositPaid
+      ? total
+      : hasPartial
+        ? depositAmount
+        : 0;
 
   const amountToPay = paymentType === 'deposit' ? depositAmount : remainingDue;
   const remainingBalance = paymentType === 'full' ? 0 : total - depositAmount;
@@ -805,7 +811,11 @@ export const EventDetailsModal = ({
                               </p>
                               <div className="flex items-baseline gap-2 pt-1">
                                 <span className="text-xl font-bold text-primary">
-                                  ₱{remainingDue.toFixed(2)}
+                                  ₱{total.toFixed(2)}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  First payment: ₱
+                                  {firstPaymentIssued.toFixed(2)}
                                 </span>
                               </div>
                             </div>

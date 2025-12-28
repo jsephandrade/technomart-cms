@@ -69,6 +69,16 @@ const PaymentModal = ({
     return 0;
   }, [isPaid, hasPartial, depositAmount, total]);
 
+  const firstPaymentIssued = useMemo(() => {
+    if (paymentStatus === 'paid' && !depositPaid) {
+      return total;
+    }
+    if (hasPartial) {
+      return depositAmount;
+    }
+    return 0;
+  }, [paymentStatus, depositPaid, hasPartial, depositAmount, total]);
+
   const remainingDue = useMemo(() => {
     return Math.max(0, total - paidAmount);
   }, [total, paidAmount]);
@@ -248,7 +258,10 @@ const PaymentModal = ({
                     </p>
                     <div className="flex items-baseline gap-2 pt-2">
                       <span className="text-3xl font-bold text-primary">
-                        ₱{remainingDue.toFixed(2)}
+                        ₱{total.toFixed(2)}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        First payment: ₱{firstPaymentIssued.toFixed(2)}
                       </span>
                     </div>
                   </div>

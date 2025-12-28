@@ -272,19 +272,29 @@ export const EventDetailsModal = ({
   const paidAmount = (() => {
     const rawPaid = currentEvent?.totalPaid ?? currentEvent?.total_paid;
     if (rawPaid !== undefined && rawPaid !== null && rawPaid !== '') {
-      return Number(rawPaid) || 0;
+      const numericPaid = Number(rawPaid) || 0;
+      if (numericPaid > 0) {
+        return numericPaid;
+      }
     }
     if (isPaid) return total;
     if (hasPartial) return depositAmount;
     return 0;
   })();
   const remainingDue = Math.max(0, total - paidAmount);
-  const firstPaymentIssued =
-    paymentStatus === 'paid' && !depositPaid
-      ? total
-      : hasPartial
-        ? depositAmount
-        : 0;
+  const recentPayment = (() => {
+    const rawRecent =
+      currentEvent?.recentPayment ?? currentEvent?.recent_payment;
+    if (rawRecent !== undefined && rawRecent !== null && rawRecent !== '') {
+      const numericRecent = Number(rawRecent) || 0;
+      if (numericRecent > 0) {
+        return numericRecent;
+      }
+    }
+    if (isPaid) return total;
+    if (hasPartial) return depositAmount;
+    return 0;
+  })();
 
   const amountToPay = paymentType === 'deposit' ? depositAmount : remainingDue;
   const remainingBalance = paymentType === 'full' ? 0 : total - depositAmount;
@@ -817,8 +827,7 @@ export const EventDetailsModal = ({
                                   ₱{total.toFixed(2)}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                  First payment: ₱
-                                  {firstPaymentIssued.toFixed(2)}
+                                  Recent payment: ₱{recentPayment.toFixed(2)}
                                 </span>
                               </div>
                             </div>

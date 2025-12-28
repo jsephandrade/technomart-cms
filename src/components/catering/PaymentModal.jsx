@@ -66,22 +66,28 @@ const PaymentModal = ({
   const paidAmount = useMemo(() => {
     const rawPaid = event?.totalPaid ?? event?.total_paid;
     if (rawPaid !== undefined && rawPaid !== null && rawPaid !== '') {
-      return Number(rawPaid) || 0;
+      const numericPaid = Number(rawPaid) || 0;
+      if (numericPaid > 0) {
+        return numericPaid;
+      }
     }
     if (isPaid) return total;
     if (hasPartial) return depositAmount;
     return 0;
   }, [event, isPaid, hasPartial, depositAmount, total]);
 
-  const firstPaymentIssued = useMemo(() => {
-    if (paymentStatus === 'paid' && !depositPaid) {
-      return total;
+  const recentPayment = useMemo(() => {
+    const rawRecent = event?.recentPayment ?? event?.recent_payment;
+    if (rawRecent !== undefined && rawRecent !== null && rawRecent !== '') {
+      const numericRecent = Number(rawRecent) || 0;
+      if (numericRecent > 0) {
+        return numericRecent;
+      }
     }
-    if (hasPartial) {
-      return depositAmount;
-    }
+    if (isPaid) return total;
+    if (hasPartial) return depositAmount;
     return 0;
-  }, [paymentStatus, depositPaid, hasPartial, depositAmount, total]);
+  }, [event, isPaid, hasPartial, depositAmount, total]);
 
   const remainingDue = useMemo(() => {
     return Math.max(0, total - paidAmount);
@@ -265,7 +271,7 @@ const PaymentModal = ({
                         ₱{total.toFixed(2)}
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        First payment: ₱{firstPaymentIssued.toFixed(2)}
+                        Recent payment: ₱{recentPayment.toFixed(2)}
                       </span>
                     </div>
                   </div>

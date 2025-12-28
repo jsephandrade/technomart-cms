@@ -100,12 +100,29 @@ def _total_paid_amount(event_id):
         return Decimal("0")
 
 
+def _latest_payment_amount(event_id):
+    try:
+        latest = (
+            PaymentTransaction.objects.filter(
+                order_id=str(event_id),
+                status=PaymentTransaction.STATUS_COMPLETED,
+            )
+            .order_by("-created_at")
+            .values_list("amount", flat=True)
+            .first()
+        )
+        return _decimal(latest or 0)
+    except Exception:
+        return Decimal("0")
+
+
 def _serialize_event(event, include_items=False):
     start_time = event.start_time.isoformat() if event.start_time else None
     end_time = event.end_time.isoformat() if event.end_time else None
     event_date = event.event_date.isoformat() if event.event_date else None
 
     total_paid = _total_paid_amount(event.id)
+    recent_payment = _latest_payment_amount(event.id)
     payload = {
         "id": str(event.id),
         "name": event.name,
@@ -129,6 +146,7 @@ def _serialize_event(event, include_items=False):
         "depositPaid": event.deposit_paid,
         "paymentStatus": event.payment_status,
         "totalPaid": float(total_paid or 0),
+        "recentPayment": float(recent_payment or 0),
         "menuAdditions": int(event.menu_additions_count or 0),
         "contactPerson": {
             "name": event.contact_name or "",

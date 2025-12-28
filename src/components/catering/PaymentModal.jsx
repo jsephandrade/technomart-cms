@@ -64,10 +64,14 @@ const PaymentModal = ({
   }, [event, total]);
 
   const paidAmount = useMemo(() => {
+    const rawPaid = event?.totalPaid ?? event?.total_paid;
+    if (rawPaid !== undefined && rawPaid !== null && rawPaid !== '') {
+      return Number(rawPaid) || 0;
+    }
     if (isPaid) return total;
     if (hasPartial) return depositAmount;
     return 0;
-  }, [isPaid, hasPartial, depositAmount, total]);
+  }, [event, isPaid, hasPartial, depositAmount, total]);
 
   const firstPaymentIssued = useMemo(() => {
     if (paymentStatus === 'paid' && !depositPaid) {

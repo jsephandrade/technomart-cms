@@ -4,7 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -13,6 +13,7 @@ from .models import (
     CateringEvent,
     CateringEventItem,
     MenuItem,
+    PaymentTransaction,
     PaymentMethodConfig,
 )
 from .views_common import _actor_from_request, _has_permission
@@ -84,11 +85,27 @@ def _catering_order_number(event_id):
     return f"C-{number:06d}"
 
 
+def _total_paid_amount(event_id):
+    try:
+        total = (
+            PaymentTransaction.objects.filter(
+                order_id=str(event_id),
+                status=PaymentTransaction.STATUS_COMPLETED,
+            )
+            .aggregate(total=Sum("amount"))
+            .get("total")
+        )
+        return _decimal(total or 0)
+    except Exception:
+        return Decimal("0")
+
+
 def _serialize_event(event, include_items=False):
     start_time = event.start_time.isoformat() if event.start_time else None
     end_time = event.end_time.isoformat() if event.end_time else None
     event_date = event.event_date.isoformat() if event.event_date else None
 
+    total_paid = _total_paid_amount(event.id)
     payload = {
         "id": str(event.id),
         "name": event.name,
@@ -111,6 +128,7 @@ def _serialize_event(event, include_items=False):
         "depositAmount": float(event.deposit_amount or 0),
         "depositPaid": event.deposit_paid,
         "paymentStatus": event.payment_status,
+        "totalPaid": float(total_paid or 0),
         "menuAdditions": int(event.menu_additions_count or 0),
         "contactPerson": {
             "name": event.contact_name or "",
@@ -561,18 +579,12 @@ def catering_event_payment(request, event_id):
     if amount <= 0:
         return JsonResponse({"success": False, "message": "Invalid amount"}, status=400)
 
+    total_paid = _total_paid_amount(event.id)
     # Calculate expected amount based on payment type
     if payment_type == "deposit":
         expected_amount = event.deposit_amount
     else:  # full payment
-        status = (event.payment_status or "").strip().lower()
-        has_partial = bool(event.deposit_paid) or status == "partial"
-        if status == "paid":
-            expected_amount = Decimal("0")
-        elif has_partial:
-            expected_amount = event.estimated_total - event.deposit_amount
-        else:
-            expected_amount = event.estimated_total
+        expected_amount = event.estimated_total - total_paid
         if expected_amount < 0:
             expected_amount = Decimal("0")
 

@@ -269,7 +269,15 @@ export const EventDetailsModal = ({
   const hasPartial = depositPaid || paymentStatus === 'partial';
   const isPaid = paymentStatus === 'paid';
 
-  const paidAmount = isPaid ? total : hasPartial ? depositAmount : 0;
+  const paidAmount = (() => {
+    const rawPaid = currentEvent?.totalPaid ?? currentEvent?.total_paid;
+    if (rawPaid !== undefined && rawPaid !== null && rawPaid !== '') {
+      return Number(rawPaid) || 0;
+    }
+    if (isPaid) return total;
+    if (hasPartial) return depositAmount;
+    return 0;
+  })();
   const remainingDue = Math.max(0, total - paidAmount);
   const firstPaymentIssued =
     paymentStatus === 'paid' && !depositPaid

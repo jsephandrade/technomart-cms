@@ -64,7 +64,14 @@ export const useInventoryReport = () => {
       const response = await analyticsService.getInventoryReport();
 
       if (response.success) {
-        setInventoryData(response.data);
+        const normalized = (response.data || []).map((item) => ({
+          ...item,
+          quantity: Number(item.quantity ?? 0),
+          minStock: Number(item.minStock ?? item.min_stock ?? 0),
+          expiryDate:
+            item.expiryDate ?? item.expiry_date ?? item.expiry ?? null,
+        }));
+        setInventoryData(normalized);
       } else {
         throw new Error('Failed to fetch inventory report');
       }

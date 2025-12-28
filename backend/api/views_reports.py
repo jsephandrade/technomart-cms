@@ -393,6 +393,7 @@ def reports_inventory(request):
                 "quantity": float(i.quantity or 0),
                 "unit": i.unit,
                 "minStock": float(i.min_stock or 0),
+                "expiryDate": i.expiry_date.isoformat() if i.expiry_date else None,
             }
             for i in items
         ]

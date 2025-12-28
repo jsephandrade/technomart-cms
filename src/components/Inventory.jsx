@@ -151,12 +151,12 @@ const Inventory = () => {
   }, []);
 
   const handleUpdateItem = useCallback(
-    async (updatedItem) => {
+    (updatedItem) => {
       const newQty = Number(updatedItem.currentStock ?? 0);
       const prevQty = Number(
         (editingItem && editingItem.currentStock) ?? newQty
       );
-      // First update metadata (exclude quantity which is ledger-driven)
+      // Optimistically update UI before awaiting backend responses.
       const metaPayload = {
         name: updatedItem.name,
         category: updatedItem.category,
@@ -165,12 +165,19 @@ const Inventory = () => {
         supplier: updatedItem.supplier,
         expiryDate: updatedItem.expiryDate ? updatedItem.expiryDate : null,
       };
-      await updateInventoryItem(updatedItem.id, metaPayload);
-      // Then, if stock changed, write through stock endpoint using 'set'
-      if (!Number.isNaN(newQty) && newQty !== prevQty) {
-        await updateStock(updatedItem.id, newQty, 'set');
-      }
-      schedulePostMutationSync();
+      const metaPromise = updateInventoryItem(updatedItem.id, metaPayload);
+      const stockPromise =
+        !Number.isNaN(newQty) && newQty !== prevQty
+          ? updateStock(updatedItem.id, newQty, 'set')
+          : Promise.resolve();
+
+      Promise.all([metaPromise, stockPromise])
+        .catch(() => {
+          // Errors are handled in the hooks; keep UI responsive.
+        })
+        .finally(() => {
+          schedulePostMutationSync();
+        });
     },
     [updateInventoryItem, editingItem, schedulePostMutationSync, updateStock]
   );

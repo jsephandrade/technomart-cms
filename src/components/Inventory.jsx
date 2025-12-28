@@ -121,7 +121,7 @@ const Inventory = () => {
       : current <= threshold
         ? 'Low'
         : current >= threshold * 2
-          ? 'Overstocked'
+          ? 'Sufficient'
           : 'Good';
 
   const handleAddItem = useCallback(

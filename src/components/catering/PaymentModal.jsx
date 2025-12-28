@@ -365,6 +365,11 @@ const PaymentModal = ({
         </div>
 
         <DialogFooter className="gap-2">
+          {remainingDue <= 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Payment is complete. Add menu items to reopen payment.
+            </p>
+          ) : null}
           <Button
             variant="outline"
             onClick={() => onOpenChange?.(false)}

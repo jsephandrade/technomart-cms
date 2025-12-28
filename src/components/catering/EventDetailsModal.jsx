@@ -935,7 +935,12 @@ export const EventDetailsModal = ({
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex justify-end gap-2 pt-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                      {remainingDue <= 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Payment is complete. Add menu items to reopen payment.
+                        </p>
+                      ) : null}
                       <Button
                         type="button"
                         variant="outline"

@@ -139,7 +139,12 @@ export const EventDetailsModal = ({
   const currentEvent = localEvent || event;
   const hasSavedOrder =
     Array.isArray(currentEvent?.items) && currentEvent.items.length > 0;
-  const disableDeposit = hasSavedOrder;
+  const menuAdditions =
+    Number(
+      currentEvent?.menuAdditions ?? currentEvent?.menu_additions_count ?? 0
+    ) || 0;
+  const additionsLocked = menuAdditions >= 1;
+  const disableDeposit = hasSavedOrder || additionsLocked;
 
   useEffect(() => {
     if (disableDeposit && paymentType === 'deposit') {
@@ -722,7 +727,7 @@ export const EventDetailsModal = ({
                           aria-disabled={disableDeposit}
                           title={
                             disableDeposit
-                              ? '50% deposit is disabled for saved orders.'
+                              ? '50% deposit is disabled for this order.'
                               : undefined
                           }
                         >
@@ -930,7 +935,11 @@ export const EventDetailsModal = ({
                       <Button
                         type="button"
                         onClick={handlePaymentSubmit}
-                        disabled={isProcessingPayment || !total}
+                        disabled={
+                          isProcessingPayment ||
+                          !total ||
+                          (disableDeposit && paymentType !== 'full')
+                        }
                         size="sm"
                       >
                         {isProcessingPayment ? (

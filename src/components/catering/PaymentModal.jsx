@@ -29,9 +29,11 @@ const PaymentModal = ({
   totals,
   isSyncing = false,
   disableDeposit = false,
+  forceFullPayment = false,
 }) => {
+  const shouldForceFullPayment = forceFullPayment || disableDeposit;
   const [paymentType, setPaymentType] = useState(() =>
-    disableDeposit ? 'full' : 'deposit'
+    shouldForceFullPayment ? 'full' : 'deposit'
   ); // 'deposit' or 'full'
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash', 'card', 'mobile'
   const [isProcessing, setIsProcessing] = useState(false);
@@ -81,10 +83,10 @@ const PaymentModal = ({
   }, [paymentType, total, depositAmount]);
 
   useEffect(() => {
-    if (disableDeposit && paymentType === 'deposit') {
+    if (shouldForceFullPayment && paymentType === 'deposit') {
       setPaymentType('full');
     }
-  }, [disableDeposit, paymentType]);
+  }, [shouldForceFullPayment, paymentType]);
 
   const handlePayment = async () => {
     if (isSyncing) return;
@@ -150,7 +152,7 @@ const PaymentModal = ({
             <RadioGroup
               value={paymentType}
               onValueChange={(value) => {
-                if (value === 'deposit' && disableDeposit) return;
+                if (value === 'deposit' && shouldForceFullPayment) return;
                 setPaymentType(value);
               }}
             >
@@ -161,18 +163,18 @@ const PaymentModal = ({
                   paymentType === 'deposit'
                     ? 'border-primary bg-primary/5 shadow-md shadow-primary/10'
                     : 'border-border bg-card',
-                  disableDeposit
+                  shouldForceFullPayment
                     ? 'cursor-not-allowed opacity-60'
                     : 'cursor-pointer hover:border-primary/50 hover:bg-muted/50'
                 )}
                 onClick={() => {
-                  if (disableDeposit) return;
+                  if (shouldForceFullPayment) return;
                   setPaymentType('deposit');
                 }}
-                aria-disabled={disableDeposit}
+                aria-disabled={shouldForceFullPayment}
                 title={
-                  disableDeposit
-                    ? '50% deposit is disabled for saved orders.'
+                  shouldForceFullPayment
+                    ? '50% deposit is disabled for this order.'
                     : undefined
                 }
               >
@@ -189,7 +191,7 @@ const PaymentModal = ({
                         htmlFor="deposit"
                         className={cn(
                           'text-lg font-semibold',
-                          disableDeposit
+                          shouldForceFullPayment
                             ? 'cursor-not-allowed'
                             : 'cursor-pointer'
                         )}
@@ -355,7 +357,11 @@ const PaymentModal = ({
           </Button>
           <Button
             onClick={handlePayment}
-            disabled={isProcessing || isSyncing}
+            disabled={
+              isProcessing ||
+              isSyncing ||
+              (shouldForceFullPayment && paymentType !== 'full')
+            }
             size="lg"
           >
             {isProcessing ? (

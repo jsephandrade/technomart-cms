@@ -111,6 +111,7 @@ def _serialize_event(event, include_items=False):
         "depositAmount": float(event.deposit_amount or 0),
         "depositPaid": event.deposit_paid,
         "paymentStatus": event.payment_status,
+        "menuAdditions": int(event.menu_additions_count or 0),
         "contactPerson": {
             "name": event.contact_name or "",
             "phone": event.contact_phone or "",
@@ -136,6 +137,34 @@ def _serialize_event(event, include_items=False):
             )
         payload["items"] = items
     return payload
+
+
+def _menu_items_signature(items):
+    signature = []
+    for item in items:
+        if isinstance(item, CateringEventItem):
+            menu_item_id = str(item.menu_item_id) if item.menu_item_id else None
+            name = (item.name or "").strip()
+            try:
+                quantity = int(item.quantity or 0)
+            except Exception:
+                quantity = 0
+            unit_price = _decimal(item.unit_price)
+        else:
+            menu_item_id = item.get("menu_item_id")
+            name = (item.get("name") or "").strip()
+            try:
+                quantity = int(item.get("quantity") or 0)
+            except Exception:
+                quantity = 0
+            unit_price = _decimal(item.get("unit_price"))
+        try:
+            unit_price = unit_price.quantize(Decimal("0.01"))
+        except Exception:
+            unit_price = _decimal(unit_price).quantize(Decimal("0.01"))
+        signature.append((menu_item_id, name, quantity, str(unit_price)))
+    signature.sort()
+    return signature
 
 
 def _actor_uuid(actor):
@@ -428,7 +457,7 @@ def catering_event_menu_items(request, event_id):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
     try:
-        event = CateringEvent.objects.filter(deleted_at__isnull=True).get(pk=event_id)
+        event = CateringEvent.objects.prefetch_related("items").filter(deleted_at__isnull=True).get(pk=event_id)
     except CateringEvent.DoesNotExist:
         return JsonResponse({"success": False, "message": "Event not found"}, status=404)
 
@@ -486,7 +515,25 @@ def catering_event_menu_items(request, event_id):
             }
         )
 
+    existing_signature = _menu_items_signature(event.items.all())
+    incoming_signature = _menu_items_signature(normalized)
+    has_existing_items = bool(existing_signature)
+    has_change = incoming_signature != existing_signature
+
+    if has_existing_items and has_change and event.menu_additions_count >= 1:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Menu items can only be updated once after the initial order.",
+            },
+            status=409,
+        )
+
+    if not has_change:
+        return JsonResponse({"success": True, "data": _serialize_event(event, include_items=True)})
+
     actor_id = _actor_uuid(actor)
+    increment_additions = has_existing_items
 
     with transaction.atomic():
         event.items.all().delete()
@@ -501,8 +548,13 @@ def catering_event_menu_items(request, event_id):
         event.estimated_total = total_amount
         # Automatically set deposit_amount to 50% of total
         event.deposit_amount = total_amount * Decimal("0.5")
+        if increment_additions:
+            event.menu_additions_count = (event.menu_additions_count or 0) + 1
         event.updated_by_id = actor_id if actor_id else None
-        event.save(update_fields=["estimated_total", "deposit_amount", "updated_by", "updated_at"])
+        update_fields = ["estimated_total", "deposit_amount", "updated_by", "updated_at"]
+        if increment_additions:
+            update_fields.append("menu_additions_count")
+        event.save(update_fields=update_fields)
 
     event.refresh_from_db()
     return JsonResponse({"success": True, "data": _serialize_event(event, include_items=True)})

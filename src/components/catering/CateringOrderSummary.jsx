@@ -16,6 +16,8 @@ const CateringOrderSummary = ({
   canProcessPayment = false,
   onProcessPayment,
   itemCount = 0,
+  disableEdits = false,
+  disablePayment = false,
 }) => {
   const itemsArray = useMemo(() => {
     return Object.values(selectedItems).filter(Boolean);
@@ -42,6 +44,7 @@ const CateringOrderSummary = ({
   }, [subtotal, discountAmount]);
 
   const handleQuantityChange = (item, delta) => {
+    if (disableEdits) return;
     const newQuantity = Math.max(1, (item.quantity || 1) + delta);
     onUpdateQuantity?.(item.id, newQuantity);
   };
@@ -71,6 +74,7 @@ const CateringOrderSummary = ({
             size="icon"
             className="h-9 w-9"
             onClick={onClearAll}
+            disabled={disableEdits}
             aria-label="Clear order"
           >
             <Trash2 className="h-4 w-4" />
@@ -107,7 +111,7 @@ const CateringOrderSummary = ({
                             size="icon"
                             className="h-6 w-6"
                             onClick={() => handleQuantityChange(item, -1)}
-                            disabled={quantity <= 1}
+                            disabled={disableEdits || quantity <= 1}
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
@@ -119,6 +123,7 @@ const CateringOrderSummary = ({
                             size="icon"
                             className="h-6 w-6"
                             onClick={() => handleQuantityChange(item, 1)}
+                            disabled={disableEdits}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
@@ -130,6 +135,7 @@ const CateringOrderSummary = ({
                             size="icon"
                             className="h-6 w-6 text-destructive hover:text-destructive"
                             onClick={() => onRemoveItem?.(item.id)}
+                            disabled={disableEdits}
                           >
                             <Trash2 className="h-3 w-3" />
                             <span className="sr-only">Remove</span>
@@ -171,7 +177,7 @@ const CateringOrderSummary = ({
               className="w-full"
               size="sm"
               variant="default"
-              disabled={!canProcessPayment}
+              disabled={!canProcessPayment || disablePayment}
               onClick={onProcessPayment}
             >
               <CreditCard className="mr-2 h-4 w-4" /> Process Payment

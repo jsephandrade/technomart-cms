@@ -941,6 +941,7 @@ class CateringEvent(models.Model):
     deposit_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Deposit amount required")
     deposit_paid = models.BooleanField(default=False, help_text="Whether deposit has been paid")
     payment_status = models.CharField(max_length=32, default="unpaid", help_text="Overall payment status: unpaid, partial, paid")
+    menu_additions_count = models.PositiveSmallIntegerField(default=0, help_text="Number of post-save menu updates")
     deleted_at = models.DateTimeField(blank=True, null=True, help_text="Soft delete timestamp")
     deleted_by = models.ForeignKey(
         AppUser,

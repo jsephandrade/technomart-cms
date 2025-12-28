@@ -82,6 +82,7 @@ const Inventory = () => {
       minThreshold: it.minStock ?? 0,
       unit: it.unit,
       supplier: it.supplier || '',
+      expiryDate: it.expiryDate || null,
       disabled: !!disabledMap[it.id],
       lastUpdated: it.updatedAt || it.lastRestocked || '',
     }));
@@ -123,6 +124,7 @@ const Inventory = () => {
         minStock: Number(newItem.minThreshold ?? 0),
         unit: newItem.unit,
         supplier: newItem.supplier,
+        expiryDate: newItem.expiryDate ? newItem.expiryDate : null,
       };
       const created = await createInventoryItem(payload);
       schedulePostMutationSync();
@@ -150,6 +152,7 @@ const Inventory = () => {
         minStock: Number(updatedItem.minThreshold ?? 0),
         unit: updatedItem.unit,
         supplier: updatedItem.supplier,
+        expiryDate: updatedItem.expiryDate ? updatedItem.expiryDate : null,
       };
       await updateInventoryItem(updatedItem.id, metaPayload);
       // Then, if stock changed, write through stock endpoint using 'set'

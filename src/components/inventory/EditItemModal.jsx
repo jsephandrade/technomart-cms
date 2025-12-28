@@ -31,6 +31,16 @@ import { useForm, Controller } from 'react-hook-form';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+const toDateInputValue = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value.split('T')[0];
+  try {
+    return new Date(value).toISOString().split('T')[0];
+  } catch {
+    return '';
+  }
+};
+
 const EditItemModal = ({ open, onOpenChange, item, onEditItem }) => {
   const {
     register,
@@ -73,6 +83,7 @@ const EditItemModal = ({ open, onOpenChange, item, onEditItem }) => {
       reset(item);
       setValue('category', item.category);
       setValue('unit', item.unit);
+      setValue('expiryDate', toDateInputValue(item.expiryDate));
     }
   }, [item, reset, setValue]);
 
@@ -312,6 +323,25 @@ const EditItemModal = ({ open, onOpenChange, item, onEditItem }) => {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Your supplier's name
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="expiryDate"
+                  className="flex items-center gap-2 h-5"
+                >
+                  Expiry Date
+                  <Badge variant="secondary" className="text-xs">
+                    Optional
+                  </Badge>
+                </Label>
+                <Input
+                  id="expiryDate"
+                  type="date"
+                  {...register('expiryDate')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Track perishable items
                 </p>
               </div>
             </div>

@@ -202,14 +202,19 @@ def inventory_item_detail(request, iid):
             except Exception:
                 pass
         if "expiryDate" in data or "expiry_date" in data:
-            exp = data.get("expiryDate") or data.get("expiry_date") or None
-            if exp:
+            exp = data.get("expiryDate") if "expiryDate" in data else data.get("expiry_date")
+            if exp is None or (isinstance(exp, str) and exp.strip() == ""):
+                if item.expiry_date is not None:
+                    changes["expiry_date"] = {"old": item.expiry_date.isoformat() if item.expiry_date else None, "new": None}
+                    item.expiry_date = None
+                    changed = True
+            else:
                 try:
                     new_exp = datetime.fromisoformat(str(exp)).date()
                     if item.expiry_date != new_exp:
                         changes["expiry_date"] = {"old": item.expiry_date.isoformat() if item.expiry_date else None, "new": new_exp.isoformat()}
                         item.expiry_date = new_exp
-                    changed = True
+                        changed = True
                 except Exception:
                     pass
         if changed:

@@ -295,6 +295,25 @@ const AddItemModal = ({ open, onOpenChange, onAddItem }) => {
                   Your supplier's name
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="expiryDate"
+                  className="flex items-center gap-2 h-5"
+                >
+                  Expiry Date
+                  <Badge variant="secondary" className="text-xs">
+                    Optional
+                  </Badge>
+                </Label>
+                <Input
+                  id="expiryDate"
+                  type="date"
+                  {...register('expiryDate')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Track perishable items
+                </p>
+              </div>
             </div>
           </div>
 

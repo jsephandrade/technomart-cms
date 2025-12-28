@@ -150,7 +150,7 @@ export const RoleConfigModal = ({ open, onOpenChange, role, onUpdateRole }) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="scrollbar-hide max-h-[90vh] overflow-y-auto sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Configure Role: {role?.label}</DialogTitle>
           <DialogDescription>

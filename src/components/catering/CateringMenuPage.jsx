@@ -335,7 +335,13 @@ const CateringMenuPage = () => {
   }, [selectedItems]);
   const hasItems = itemCount > 0;
   const paymentEnabled = paymentTotals.total > 0 || itemsArray.length > 0;
-  const processPaymentDisabled = additionsLocked;
+  const paymentStatus = String(
+    event?.paymentStatus || event?.payment_status || ''
+  )
+    .trim()
+    .toLowerCase();
+  const isPaid = paymentStatus === 'paid';
+  const processPaymentDisabled = additionsLocked && isPaid;
 
   const handlePaymentSubmit = async (paymentData) => {
     try {

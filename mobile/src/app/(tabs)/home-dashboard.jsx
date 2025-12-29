@@ -1,5 +1,11 @@
 // app/(tabs)/home-dashboard.jsx
-import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import React, {
+  useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -45,6 +51,7 @@ export default function HomeDashboardScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const hasLoadedMenuRef = useRef(false);
 
   useEffect(() => {
     const getUserRole = async () => {
@@ -64,15 +71,21 @@ export default function HomeDashboardScreen() {
     getUserRole();
   }, []);
 
-  const loadMenuItems = async () => {
+  const loadMenuItems = async ({ silent = false } = {}) => {
+    const shouldUpdateLoading = !hasLoadedMenuRef.current && !silent;
     try {
-      setLoading(true);
+      if (shouldUpdateLoading) {
+        setLoading(true);
+      }
       const items = await fetchMenuItems();
       setMenuItems(items || []);
+      hasLoadedMenuRef.current = true;
     } catch (err) {
       console.error('Error fetching menu items:', err);
     } finally {
-      setLoading(false);
+      if (shouldUpdateLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -103,14 +116,14 @@ export default function HomeDashboardScreen() {
     }
   };
 
-  const loadAllData = async () => {
-    await loadMenuItems();
+  const loadAllData = async ({ silent = false } = {}) => {
+    await loadMenuItems({ silent });
     await loadBackendNotifications();
   };
 
   useEffect(() => {
     loadAllData();
-    const interval = setInterval(loadAllData, 30000);
+    const interval = setInterval(() => loadAllData({ silent: true }), 600000);
     return () => clearInterval(interval);
   }, []);
 

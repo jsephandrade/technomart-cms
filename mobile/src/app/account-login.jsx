@@ -24,6 +24,7 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -48,6 +49,23 @@ export default function AccountLoginScreen() {
     if (typeof msg === 'object' && msg !== null) return JSON.stringify(msg);
     return String(msg);
   };
+
+  const runBiometricGate = useCallback(async () => {
+    try {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      if (!compatible) return;
+
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!enrolled) return;
+
+      await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Confirm with biometrics to continue',
+        fallbackLabel: 'Use Passcode',
+      });
+    } catch (error) {
+      console.warn('Biometric prompt failed:', error?.message || error);
+    }
+  }, []);
 
   // ✅ Google Auth Config
   const googleConfig = {
@@ -144,12 +162,8 @@ export default function AccountLoginScreen() {
       await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
       setUser(profile);
 
-      Alert.alert('Success', 'Login successful!', [
-        {
-          text: 'Continue',
-          onPress: () => router.replace('/biometric-face-enrollment'),
-        },
-      ]);
+      await runBiometricGate();
+      router.replace('/home-dashboard');
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('Login Failed', formatMessage(error.message));
@@ -196,12 +210,8 @@ export default function AccountLoginScreen() {
         await AsyncStorage.setItem('user', JSON.stringify(profile));
         setUser(profile);
 
-        Alert.alert('Success', 'Login successful!', [
-          {
-            text: 'Continue',
-            onPress: () => router.replace('/biometric-face-enrollment'),
-          },
-        ]);
+        await runBiometricGate();
+        router.replace('/home-dashboard');
       } else {
         Alert.alert(
           'Google Login Failed',
@@ -216,7 +226,7 @@ export default function AccountLoginScreen() {
     } finally {
       setGoogleLoading(false);
     }
-  }, [promptAsync, request, router]);
+  }, [promptAsync, request, router, runBiometricGate]);
 
   const handleGuestEntry = useCallback(async () => {
     if (guestLoading) return;

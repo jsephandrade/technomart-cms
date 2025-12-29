@@ -11,6 +11,7 @@ import {
   Image,
   Pressable,
   Alert,
+  StyleSheet,
 } from 'react-native';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { useRouter } from 'expo-router';
@@ -22,7 +23,10 @@ import {
   HelpCircle,
   MessageCircle,
   Bell,
+  Search,
 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import CategoryItem from '../../components/CategoryItem';
 import Recommended from '../../components/Recommended';
 import { fetchMenuItems, fetchNotifications } from '../../api/api';
@@ -42,16 +46,15 @@ export default function HomeDashboardScreen() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [userRole, setUserRole] = useState(null);
 
-  // Load user role
   useEffect(() => {
     const getUserRole = async () => {
       try {
         const userData = await AsyncStorage.getItem('@sanaol/auth/user');
         if (userData) {
           const parsed = JSON.parse(userData);
-          setUserRole(parsed.role); // expects "faculty" or "student"
+          setUserRole(parsed.role);
         } else {
-          setUserRole('student'); // fallback
+          setUserRole('student');
         }
       } catch (err) {
         console.error('Failed to get user role', err);
@@ -61,7 +64,6 @@ export default function HomeDashboardScreen() {
     getUserRole();
   }, []);
 
-  // Load menu items
   const loadMenuItems = async () => {
     try {
       setLoading(true);
@@ -74,7 +76,6 @@ export default function HomeDashboardScreen() {
     }
   };
 
-  // Load notifications
   const loadBackendNotifications = async () => {
     try {
       const backend = await fetchNotifications();
@@ -86,14 +87,13 @@ export default function HomeDashboardScreen() {
             const createdAt = n.created_at || n.createdAt || n.created || null;
             merged.push({
               id: n.id || `${n.type || 'notif'}-${createdAt || Date.now()}`,
-              type: n.type, // "new", "soldout", "deleted"
+              type: n.type,
               title: n.title || n.item?.name || 'Notification',
               message: n.message || '',
               created_at: createdAt || new Date().toISOString(),
             });
           }
         });
-        // Sort by newest first
         return merged.sort(
           (a, b) => new Date(b.created_at) - new Date(a.created_at)
         );
@@ -110,7 +110,7 @@ export default function HomeDashboardScreen() {
 
   useEffect(() => {
     loadAllData();
-    const interval = setInterval(loadAllData, 30000); // refresh every 30s
+    const interval = setInterval(loadAllData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -119,18 +119,18 @@ export default function HomeDashboardScreen() {
     loadAllData().finally(() => setRefreshing(false));
   }, []);
 
-  // Group categories from backend
   const categoriesData = useMemo(() => {
     const categoryMap = {};
     menuItems.forEach((item) => {
       const cat = item.category || 'Others';
-      if (!categoryMap[cat])
+      if (!categoryMap[cat]) {
         categoryMap[cat] = {
           key: cat,
           title: cat,
           itemCount: 0,
           image: item.image,
         };
+      }
       categoryMap[cat].itemCount += 1;
     });
     return Object.values(categoryMap);
@@ -150,12 +150,14 @@ export default function HomeDashboardScreen() {
 
   const filteredMainCategories = useMemo(() => {
     let cats = mainCategories;
-    if (searchQuery)
+    if (searchQuery) {
       cats = cats.filter((cat) =>
         cat.title.toLowerCase().includes(searchQuery.toLowerCase())
       );
-    if (userRole !== 'faculty')
+    }
+    if (userRole !== 'faculty') {
       cats = cats.filter((cat) => cat.title.toLowerCase() !== 'catering');
+    }
     return cats;
   }, [mainCategories, searchQuery, userRole]);
 
@@ -171,20 +173,22 @@ export default function HomeDashboardScreen() {
 
   const allItemsFiltered = useMemo(() => {
     let items = menuItems;
-    if (userRole !== 'faculty')
+    if (userRole !== 'faculty') {
       items = items.filter(
         (item) => (item.category || '').toLowerCase() !== 'catering'
       );
-    if (searchQuery)
+    }
+    if (searchQuery) {
       items = items.filter((item) =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
+    }
     return items;
   }, [menuItems, searchQuery, userRole]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Handlers
   const handleLogout = async () => {
     try {
       await AsyncStorage.multiRemove([
@@ -202,112 +206,37 @@ export default function HomeDashboardScreen() {
 
   const handleCheckout = () => router.push('/customer-cart');
   const handleAddMoreItems = () => router.push('/(tabs)');
+  const handleClearSearch = () => setSearchQuery('');
+  const handleFilterPress = () =>
+    Alert.alert('Filters', 'Filters are coming soon.');
+
+  const searchPlaceholder =
+    userRole === 'faculty' ? 'Search menu & catering...' : 'Search menu...';
+  const emptyMessage = searchQuery
+    ? 'No items match your search yet.'
+    : 'No items available right now.';
 
   const DropdownItem = ({ icon, label, onPress, color }) => (
-    <TouchableOpacity
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 8,
-        paddingHorizontal: 8,
-      }}
-      onPress={onPress}
-    >
-      <View
-        style={{
-          width: 24,
-          height: 24,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {icon}
-      </View>
-      <Text
-        style={{
-          marginLeft: 8,
-          fontSize: 14,
-          color: color || '#374151',
-          fontWeight: '500',
-        }}
-      >
+    <TouchableOpacity style={styles.dropdownItem} onPress={onPress}>
+      <View style={styles.dropdownIcon}>{icon}</View>
+      <Text style={[styles.dropdownLabel, color ? { color } : null]}>
         {label}
       </Text>
     </TouchableOpacity>
   );
 
-  const renderCategoriesHeader = () => (
-    <View style={{ marginBottom: 8, paddingHorizontal: 8 }}>
-      <Text style={{ fontSize: 20, fontWeight: '700', color: '#111827' }}>
-        Categories
-      </Text>
-      <View
-        style={{
-          marginTop: 4,
-          width: 48,
-          height: 3,
-          borderRadius: 2,
-          backgroundColor: '#f97316',
-        }}
-      />
-    </View>
-  );
-
   const renderDropdownContainer = (children) => (
-    <View
-      style={{
-        position: 'absolute',
-        top: 56,
-        right: 16,
-        width: 220,
-        zIndex: 150,
-      }}
-    >
-      <View
-        style={{
-          width: 0,
-          height: 0,
-          borderLeftWidth: 8,
-          borderRightWidth: 8,
-          borderBottomWidth: 10,
-          borderLeftColor: 'transparent',
-          borderRightColor: 'transparent',
-          borderBottomColor: 'white',
-          alignSelf: 'flex-end',
-          marginRight: 8,
-        }}
-      />
-      <View
-        style={{
-          backgroundColor: 'white',
-          borderRadius: 12,
-          paddingVertical: 8,
-          paddingHorizontal: 8,
-          shadowColor: '#000',
-          shadowOpacity: 0.1,
-          shadowRadius: 5,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 5,
-        }}
-      >
-        {children}
-      </View>
+    <View style={styles.dropdownContainer}>
+      <View style={styles.dropdownPointer} />
+      <View style={styles.dropdownPanel}>{children}</View>
     </View>
   );
 
   if (!fontsLoaded || loading || userRole === null) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#f97316" />
-        <Text
-          style={{
-            marginTop: 8,
-            color: '#f97316',
-            fontFamily: 'Roboto_700Bold',
-          }}
-        >
-          Loading Menu...
-        </Text>
+        <Text style={styles.loadingText}>Loading Menu...</Text>
       </View>
     );
   }
@@ -316,79 +245,9 @@ export default function HomeDashboardScreen() {
     encodeURIComponent(title.replace(/\s+/g, ''));
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fef3c7' }}>
-      {/* Top Search & Buttons */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          gap: 8,
-          zIndex: 200,
-        }}
-      >
-        <TextInput
-          placeholder="Search menu..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={{
-            flex: 1,
-            height: 40,
-            backgroundColor: 'white',
-            borderRadius: 12,
-            paddingHorizontal: 12,
-            fontSize: 14,
-            shadowColor: '#000',
-            shadowOpacity: 0.05,
-            shadowRadius: 5,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 2,
-          }}
-        />
-
-        {/* Bell with badge */}
-        <TouchableOpacity
-          onPress={() =>
-            setOpenDropdown(
-              openDropdown === 'notifications' ? null : 'notifications'
-            )
-          }
-        >
-          <Bell
-            size={20}
-            color={menuNotifications.length > 0 ? '#f97316' : '#374151'}
-          />
-          {menuNotifications.length > 0 && (
-            <View
-              style={{
-                position: 'absolute',
-                top: -4,
-                right: -4,
-                width: 16,
-                height: 16,
-                borderRadius: 8,
-                backgroundColor: '#ef4444',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
-                {menuNotifications.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() =>
-            setOpenDropdown(openDropdown === 'settings' ? null : 'settings')
-          }
-        >
-          <Gear size={20} color="#374151" />
-        </TouchableOpacity>
-      </View>
-
+    <View style={styles.container}>
+      <View style={styles.backgroundGlowTop} />
+      <View style={styles.backgroundGlowBottom} />
       <ScrollView
         refreshControl={
           <RefreshControl
@@ -398,242 +257,311 @@ export default function HomeDashboardScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 16 }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: total > 0 ? 180 : 40 },
+        ]}
       >
-        <Recommended items={menuItems.slice(0, 6)} />
-
-        {/* Main Categories */}
-        {renderCategoriesHeader()}
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-            paddingHorizontal: 8,
-          }}
+        <LinearGradient
+          colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
+          start={[0, 0]}
+          end={[1, 1]}
+          style={styles.heroCard}
         >
-          {filteredMainCategories.map((item) => (
-            <CategoryItem
-              key={item.key}
-              image={item.image}
-              title={item.title}
-              onPress={() =>
-                router.push(`/categories/${makeCategorySlug(item.title)}`)
-              }
+          <View style={styles.heroRow}>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroEyebrow}>Fresh today</Text>
+              <Text style={styles.heroTitle}>TechnoMart</Text>
+              <Text style={styles.heroSubtitle}>
+                Order ahead and pick up in minutes.
+              </Text>
+            </View>
+            <View style={styles.heroActions}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() =>
+                  setOpenDropdown(
+                    openDropdown === 'notifications' ? null : 'notifications'
+                  )
+                }
+              >
+                <Bell size={18} color="#1F2937" />
+                {menuNotifications.length > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {menuNotifications.length}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() =>
+                  setOpenDropdown(
+                    openDropdown === 'settings' ? null : 'settings'
+                  )
+                }
+              >
+                <Gear size={18} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.heroMetaRow}>
+            <View style={styles.metaPill}>
+              <Text style={styles.metaText}>Pickup 15-20 min</Text>
+            </View>
+            <View style={styles.metaPill}>
+              <Text style={styles.metaText}>{menuItems.length} items</Text>
+            </View>
+            <View style={styles.metaPill}>
+              <Text style={styles.metaText}>
+                {userRole === 'faculty' ? 'Faculty access' : 'Student menu'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.cartPill,
+                cartCount === 0 && styles.cartPillDisabled,
+              ]}
+              onPress={handleCheckout}
+              disabled={cartCount === 0}
+            >
+              <Ionicons
+                name="cart-outline"
+                size={16}
+                color={cartCount === 0 ? '#9CA3AF' : '#1F2937'}
+              />
+              <Text
+                style={[
+                  styles.cartPillText,
+                  cartCount === 0 && styles.cartPillTextDisabled,
+                ]}
+              >
+                Cart {cartCount}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.searchBar}>
+            <Search size={18} color="#6B7280" />
+            <TextInput
+              placeholder={searchPlaceholder}
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
             />
-          ))}
+            {searchQuery ? (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={handleClearSearch}
+              >
+                <Text style={styles.clearButtonText}>x</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={handleFilterPress}
+            >
+              <Ionicons name="options-outline" size={18} color="#1F2937" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.quickActionsRow}>
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/(tabs)/order-tracking')}
+          >
+            <View style={styles.quickIconWrap}>
+              <Ionicons name="cart-outline" size={18} color="#F97316" />
+            </View>
+            <Text style={styles.quickActionTitle}>Orders</Text>
+            <Text style={styles.quickActionCaption}>Track status</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/(tabs)/account-profile')}
+          >
+            <View style={styles.quickIconWrap}>
+              <Ionicons name="person-outline" size={18} color="#F97316" />
+            </View>
+            <Text style={styles.quickActionTitle}>Profile</Text>
+            <Text style={styles.quickActionCaption}>View account</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickActionCard}
+            onPress={() => router.push('/screens/FAQs')}
+          >
+            <View style={styles.quickIconWrap}>
+              <Ionicons name="help-circle-outline" size={18} color="#F97316" />
+            </View>
+            <Text style={styles.quickActionTitle}>Help</Text>
+            <Text style={styles.quickActionCaption}>FAQs & tips</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Catering Section (Faculty Only) */}
-        {userRole === 'faculty' && filteredCatering && (
-          <View style={{ marginTop: 16, paddingHorizontal: 8 }}>
-            <Text
-              style={{
-                fontSize: 20,
-                fontWeight: '700',
-                color: '#111827',
-                marginBottom: 8,
-              }}
-            >
-              Catering
-            </Text>
-            <CategoryItem
-              key={filteredCatering.key}
-              image={filteredCatering.image}
-              title={filteredCatering.title}
-              onPress={() =>
-                router.push(
-                  `/categories/${makeCategorySlug(filteredCatering.title)}`
-                )
-              }
-            />
+        {menuItems.length > 0 && (
+          <View style={styles.recommendedWrap}>
+            <Recommended items={menuItems.slice(0, 6)} />
           </View>
         )}
 
-        {/* All Menu Items */}
-        <View style={{ marginTop: 16, paddingHorizontal: 8 }}>
-          <Text
-            style={{
-              fontSize: 20,
-              fontWeight: '700',
-              color: '#111827',
-              marginBottom: 8,
-            }}
-          >
-            All Menu Items
-          </Text>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Categories</Text>
+            <Text style={styles.sectionSubtitle}>Browse the menu</Text>
+          </View>
+          <View style={styles.sectionBadge}>
+            <Text style={styles.sectionBadgeText}>
+              {filteredMainCategories.length} types
+            </Text>
+          </View>
+        </View>
+        <View style={styles.categoriesGrid}>
+          {filteredMainCategories.map((item) => (
+            <View key={item.key} style={styles.categoryWrap}>
+              <CategoryItem
+                image={item.image}
+                title={item.title}
+                onPress={() =>
+                  router.push(`/categories/${makeCategorySlug(item.title)}`)
+                }
+              />
+            </View>
+          ))}
+        </View>
+
+        {userRole === 'faculty' && filteredCatering && (
+          <View style={styles.menuSection}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Catering</Text>
+                <Text style={styles.sectionSubtitle}>Faculty only</Text>
+              </View>
+            </View>
+            <View style={styles.categoryWrap}>
+              <CategoryItem
+                image={filteredCatering.image}
+                title={filteredCatering.title}
+                onPress={() =>
+                  router.push(
+                    `/categories/${makeCategorySlug(filteredCatering.title)}`
+                  )
+                }
+              />
+            </View>
+          </View>
+        )}
+
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>All Menu Items</Text>
+            <Text style={styles.sectionSubtitle}>
+              {allItemsFiltered.length} items found
+            </Text>
+          </View>
+        </View>
+        <View style={styles.menuSection}>
           {allItemsFiltered.length > 0 ? (
             allItemsFiltered.map((item) => {
               const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
+              const isAvailable = item.available !== false;
               return (
                 <View
                   key={item.id}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 12,
-                    backgroundColor: 'white',
-                    borderRadius: 12,
-                    marginBottom: 8,
-                  }}
+                  style={[
+                    styles.menuCard,
+                    !isAvailable && styles.menuCardDisabled,
+                  ]}
                 >
                   <Image
                     source={resolveImageSource(item.image)}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 8,
-                      marginRight: 12,
-                    }}
+                    style={styles.menuImage}
                   />
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: '500',
-                        color: '#111827',
-                      }}
-                    >
-                      {item.name}{' '}
-                      {item.available === false && (
-                        <Text style={{ color: '#ef4444' }}> (Sold Out)</Text>
-                      )}
-                    </Text>
-                    <Text
-                      style={{ fontSize: 14, color: '#6b7280', marginTop: 2 }}
-                    >
-                      {item.description}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      fontWeight: '700',
-                      color: '#f97316',
-                    }}
-                  >
-                    ₱{item.price}
-                  </Text>
-                  {item.available && (
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        marginLeft: 10,
-                      }}
-                    >
-                      <TouchableOpacity
-                        onPress={() => decreaseQuantity(item.id)}
-                        style={{
-                          backgroundColor: '#e67e22',
-                          padding: 6,
-                          borderRadius: 20,
-                          marginHorizontal: 4,
-                        }}
-                      >
-                        <Text style={{ color: '#fff', fontWeight: '700' }}>
-                          -
-                        </Text>
-                      </TouchableOpacity>
-                      <Text
-                        style={{
-                          minWidth: 20,
-                          textAlign: 'center',
-                          fontWeight: '700',
-                        }}
-                      >
-                        {qty}
+                  <View style={styles.menuInfo}>
+                    <View style={styles.menuTitleRow}>
+                      <Text style={styles.menuName} numberOfLines={1}>
+                        {item.name}
                       </Text>
-                      <TouchableOpacity
-                        onPress={() => addToCart(item)}
-                        style={{
-                          backgroundColor: '#e67e22',
-                          padding: 6,
-                          borderRadius: 20,
-                          marginHorizontal: 4,
-                        }}
-                      >
-                        <Text style={{ color: '#fff', fontWeight: '700' }}>
-                          +
-                        </Text>
-                      </TouchableOpacity>
+                      {!isAvailable && (
+                        <View style={styles.soldOutBadge}>
+                          <Text style={styles.soldOutText}>Sold Out</Text>
+                        </View>
+                      )}
                     </View>
-                  )}
+                    <Text style={styles.menuDesc} numberOfLines={2}>
+                      {item.description || 'No description available.'}
+                    </Text>
+                    <View style={styles.menuFooter}>
+                      <Text style={styles.menuPrice}>�,�{item.price}</Text>
+                      {isAvailable ? (
+                        <View style={styles.qtyControls}>
+                          <TouchableOpacity
+                            onPress={() => decreaseQuantity(item.id)}
+                            style={styles.qtyButton}
+                          >
+                            <Text style={styles.qtyButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.qtyText}>{qty}</Text>
+                          <TouchableOpacity
+                            onPress={() => addToCart(item)}
+                            style={styles.qtyButton}
+                          >
+                            <Text style={styles.qtyButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <Text style={styles.menuUnavailable}>Unavailable</Text>
+                      )}
+                    </View>
+                  </View>
                 </View>
               );
             })
           ) : (
-            <Text style={{ fontFamily: 'Roboto_700Bold', color: '#555' }}>
-              No items found.
-            </Text>
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No items yet</Text>
+              <Text style={styles.emptySubtitle}>{emptyMessage}</Text>
+            </View>
           )}
         </View>
       </ScrollView>
 
-      {/* Floating Checkout & Add More */}
       {total > 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            left: 20,
-            right: 20,
-            gap: 10,
-          }}
-        >
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'center',
-              alignItems: 'center',
-              backgroundColor: '#FF8C00',
-              paddingVertical: 14,
-              borderRadius: 30,
-              elevation: 4,
-            }}
-            onPress={handleCheckout}
-          >
-            <Text
-              style={{
-                color: '#fff',
-                fontWeight: '700',
-                fontSize: 16,
-                marginLeft: 8,
-              }}
+        <View style={styles.checkoutBar}>
+          <View style={styles.checkoutRow}>
+            <View>
+              <Text style={styles.checkoutLabel}>Your cart</Text>
+              <Text style={styles.checkoutValue}>�,�{total}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.checkoutButton}
+              onPress={handleCheckout}
             >
-              ₱{total} • Checkout
-            </Text>
-          </TouchableOpacity>
+              <Ionicons name="cart-outline" size={18} color="#fff" />
+              <Text style={styles.checkoutButtonText}>View Cart</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={{
-              backgroundColor: '#27ae60',
-              paddingVertical: 12,
-              borderRadius: 30,
-              width: '100%',
-              alignItems: 'center',
-              elevation: 3,
-            }}
+            style={styles.checkoutSecondary}
             onPress={handleAddMoreItems}
           >
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>
-              + Add More Items
-            </Text>
+            <Text style={styles.checkoutSecondaryText}>Continue browsing</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Dropdown Overlay */}
       <>
         {openDropdown && (
           <Pressable
-            style={{ position: 'absolute', inset: 0 }}
+            style={StyleSheet.absoluteFillObject}
             onPress={() => setOpenDropdown(null)}
           />
         )}
-        {/* Settings Dropdown */}
         {openDropdown === 'settings' &&
           renderDropdownContainer(
             <>
+              <Text style={styles.dropdownHeader}>Account</Text>
               <DropdownItem
                 icon={<User size={16} color="#374151" />}
                 label="Profile"
@@ -663,31 +591,29 @@ export default function HomeDashboardScreen() {
             </>
           )}
 
-        {/* Notifications Dropdown */}
         {openDropdown === 'notifications' &&
           renderDropdownContainer(
             <>
+              <Text style={styles.dropdownHeader}>Notifications</Text>
               {menuNotifications.length === 0 ? (
-                <Text
-                  style={{ color: '#6B7280', textAlign: 'center', padding: 8 }}
-                >
-                  No updates
-                </Text>
+                <Text style={styles.dropdownEmpty}>No updates yet</Text>
               ) : (
                 menuNotifications.slice(0, 5).map((n, idx) => (
-                  <View key={idx} style={{ paddingVertical: 4 }}>
+                  <View key={idx} style={styles.notificationItem}>
                     <Text
-                      style={{
-                        color:
-                          n.type === 'new'
-                            ? '#16a34a'
-                            : n.type === 'soldout'
-                              ? '#ef4444'
-                              : n.type === 'deleted'
-                                ? '#9ca3af'
-                                : '#374151',
-                        fontWeight: '500',
-                      }}
+                      style={[
+                        styles.notificationTitle,
+                        {
+                          color:
+                            n.type === 'new'
+                              ? '#16a34a'
+                              : n.type === 'soldout'
+                                ? '#ef4444'
+                                : n.type === 'deleted'
+                                  ? '#9ca3af'
+                                  : '#374151',
+                        },
+                      ]}
                     >
                       {n.type === 'new'
                         ? 'New:'
@@ -698,12 +624,14 @@ export default function HomeDashboardScreen() {
                             : ''}{' '}
                       {n.title}
                     </Text>
-                    <Text style={{ fontSize: 10, color: '#6b7280' }}>
+                    <Text style={styles.notificationTime}>
                       {new Date(n.created_at).toLocaleString()}
                     </Text>
-                    <Text style={{ fontSize: 12, color: '#374151' }}>
-                      {n.message}
-                    </Text>
+                    {n.message ? (
+                      <Text style={styles.notificationMessage}>
+                        {n.message}
+                      </Text>
+                    ) : null}
                   </View>
                 ))
               )}
@@ -713,3 +641,525 @@ export default function HomeDashboardScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFF7EE',
+  },
+  backgroundGlowTop: {
+    position: 'absolute',
+    top: -120,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: '#FFE5C8',
+    opacity: 0.7,
+  },
+  backgroundGlowBottom: {
+    position: 'absolute',
+    bottom: -140,
+    left: -100,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: '#FFD6AE',
+    opacity: 0.6,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  heroCard: {
+    margin: 16,
+    borderRadius: 24,
+    padding: 16,
+    overflow: 'hidden',
+  },
+  heroRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  heroCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  heroEyebrow: {
+    fontSize: 12,
+    letterSpacing: 1.4,
+    color: '#7C2D12',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  heroTitle: {
+    fontSize: 28,
+    color: '#1F2937',
+    fontFamily: 'Roboto_700Bold',
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginTop: 6,
+    maxWidth: 220,
+  },
+  heroActions: {
+    flexDirection: 'row',
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  metaPill: {
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  metaText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#7C2D12',
+  },
+  cartPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  cartPillDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  cartPillText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  cartPillTextDisabled: {
+    color: '#9CA3AF',
+  },
+  searchBar: {
+    marginTop: 4,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#111827',
+  },
+  clearButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  clearButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  filterButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#FFE7C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  quickActionCard: {
+    width: '31%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  quickIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFF2E4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  quickActionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  quickActionCaption: {
+    fontSize: 11,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  recommendedWrap: {
+    marginTop: 6,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  sectionBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  sectionBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  categoryWrap: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  menuSection: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  menuCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  menuCardDisabled: {
+    opacity: 0.6,
+  },
+  menuImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginRight: 12,
+    backgroundColor: '#F7EDE2',
+  },
+  menuInfo: {
+    flex: 1,
+  },
+  menuTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  menuName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+    paddingRight: 8,
+  },
+  menuDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  menuFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  menuPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FF7A18',
+  },
+  soldOutBadge: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  soldOutText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  qtyControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E4',
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  qtyButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FF7A18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  qtyText: {
+    minWidth: 20,
+    textAlign: 'center',
+    fontWeight: '700',
+    color: '#1F2937',
+    marginHorizontal: 6,
+  },
+  menuUnavailable: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  emptyState: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  checkoutBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  checkoutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  checkoutLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  checkoutValue: {
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    marginTop: 2,
+  },
+  checkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF7A18',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  checkoutButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  checkoutSecondary: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    backgroundColor: '#FFF7EE',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  checkoutSecondaryText: {
+    color: '#9A3412',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  dropdownContainer: {
+    position: 'absolute',
+    top: 84,
+    right: 16,
+    width: 240,
+    zIndex: 200,
+  },
+  dropdownPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#fff',
+    alignSelf: 'flex-end',
+    marginRight: 10,
+  },
+  dropdownPanel: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  dropdownIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdownLabel: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  dropdownHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: 6,
+    marginBottom: 6,
+  },
+  dropdownEmpty: {
+    color: '#6B7280',
+    textAlign: 'center',
+    padding: 8,
+  },
+  notificationItem: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  notificationTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  notificationTime: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  notificationMessage: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF7EE',
+  },
+  loadingText: {
+    marginTop: 8,
+    color: '#F97316',
+    fontFamily: 'Roboto_700Bold',
+  },
+});

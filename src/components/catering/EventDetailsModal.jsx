@@ -97,6 +97,7 @@ export const EventDetailsModal = ({
   onOpenChange,
   event,
   onUpdateEvent,
+  rescheduleMode = false,
 }) => {
   const [scheduleForm, setScheduleForm] = useState({
     date: '',
@@ -136,6 +137,12 @@ export const EventDetailsModal = ({
     setLocalEvent(event);
   }, [event]);
 
+  useEffect(() => {
+    if (event && rescheduleMode) {
+      setIsEditingSchedule(true);
+    }
+  }, [event, rescheduleMode]);
+
   const currentEvent = localEvent || event;
   const hasSavedOrder =
     Array.isArray(currentEvent?.items) && currentEvent.items.length > 0;
@@ -163,7 +170,10 @@ export const EventDetailsModal = ({
 
   const daysUntilEvent = getDaysUntilDate(event?.date);
   const isRescheduleLocked =
-    typeof daysUntilEvent === 'number' && daysUntilEvent <= 5;
+    !rescheduleMode &&
+    typeof daysUntilEvent === 'number' &&
+    daysUntilEvent >= 0 &&
+    daysUntilEvent <= 5;
   const rescheduleLockMessage =
     'Rescheduling is unavailable within 5 days of the event.';
 
@@ -189,6 +199,9 @@ export const EventDetailsModal = ({
     }
     if (scheduleForm.endTime !== initialEndTime) {
       updates.endTime = scheduleForm.endTime || null;
+    }
+    if (rescheduleMode && event?.status && event.status !== 'scheduled') {
+      updates.status = 'scheduled';
     }
 
     if (Object.keys(updates).length === 0) return;

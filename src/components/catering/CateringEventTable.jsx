@@ -10,6 +10,7 @@ import {
   X,
   CheckCircle2,
   Wallet,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +29,11 @@ export const CateringEventTable = ({
   onMenuItems,
   onCancelEvent,
   onRemoveEvent,
+  onRescheduleEvent,
+  listType = 'upcoming',
 }) => {
+  const showRescheduleAction = listType === 'past' || listType === 'cancelled';
+
   const getPaymentStatusBadge = (event) => {
     const paymentStatus =
       event?.paymentStatus || event?.payment_status || 'unpaid';
@@ -142,6 +147,15 @@ export const CateringEventTable = ({
                       <DropdownMenuItem onClick={() => onMenuItems(event)}>
                         <Utensils className="mr-2 h-4 w-4" /> Menu Items
                       </DropdownMenuItem>
+                      {showRescheduleAction && (
+                        <DropdownMenuItem
+                          onClick={() =>
+                            onRescheduleEvent && onRescheduleEvent(event)
+                          }
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" /> Reschedule
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
                       {event.status === 'cancelled' ? (
                         <DropdownMenuItem

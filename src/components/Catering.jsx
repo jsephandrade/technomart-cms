@@ -177,6 +177,7 @@ const Catering = () => {
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [rescheduleEventId, setRescheduleEventId] = useState(null);
   const [events, setEvents] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [eventsError, setEventsError] = useState(null);
@@ -293,7 +294,14 @@ const Catering = () => {
     }
   }, []);
 
-  const handleViewDetails = useCallback(async (event) => {
+  const openEventDetails = useCallback(async (event, options = {}) => {
+    if (!event?.id) return;
+    const { reschedule = false } = options || {};
+    if (reschedule) {
+      setRescheduleEventId(event.id);
+    } else {
+      setRescheduleEventId(null);
+    }
     setSelectedEvent(event);
     setShowEventDetailsModal(true);
     try {
@@ -314,6 +322,16 @@ const Catering = () => {
       toast.error(message);
     }
   }, []);
+
+  const handleViewDetails = useCallback(
+    (event) => openEventDetails(event),
+    [openEventDetails]
+  );
+
+  const handleRescheduleEvent = useCallback(
+    (event) => openEventDetails(event, { reschedule: true }),
+    [openEventDetails]
+  );
 
   const handleCancelEvent = useCallback(
     async (event) => {
@@ -349,6 +367,9 @@ const Catering = () => {
         if (selectedEvent?.id === mapped.id) {
           setSelectedEvent(mapped);
         }
+        if (rescheduleEventId === mapped.id) {
+          setRescheduleEventId(null);
+        }
         toast.success('Event schedule updated.');
         return mapped;
       } catch (error) {
@@ -360,7 +381,7 @@ const Catering = () => {
         throw error;
       }
     },
-    [selectedEvent]
+    [selectedEvent, rescheduleEventId]
   );
 
   const handleRemoveEvent = useCallback(
@@ -385,7 +406,7 @@ const Catering = () => {
     [navigate]
   );
 
-  const renderTable = (data, emptyMessage) => {
+  const renderTable = (data, emptyMessage, listType) => {
     if (isLoadingEvents) {
       return (
         <div className="text-center py-10">
@@ -436,6 +457,8 @@ const Catering = () => {
         onMenuItems={handleMenuItems}
         onCancelEvent={handleCancelEvent}
         onRemoveEvent={handleRemoveEvent}
+        onRescheduleEvent={handleRescheduleEvent}
+        listType={listType}
       />
     );
   };
@@ -466,15 +489,24 @@ const Catering = () => {
               <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
             </TabsList>
             <TabsContent value="upcoming" className="pt-2">
-              {renderTable(upcomingEvents, 'No upcoming catering events found')}
+              {renderTable(
+                upcomingEvents,
+                'No upcoming catering events found',
+                'upcoming'
+              )}
             </TabsContent>
             <TabsContent value="past" className="pt-2">
-              {renderTable(pastEvents, 'No past catering events to display')}
+              {renderTable(
+                pastEvents,
+                'No past catering events to display',
+                'past'
+              )}
             </TabsContent>
             <TabsContent value="cancelled" className="pt-2">
               {renderTable(
                 cancelledEvents,
-                'No cancelled catering events to display'
+                'No cancelled catering events to display',
+                'cancelled'
               )}
             </TabsContent>
           </Tabs>
@@ -496,9 +528,15 @@ const Catering = () => {
 
       <EventDetailsModal
         open={showEventDetailsModal}
-        onOpenChange={setShowEventDetailsModal}
+        onOpenChange={(nextOpen) => {
+          setShowEventDetailsModal(nextOpen);
+          if (!nextOpen) {
+            setRescheduleEventId(null);
+          }
+        }}
         event={selectedEvent}
         onUpdateEvent={handleUpdateEventSchedule}
+        rescheduleMode={rescheduleEventId === selectedEvent?.id}
       />
     </>
   );

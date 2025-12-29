@@ -88,8 +88,8 @@ class PendingUserGateMiddleware:
     def __call__(self, request):
         path = request.path or ""
         if path.startswith("/api/orders/"):
-         return self.get_response(request)
- 
+            return self.get_response(request)
+
         # Only enforce for API routes
         if path.startswith("/api/"):
             if self._is_public(path):

@@ -1,11 +1,16 @@
 import React from 'react';
 import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
+import { resolveImageSource } from '../utils/image';
 
 export default function CategoryItem({ image, title, onPress }) {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <View style={styles.iconContainer}>
-        <Image source={image} style={styles.image} resizeMode="contain" />
+        <Image
+          source={resolveImageSource(image)}
+          style={styles.image}
+          resizeMode="contain"
+        />
       </View>
       <Text style={styles.title}>{title}</Text>
     </TouchableOpacity>

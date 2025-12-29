@@ -27,6 +27,7 @@ import CategoryItem from '../../components/CategoryItem';
 import Recommended from '../../components/Recommended';
 import { fetchMenuItems, fetchNotifications } from '../../api/api';
 import { useCart } from '../../context/CartContext';
+import { resolveImageSource } from '../../utils/image';
 
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
@@ -476,17 +477,15 @@ export default function HomeDashboardScreen() {
                     marginBottom: 8,
                   }}
                 >
-                  {item.image && (
-                    <Image
-                      source={{ uri: item.image }}
-                      style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: 8,
-                        marginRight: 12,
-                      }}
-                    />
-                  )}
+                  <Image
+                    source={resolveImageSource(item.image)}
+                    style={{
+                      width: 60,
+                      height: 60,
+                      borderRadius: 8,
+                      marginRight: 12,
+                    }}
+                  />
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{

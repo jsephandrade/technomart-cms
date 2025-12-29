@@ -15,6 +15,49 @@ export const BASE_URL_MENU = `http://192.168.1.5:8000/api/menu`;
 export const BASE_URL_FEEDBACK = `http://192.168.1.5:8000`;
 const API_BASE = `http://192.168.1.5:8000/api/accounts`;
 
+const BASE_ORIGIN = BASE_URL.replace(/\/api\/?$/, '') || BASE_URL_FEEDBACK;
+
+const normalizeMediaUrl = (value) => {
+  if (!value || typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:')
+  ) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('//')) {
+    return `http:${trimmed}`;
+  }
+  const origin = (BASE_ORIGIN || '').replace(/\/$/, '');
+  if (!origin) return trimmed;
+  return `${origin}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+};
+
+const unwrapList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.items)) return payload.items;
+  return [];
+};
+
+const normalizeMenuItems = (payload) =>
+  unwrapList(payload).map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const rawImage = item.image || item.imageUrl || item.thumbnail || null;
+    const imageUrl = normalizeMediaUrl(rawImage);
+    const isSvg =
+      typeof imageUrl === 'string' && imageUrl.toLowerCase().includes('.svg');
+    return {
+      ...item,
+      image: isSvg ? null : imageUrl,
+    };
+  });
+
 // Helper to get token
 async function getTokenHeader() {
   const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
@@ -298,7 +341,7 @@ export const fetchMenuItems = async (category = '') => {
       }
     }
 
-    return response.data || [];
+    return normalizeMenuItems(response.data);
   } catch (error) {
     console.error(
       'fetchMenuItems error:',
@@ -322,7 +365,8 @@ export const fetchMenuItemsByCategory = async (category) => {
       }
     );
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+    return normalizeMenuItems(data);
   } catch (err) {
     console.error('fetchMenuItemsByCategory error:', err);
     return [];

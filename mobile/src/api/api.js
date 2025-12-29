@@ -67,14 +67,21 @@ async function getTokenHeader() {
 // Refresh token function
 export async function refreshAccessToken() {
   const refresh = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-  if (!refresh) throw new Error('No refresh token available');
+  if (!refresh) return null;
 
   try {
     const res = await axios.post(`${API_BASE}/token/refresh/`, { refresh });
     const newAccess = res.data.access;
+    if (!newAccess) return null;
     await AsyncStorage.setItem(ACCESS_TOKEN_KEY, newAccess);
     return newAccess;
   } catch (err) {
+    const status = err.response?.status;
+    const code = err.response?.data?.code;
+    if (status === 401 || code === 'token_not_valid') {
+      await clearStoredTokens();
+      return null;
+    }
     console.error('Failed to refresh token', err.response?.data || err.message);
     throw err;
   }
@@ -127,11 +134,16 @@ export async function getValidToken() {
       token = res.data.access;
       await AsyncStorage.setItem(ACCESS_TOKEN_KEY, token);
     } catch (err) {
+      const status = err.response?.status;
+      const code = err.response?.data?.code;
+      await clearStoredTokens(); // clean invalid tokens
+      if (status === 401 || code === 'token_not_valid') {
+        return null;
+      }
       console.error(
         'Refresh token invalid or expired',
         err.response?.data || err.message
       );
-      await clearStoredTokens(); // clean invalid tokens
       return null;
     }
   }
@@ -168,10 +180,12 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       try {
         const newToken = await refreshAccessToken();
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        }
       } catch (err) {
-        console.error('Token refresh failed', err);
+        return Promise.reject(err);
       }
     }
 
@@ -331,7 +345,7 @@ export const fetchMenuItems = async (category = '') => {
     } catch (err) {
       if (err.response?.data?.code === 'token_not_valid') {
         token = await refreshAccessToken();
-        const newHeaders = { Authorization: `Bearer ${token}` };
+        const newHeaders = token ? { Authorization: `Bearer ${token}` } : {};
         response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
           headers: newHeaders,
           params,
@@ -433,6 +447,7 @@ export const fetchNotifications = async () => {
     if (err.status === 401) {
       try {
         const newToken = await refreshAccessToken();
+        if (!newToken) return [];
         return await fetchWithToken(newToken);
       } catch (refreshErr) {
         console.error('Token refresh failed:', refreshErr);

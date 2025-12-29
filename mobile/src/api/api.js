@@ -332,6 +332,25 @@ export const fetchMenuItemsByCategory = async (category) => {
 // --------------------
 // Notifications
 // --------------------
+const normalizeNotificationsPayload = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.notifications)) return payload.notifications;
+  return [];
+};
+
+const normalizeNotifications = (payload) =>
+  normalizeNotificationsPayload(payload)
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const createdAt =
+        item.created_at || item.createdAt || item.created || null;
+      return { ...item, created_at: createdAt };
+    })
+    .filter(Boolean);
+
 export const fetchNotifications = async () => {
   let token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
   if (!token) throw new Error('No access token found');
@@ -354,7 +373,7 @@ export const fetchNotifications = async () => {
         err.status = res.status;
         throw err;
       }
-      return data;
+      return normalizeNotifications(data);
     } else {
       const text = await res.text();
       const err = new Error(`Unexpected response: ${res.status}`);

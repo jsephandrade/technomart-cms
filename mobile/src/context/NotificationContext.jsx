@@ -14,8 +14,9 @@ export const NotificationProvider = ({ children }) => {
     try {
       setLoading(true);
       const data = await fetchNotifications(); // fetch from backend
+      const list = Array.isArray(data) ? data : [];
       // Optional: filter only menu updates
-      const menuUpdates = data.filter(
+      const menuUpdates = list.filter(
         (n) => n.type === 'new' || n.type === 'sold'
       );
       setNotifications(menuUpdates);

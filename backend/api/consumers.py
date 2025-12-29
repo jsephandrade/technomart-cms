@@ -4,6 +4,8 @@ import logging
 from typing import Optional
 from urllib.parse import parse_qs
 
+from django.conf import settings
+
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
@@ -145,5 +147,6 @@ class EventStreamConsumer(AsyncJsonWebsocketConsumer):
             except Exception:
                 logger.exception("Failed to parse Authorization header for websocket connection")
         cookies = self.scope.get("cookies") or {}
-        token = cookies.get("authToken")
+        cookie_name = getattr(settings, "AUTH_ACCESS_COOKIE_NAME", "auth_access")
+        token = cookies.get(cookie_name) or cookies.get("authToken")
         return token

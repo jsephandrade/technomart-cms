@@ -567,6 +567,15 @@ def _actor_from_request(request):
         actor = _actor_from_token(token)
         if actor:
             return actor, None
+    else:
+        try:
+            cfg = _auth_cookie_config()
+            token = request.COOKIES.get(cfg["access_name"], "") or ""
+            actor = _actor_from_token(token)
+            if actor:
+                return actor, None
+        except Exception:
+            pass
 
     # Fallback: allow Django-authenticated users (session/cookie) that carry role info
     try:
@@ -579,6 +588,76 @@ def _actor_from_request(request):
         pass
 
     return None, JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+
+# Cookie helpers for httpOnly auth tokens
+def _auth_cookie_config():
+    samesite = getattr(settings, "AUTH_COOKIE_SAMESITE", "Lax")
+    if samesite not in {"Lax", "Strict", "None"}:
+        samesite = "Lax"
+    return {
+        "access_name": getattr(settings, "AUTH_ACCESS_COOKIE_NAME", "auth_access"),
+        "refresh_name": getattr(settings, "AUTH_REFRESH_COOKIE_NAME", "auth_refresh"),
+        "secure": getattr(settings, "AUTH_COOKIE_SECURE", not getattr(settings, "DEBUG", False)),
+        "domain": getattr(settings, "AUTH_COOKIE_DOMAIN", None),
+        "path": getattr(settings, "AUTH_COOKIE_PATH", "/"),
+        "samesite": samesite,
+    }
+
+
+def _set_auth_cookies(
+    response,
+    access_token,
+    refresh_token,
+    *,
+    remember=False,
+    access_max_age=None,
+):
+    if response is None:
+        return response
+    cfg = _auth_cookie_config()
+    if access_token:
+        response.set_cookie(
+            cfg["access_name"],
+            access_token,
+            max_age=access_max_age,
+            httponly=True,
+            secure=cfg["secure"],
+            samesite=cfg["samesite"],
+            domain=cfg["domain"],
+            path=cfg["path"],
+        )
+    if refresh_token:
+        refresh_ttl = (
+            settings.JWT_REFRESH_REMEMBER_EXP_SECONDS
+            if remember
+            else settings.JWT_REFRESH_EXP_SECONDS
+        )
+        response.set_cookie(
+            cfg["refresh_name"],
+            refresh_token,
+            max_age=refresh_ttl,
+            httponly=True,
+            secure=cfg["secure"],
+            samesite=cfg["samesite"],
+            domain=cfg["domain"],
+            path=cfg["path"],
+        )
+    return response
+
+
+def _clear_auth_cookies(response):
+    if response is None:
+        return response
+    cfg = _auth_cookie_config()
+    response.delete_cookie(cfg["access_name"], domain=cfg["domain"], path=cfg["path"])
+    response.delete_cookie(cfg["refresh_name"], domain=cfg["domain"], path=cfg["path"])
+    return response
+
+
+def _get_refresh_token_from_request(request):
+    cfg = _auth_cookie_config()
+    return request.COOKIES.get(cfg["refresh_name"], "") or ""
 
 
 # JWT and token helpers

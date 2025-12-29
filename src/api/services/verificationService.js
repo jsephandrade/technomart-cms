@@ -33,8 +33,7 @@ class VerificationService {
         params.append(k, String(v));
     });
 
-    // apiClient automatically injects the Authorization header
-    // through AuthContext's token provider
+    // Auth uses httpOnly cookies; apiClient sends credentials when enabled.
     const res = await apiClient.get(`/verify/requests?${params.toString()}`);
     const data = (res?.data || []).map((r) => ({
       id: r.id,

@@ -58,6 +58,7 @@ MENU_IMAGE_PLACEHOLDER_URL = os.getenv(
 )
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 # Keep middleware lightweight; omit session/auth/csrf
 MIDDLEWARE = [
@@ -67,6 +68,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "api.middleware.CookieAuthMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "api.middleware.RequestIdMiddleware",
@@ -162,6 +164,16 @@ JWT_EXP_SECONDS = _jwt["JWT_EXP_SECONDS"]
 JWT_REMEMBER_EXP_SECONDS = _jwt["JWT_REMEMBER_EXP_SECONDS"]
 JWT_REFRESH_EXP_SECONDS = _jwt["JWT_REFRESH_EXP_SECONDS"]
 JWT_REFRESH_REMEMBER_EXP_SECONDS = _jwt["JWT_REFRESH_REMEMBER_EXP_SECONDS"]
+
+# Auth cookie settings (httpOnly JWT cookies)
+AUTH_ACCESS_COOKIE_NAME = os.getenv("DJANGO_AUTH_ACCESS_COOKIE_NAME", "auth_access")
+AUTH_REFRESH_COOKIE_NAME = os.getenv("DJANGO_AUTH_REFRESH_COOKIE_NAME", "auth_refresh")
+AUTH_COOKIE_SAMESITE = os.getenv("DJANGO_AUTH_COOKIE_SAMESITE", "Lax")
+AUTH_COOKIE_DOMAIN = os.getenv("DJANGO_AUTH_COOKIE_DOMAIN", "") or None
+AUTH_COOKIE_SECURE = (
+    os.getenv("DJANGO_AUTH_COOKIE_SECURE", "0") in {"1", "true", "True", "yes", "on"}
+    or not DEBUG
+)
 
 # Google OAuth
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()

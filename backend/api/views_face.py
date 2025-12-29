@@ -22,6 +22,7 @@ from .views_common import (
     _issue_jwt,
     _issue_refresh_token_db,
     _issue_verify_token_from_db,
+    _set_auth_cookies,
 )
 from .utils_audit import record_audit
 
@@ -305,6 +306,15 @@ def face_login(request):
         data = json.loads(request.body.decode("utf-8") or "{}")
     except Exception:
         data = {}
+    header_mode = (request.META.get("HTTP_X_AUTH_MODE", "") or "").lower()
+    auth_mode = (
+        data.get("authMode")
+        or data.get("auth_mode")
+        or data.get("tokenTransport")
+        or data.get("token_transport")
+        or ""
+    )
+    return_tokens = not (header_mode == "cookie" or str(auth_mode).lower() == "cookie")
 
     image = data.get("image") or data.get("imageData") or ""
     remember_raw = data.get("remember")
@@ -463,17 +473,20 @@ def face_login(request):
         except Exception:
             pass
 
-        return JsonResponse({
+        payload = {
             "success": True,
             "user": _safe_user_from_db(user),
-            "token": token,
-            "refreshToken": refresh_token,
             "metadata": {
                 "distance": distance,
                 "confidence": metadata.get("confidence", 0),
-                "model": model_name
-            }
-        })
+                "model": model_name,
+            },
+        }
+        if return_tokens:
+            payload.update({"token": token, "refreshToken": refresh_token})
+        resp = JsonResponse(payload)
+        _set_auth_cookies(resp, token, refresh_token, remember=remember, access_max_age=exp_seconds)
+        return resp
 
     except Exception as e:
         try:

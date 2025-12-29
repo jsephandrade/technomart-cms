@@ -6,6 +6,22 @@ import time
 import uuid
 
 
+class CookieAuthMiddleware:
+    """Populate Authorization header from httpOnly auth cookies when present."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        auth = request.META.get("HTTP_AUTHORIZATION", "") or ""
+        if not auth.startswith("Bearer "):
+            cookie_name = getattr(settings, "AUTH_ACCESS_COOKIE_NAME", "auth_access")
+            token = request.COOKIES.get(cookie_name, "")
+            if token:
+                request.META["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        return self.get_response(request)
+
+
 class PendingUserGateMiddleware:
     """Blocks API access for users who are not approved.
 

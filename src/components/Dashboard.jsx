@@ -24,13 +24,13 @@ import { cn } from '@/lib/utils';
 const Dashboard = () => {
   const [timeRange, setTimeRange] = useState('today');
   const { stats, loading, error, refetch } = useDashboard(timeRange);
-  const { hasAnyRole, token } = useAuth();
+  const { hasAnyRole, user } = useAuth();
   const isVerifier = hasAnyRole(['admin', 'manager']);
   const { requests: pendingRequests, pagination: verifyPagination } =
     useVerificationQueue({
       status: 'pending',
       limit: 1,
-      enabled: isVerifier && Boolean(token),
+      enabled: isVerifier && Boolean(user),
     });
 
   // Merge today and yesterday category sales data for comparison

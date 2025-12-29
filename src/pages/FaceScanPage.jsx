@@ -205,7 +205,7 @@ const FaceScanPage = () => {
       stopStream();
 
       const res = await loginWithFace(dataUrl, { remember: true });
-      if (res?.success && res?.token) {
+      if (res?.success && !res?.pending) {
         setScanResult('success');
         setTimeout(() => navigate('/'), 1000);
       } else if (res?.pending) {

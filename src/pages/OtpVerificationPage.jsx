@@ -178,7 +178,7 @@ const OtpVerificationPage = () => {
         code,
         remember: context.remember,
       });
-      if (!res?.success || !res?.token) {
+      if (!res?.success) {
         setError(res?.message || res?.error || 'Invalid or expired code.');
         return;
       }

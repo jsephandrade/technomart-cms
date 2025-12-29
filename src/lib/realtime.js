@@ -2,7 +2,11 @@
 // Usage: const rt = createRealtime({ path: '/orders', onMessage }); rt.close()
 
 export function createRealtime({ path = '/', onMessage, onStatusChange } = {}) {
-  const base = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_WS_URL) || '';
+  const base =
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      import.meta.env.VITE_WS_URL) ||
+    '';
   if (!base) {
     onStatusChange?.('disabled');
     return { close() {}, isActive: () => false };
@@ -13,14 +17,10 @@ export function createRealtime({ path = '/', onMessage, onStatusChange } = {}) {
   let reconnectAttempts = 0;
 
   const buildUrl = () => {
-    const token = (() => {
-      try { return localStorage.getItem('auth_token') || ''; } catch { return ''; }
-    })();
     const trimmed = base.endsWith('/') ? base.slice(0, -1) : base;
     const p = path.startsWith('/') ? path : `/${path}`;
     const url = `${trimmed}${p}`;
-    const qs = token ? (url.includes('?') ? `&token=${encodeURIComponent(token)}` : `?token=${encodeURIComponent(token)}`) : '';
-    return `${url}${qs}`;
+    return url;
   };
 
   const connect = () => {
@@ -68,17 +68,19 @@ export function createRealtime({ path = '/', onMessage, onStatusChange } = {}) {
   return {
     close() {
       active = false;
-      try { ws && ws.close(); } catch {}
+      try {
+        ws && ws.close();
+      } catch {}
     },
     isActive: () => active,
     send(payload) {
       try {
         if (ws && ws.readyState === WebSocket.OPEN) {
-          const data = typeof payload === 'string' ? payload : JSON.stringify(payload);
+          const data =
+            typeof payload === 'string' ? payload : JSON.stringify(payload);
           ws.send(data);
         }
       } catch {}
     },
   };
 }
-

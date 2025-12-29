@@ -33,7 +33,7 @@ class AuthService {
     }
     const res = await apiClient.post(
       '/auth/google',
-      { credential },
+      { credential, authMode: 'cookie' },
       { retry: { retries: 1 } }
     );
     const data = res?.data || res;
@@ -79,7 +79,7 @@ class AuthService {
     const remember = Boolean(options?.remember);
     const res = await apiClient.post(
       '/auth/face-login',
-      { image: imageData, remember },
+      { image: imageData, remember, authMode: 'cookie' },
       { retry: { retries: 1 } }
     );
     const data = res?.data || res;
@@ -178,7 +178,13 @@ class AuthService {
         verifyToken: null,
       };
     }
-    const payload = { email, password, ...options, remember };
+    const payload = {
+      email,
+      password,
+      ...options,
+      remember,
+      authMode: 'cookie',
+    };
     const res = await apiClient.post('/auth/login', payload, {
       retry: { retries: 1 },
     });
@@ -287,6 +293,7 @@ class AuthService {
       email: normalizedEmail,
       otpToken,
       code,
+      authMode: 'cookie',
     };
     if (typeof rememberFlag === 'boolean') {
       payload.remember = rememberFlag;
@@ -368,8 +375,37 @@ class AuthService {
       await mockDelay(300);
       return { success: true };
     }
-    const res = await apiClient.post('/auth/logout', { refreshToken });
+    const payload = {};
+    if (refreshToken) payload.refreshToken = refreshToken;
+    const res = await apiClient.post('/auth/logout', payload);
     return res?.data || { success: true };
+  }
+
+  async me() {
+    if (USE_MOCKS) {
+      return { success: false };
+    }
+    const res = await apiClient.get('/auth/me', { retry: { retries: 1 } });
+    const data = res?.data || res;
+    if (!data) return { success: false };
+    if (data?.success === false) {
+      return { success: false, message: data?.message || 'Unauthorized' };
+    }
+    const rawUser = data.user || data;
+    const user = {
+      ...rawUser,
+      employeeId:
+        rawUser?.employeeId ??
+        rawUser?.employee_id ??
+        rawUser?.employee?.id ??
+        data.employeeId ??
+        data.employee_id ??
+        null,
+    };
+    return {
+      success: Boolean(data?.success ?? true),
+      user,
+    };
   }
 
   async socialLogin(provider) {
@@ -387,7 +423,10 @@ class AuthService {
         token: 'mock-social-token-' + Date.now(),
       };
     }
-    const res = await apiClient.post('/auth/social', { provider });
+    const res = await apiClient.post('/auth/social', {
+      provider,
+      authMode: 'cookie',
+    });
     const data = res?.data || res;
     const rawUser = data.user || {
       id: 'me',
@@ -491,10 +530,12 @@ class AuthService {
         refreshToken: 'mock-rtok-' + Date.now(),
       };
     }
-    const res = await apiClient.post('/auth/refresh-token', { refreshToken });
+    const payload = { authMode: 'cookie' };
+    if (refreshToken) payload.refreshToken = refreshToken;
+    const res = await apiClient.post('/auth/refresh-token', payload);
     const data = res?.data || res;
     return {
-      success: true,
+      success: Boolean(data?.success ?? true),
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
     };

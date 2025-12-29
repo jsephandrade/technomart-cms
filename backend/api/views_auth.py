@@ -17,6 +17,23 @@ import requests as _requests
 
 logger = logging.getLogger(__name__)
 
+
+def _wants_cookie_auth(request, data=None):
+    header_mode = (request.META.get("HTTP_X_AUTH_MODE", "") or "").lower()
+    if header_mode == "cookie":
+        return True
+    if data and isinstance(data, dict):
+        mode = (
+            data.get("authMode")
+            or data.get("auth_mode")
+            or data.get("tokenTransport")
+            or data.get("token_transport")
+            or ""
+        )
+        if str(mode).lower() == "cookie":
+            return True
+    return False
+
 from .views_common import (
     rate_limit,
     _login_rate_key,
@@ -29,6 +46,9 @@ from .views_common import (
     _issue_refresh_token_db,
     _issue_refresh_token_mem,
     _revoke_refresh_token,
+    _set_auth_cookies,
+    _clear_auth_cookies,
+    _get_refresh_token_from_request,
     USERS,
     _issue_verify_token_from_db,
     _issue_verify_token_from_dict,
@@ -133,6 +153,7 @@ def auth_login(request):
     elif isinstance(remember_raw, (int, str)):
         remember = str(remember_raw).lower() in {"1", "true", "yes", "on"}
     exp_seconds = getattr(settings, "JWT_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60) if remember else getattr(settings, "JWT_EXP_SECONDS", 3600)
+    return_tokens = not _wants_cookie_auth(request, data)
 
     # Lockout pre-check
     from .views_common import _client_ip
@@ -176,7 +197,7 @@ def auth_login(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": False, "message": "Invalid credentials"}, status=401)
+        return JsonResponse({"success": False, "message": "Invalid email or password."}, status=401)
 
     # Try DB first
     user_exists = False
@@ -347,8 +368,11 @@ def auth_login(request):
             })
 
         rtoken = _issue_refresh_token_mem(safe_user, remember=remember, request=request)
+        access_token = _issue_jwt_from_dict(safe_user, exp_seconds=exp_seconds)
         _lockout_check_and_touch(email, ip, success=True)
-        payload = {"success": True, "user": safe_user, "token": _issue_jwt_from_dict(safe_user, exp_seconds=exp_seconds), "refreshToken": rtoken}
+        payload = {"success": True, "user": safe_user}
+        if return_tokens:
+            payload.update({"token": access_token, "refreshToken": rtoken})
         try:
             record_audit(
                 request,
@@ -360,7 +384,9 @@ def auth_login(request):
             )
         except Exception:
             pass
-        return JsonResponse(payload)
+        resp = JsonResponse(payload)
+        _set_auth_cookies(resp, access_token, rtoken, remember=remember, access_max_age=exp_seconds)
+        return resp
 
     # Record failed attempt and maybe lock
     locked, retry_after = _lockout_check_and_touch(email, ip, success=False)
@@ -392,9 +418,10 @@ def auth_login(request):
         )
     except Exception:
         pass
-    if not user_exists:
-        return JsonResponse({"success": False, "message": "Account not found"}, status=404)
-    return JsonResponse({"success": False, "message": "Invalid credentials"}, status=401)
+    return JsonResponse(
+        {"success": False, "message": "Invalid email or password."},
+        status=401,
+    )
 
 
 @rate_limit(limit=10, window_seconds=60, key_fn=_login_rate_key)
@@ -405,6 +432,7 @@ def auth_login_verify_otp(request):
         data = json.loads(request.body.decode("utf-8") or "{}")
     except Exception:
         data = {}
+    return_tokens = not _wants_cookie_auth(request, data)
 
     email = (data.get("email") or "").lower().strip()
     otp_token = (data.get("otpToken") or data.get("otpId") or "").strip()
@@ -472,14 +500,15 @@ def auth_login_verify_otp(request):
     except Exception:
         pass
 
-    return JsonResponse(
-        {
-            "success": True,
-            "user": safe_user,
-            "token": token,
-            "refreshToken": refresh_token,
-        }
-    )
+    payload = {
+        "success": True,
+        "user": safe_user,
+    }
+    if return_tokens:
+        payload.update({"token": token, "refreshToken": refresh_token})
+    resp = JsonResponse(payload)
+    _set_auth_cookies(resp, token, refresh_token, remember=remember, access_max_age=exp_seconds)
+    return resp
 
 
 @rate_limit(limit=5, window_seconds=60, key_fn=_login_rate_key)
@@ -583,6 +612,8 @@ def auth_logout(request):
     except Exception:
         data = {}
     rtoken = (data.get("refreshToken") or "").strip()
+    if not rtoken:
+        rtoken = _get_refresh_token_from_request(request)
     if rtoken:
         _revoke_refresh_token(request, rtoken)
     # Audit: best-effort capture of actor
@@ -608,7 +639,9 @@ def auth_logout(request):
         )
     except Exception:
         pass
-    return JsonResponse({"success": True})
+    resp = JsonResponse({"success": True})
+    _clear_auth_cookies(resp)
+    return resp
 
 
 @require_http_methods(["GET"]) 
@@ -661,6 +694,7 @@ def auth_google(request):
         data = json.loads(request.body.decode("utf-8") or "{}")
     except Exception:
         data = {}
+    return_tokens = not _wants_cookie_auth(request, data)
 
     client_id = settings.GOOGLE_CLIENT_ID or os.getenv("GOOGLE_CLIENT_ID", "").strip()
     client_secret = settings.GOOGLE_CLIENT_SECRET or os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
@@ -790,7 +824,8 @@ def auth_google(request):
                 "user": safe_user,
                 "verifyToken": _issue_verify_token_from_db(db_user),
             })
-        token = _issue_jwt(db_user)
+        access_ttl = getattr(settings, "JWT_EXP_SECONDS", 3600)
+        token = _issue_jwt(db_user, exp_seconds=access_ttl)
         rtok = _issue_refresh_token_db(db_user, remember=False, request=request)
         try:
             record_audit(
@@ -803,7 +838,12 @@ def auth_google(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": True, "user": safe_user, "token": token, "refreshToken": rtok})
+        payload = {"success": True, "user": safe_user}
+        if return_tokens:
+            payload.update({"token": token, "refreshToken": rtok})
+        resp = JsonResponse(payload)
+        _set_auth_cookies(resp, token, rtok, remember=False, access_max_age=access_ttl)
+        return resp
     except (OperationalError, ProgrammingError):
         pass
 
@@ -863,6 +903,8 @@ def auth_google(request):
             pass
         return JsonResponse({"success": True, "pending": True, "user": safe_user, "verifyToken": _issue_verify_token_from_dict(safe_user)})
     rtok = _issue_refresh_token_mem(user, remember=False, request=request)
+    access_ttl = getattr(settings, "JWT_EXP_SECONDS", 3600)
+    access_token = _issue_jwt_from_dict(safe_user, exp_seconds=access_ttl)
     try:
         record_audit(
             request,
@@ -874,7 +916,12 @@ def auth_google(request):
         )
     except Exception:
         pass
-    return JsonResponse({"success": True, "user": safe_user, "token": _issue_jwt_from_dict(safe_user), "refreshToken": rtok})
+    payload = {"success": True, "user": safe_user}
+    if return_tokens:
+        payload.update({"token": access_token, "refreshToken": rtok})
+    resp = JsonResponse(payload)
+    _set_auth_cookies(resp, access_token, rtok, remember=False, access_max_age=access_ttl)
+    return resp
 
 
 from .views_common import _decode_emailverify_token
@@ -1283,7 +1330,10 @@ def refresh_token(request):
         data = json.loads(request.body.decode("utf-8") or "{}")
     except Exception:
         data = {}
+    return_tokens = not _wants_cookie_auth(request, data)
     rtoken = (data.get("refreshToken") or "").strip()
+    if not rtoken:
+        rtoken = _get_refresh_token_from_request(request)
     if not rtoken:
         return JsonResponse({"success": False, "message": "Missing refresh token"}, status=400)
 
@@ -1323,7 +1373,12 @@ def refresh_token(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": True, "token": new_access, "refreshToken": new_refresh})
+        payload = {"success": True}
+        if return_tokens:
+            payload.update({"token": new_access, "refreshToken": new_refresh})
+        resp = JsonResponse(payload)
+        _set_auth_cookies(resp, new_access, new_refresh, remember=rt.remember, access_max_age=access_ttl)
+        return resp
     except (OperationalError, ProgrammingError):
         pass
     except Exception:
@@ -1346,7 +1401,18 @@ def refresh_token(request):
         )
     except Exception:
         pass
-    return JsonResponse({"success": True, "token": out["token"], "refreshToken": out["refreshToken"]})
+    payload = {"success": True}
+    if return_tokens:
+        payload.update({"token": out["token"], "refreshToken": out["refreshToken"]})
+    resp = JsonResponse(payload)
+    _set_auth_cookies(
+        resp,
+        out["token"],
+        out["refreshToken"],
+        remember=False,
+        access_max_age=getattr(settings, "JWT_EXP_SECONDS", 3600),
+    )
+    return resp
 
 
 @require_http_methods(["POST"]) 

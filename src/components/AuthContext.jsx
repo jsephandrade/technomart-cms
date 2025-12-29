@@ -47,10 +47,6 @@ export function AuthProvider({ children }) {
   };
 
   const [user, setUser] = useState(() => loadFromStores('user', true));
-  const [token, setToken] = useState(() => loadFromStores('auth_token'));
-  const [refreshTokenValue, setRefreshTokenValue] = useState(() =>
-    loadFromStores('refresh_token')
-  );
   const [rememberPref, setRememberPref] = useState(() => {
     try {
       // default to true to keep previous behaviour (persist between sessions)
@@ -61,19 +57,26 @@ export function AuthProvider({ children }) {
     }
   });
 
-  // Keep a ref for apiClient token provider to avoid stale closures
-  const tokenRef = useRef(token);
-  useEffect(() => {
-    tokenRef.current = token;
-  }, [token]);
+  const clearStoredAuth = useCallback(() => {
+    try {
+      localStorage.removeItem('user');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      sessionStorage.removeItem('user');
+      sessionStorage.removeItem('auth_token');
+      sessionStorage.removeItem('refresh_token');
+    } catch {}
+  }, []);
+  const token = null;
 
   // Keep a ref for refresh function to avoid exhaustive-deps churn
   const refreshRef = useRef(null);
 
   // Configure apiClient once
   useEffect(() => {
-    // Dynamic token provider and 401 handler
-    apiClient.setAuthTokenProvider(() => tokenRef.current);
+    // Clear any lingering bearer token usage; rely on httpOnly cookies.
+    apiClient.setAuthTokenProvider(null);
+    apiClient.setAuthToken(null);
     let refreshing = false;
     apiClient.onUnauthorized = async () => {
       if (refreshing) return;
@@ -84,35 +87,20 @@ export function AuthProvider({ children }) {
           : Promise.resolve(false));
         if (!ok) {
           setUser(null);
-          setToken(null);
-          try {
-            localStorage.removeItem('user');
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('refresh_token');
-            sessionStorage.removeItem('user');
-            sessionStorage.removeItem('auth_token');
-            sessionStorage.removeItem('refresh_token');
-          } catch {}
+          clearStoredAuth();
         }
       } finally {
         refreshing = false;
       }
     };
-  }, []);
+  }, [clearStoredAuth]);
 
-  // Initialize apiClient header from persisted token
-  useEffect(() => {
-    apiClient.setAuthToken(token);
-  }, [token]);
-
-  const persistAuth = useCallback(
-    (nextUser, nextToken, nextRefreshToken = null, remember = undefined) => {
+  const persistUser = useCallback(
+    (nextUser, remember = undefined) => {
       const useRemember =
         typeof remember === 'boolean' ? remember : Boolean(rememberPref);
 
       setUser(nextUser);
-      setToken(nextToken);
-      setRefreshTokenValue(nextRefreshToken);
 
       try {
         // Choose storage target
@@ -132,16 +120,8 @@ export function AuthProvider({ children }) {
         } else {
           store.removeItem('user');
         }
-        if (nextToken) {
-          store.setItem('auth_token', nextToken);
-        } else {
-          store.removeItem('auth_token');
-        }
-        if (nextRefreshToken) {
-          store.setItem('refresh_token', nextRefreshToken);
-        } else {
-          store.removeItem('refresh_token');
-        }
+        store.removeItem('auth_token');
+        store.removeItem('refresh_token');
 
         // Persist preference for next logins
         if (typeof remember === 'boolean') {
@@ -153,13 +133,39 @@ export function AuthProvider({ children }) {
     [rememberPref]
   );
 
+  useEffect(() => {
+    let active = true;
+    const hydrateUser = async () => {
+      try {
+        const res = await authService.me();
+        if (!active) return;
+        if (res?.success && res?.user) {
+          persistUser(res.user);
+        } else {
+          setUser(null);
+          clearStoredAuth();
+        }
+      } catch {
+        if (!active) return;
+        setUser(null);
+        clearStoredAuth();
+      }
+    };
+    hydrateUser();
+    return () => {
+      active = false;
+    };
+  }, [clearStoredAuth, persistUser]);
+
   const login = useCallback(
     async (email, password, options = {}) => {
       try {
         const res = await authService.login(email, password, options);
-        if (res?.success && res?.token) {
+        const shouldPersist =
+          res?.success && res?.user && !res?.otpRequired && !res?.pending;
+        if (shouldPersist) {
           const remember = Boolean(options?.remember);
-          persistAuth(res.user, res.token, res.refreshToken || null, remember);
+          persistUser(res.user, remember);
         }
         return res;
       } catch (err) {
@@ -172,7 +178,7 @@ export function AuthProvider({ children }) {
         };
       }
     },
-    [persistAuth]
+    [persistUser]
   );
 
   const verifyLoginOtp = useCallback(
@@ -184,22 +190,17 @@ export function AuthProvider({ children }) {
           code,
           remember,
         });
-        if (res?.success && res?.token) {
+        if (res?.success && res?.user) {
           const rememberChoice =
             typeof remember === 'boolean' ? remember : Boolean(res?.remember);
-          persistAuth(
-            res.user,
-            res.token,
-            res.refreshToken || null,
-            rememberChoice
-          );
+          persistUser(res.user, rememberChoice);
         }
         return res;
       } catch (err) {
         return { success: false, error: err?.message || 'Verification failed' };
       }
     },
-    [persistAuth]
+    [persistUser]
   );
 
   const resendLoginOtp = useCallback(
@@ -217,8 +218,8 @@ export function AuthProvider({ children }) {
     async (provider) => {
       try {
         const res = await authService.socialLogin(provider);
-        if (res?.success) {
-          persistAuth(res.user, res.token || null, res.refreshToken || null);
+        if (res?.success && res?.user) {
+          persistUser(res.user);
           return true;
         }
         return false;
@@ -226,7 +227,7 @@ export function AuthProvider({ children }) {
         return false;
       }
     },
-    [persistAuth]
+    [persistUser]
   );
 
   const loginWithGoogle = useCallback(
@@ -234,17 +235,17 @@ export function AuthProvider({ children }) {
       try {
         const res = await authService.loginWithGoogle(credential);
         if (!res?.success) return { success: false };
-        // Only persist when we actually have a token (approved users)
-        if (res.token) {
+        const shouldPersist = res?.user && !res?.pending && !res?.verifyToken;
+        if (shouldPersist) {
           const remember = Boolean(options?.remember);
-          persistAuth(res.user, res.token, res.refreshToken || null, remember);
+          persistUser(res.user, remember);
         }
         return res; // { success, pending?, user, token?, verifyToken? }
       } catch (err) {
         return { success: false, error: err?.message || 'Login failed' };
       }
     },
-    [persistAuth]
+    [persistUser]
   );
 
   const loginWithFace = useCallback(
@@ -252,16 +253,17 @@ export function AuthProvider({ children }) {
       try {
         const res = await authService.loginWithFace(imageData, options);
         if (!res?.success) return { success: false };
-        if (res.token) {
+        const shouldPersist = res?.user && !res?.pending;
+        if (shouldPersist) {
           const remember = Boolean(options?.remember);
-          persistAuth(res.user, res.token, res.refreshToken || null, remember);
+          persistUser(res.user, remember);
         }
         return res;
       } catch (err) {
         return { success: false, error: err?.message || 'Login failed' };
       }
     },
-    [persistAuth]
+    [persistUser]
   );
 
   const register = useCallback(
@@ -269,64 +271,39 @@ export function AuthProvider({ children }) {
       try {
         const res = await authService.register(userData);
         // Do not persist during pending; page will route to verify
-        if (res?.success && res?.token) {
-          persistAuth(res.user, res.token, res.refreshToken || null);
+        if (res?.success && res?.user && !res?.pending) {
+          persistUser(res.user);
         }
         return res;
       } catch (err) {
         return { success: false, error: err?.message || 'Registration failed' };
       }
     },
-    [persistAuth]
+    [persistUser]
   );
 
   const logout = useCallback(async () => {
     try {
-      await authService.logout(refreshTokenValue);
+      await authService.logout();
     } catch {}
-    // Clear from both storages on logout
-    try {
-      localStorage.removeItem('user');
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
-      sessionStorage.removeItem('user');
-      sessionStorage.removeItem('auth_token');
-      sessionStorage.removeItem('refresh_token');
-    } catch {}
+    clearStoredAuth();
     setUser(null);
-    setToken(null);
-    setRefreshTokenValue(null);
-  }, [refreshTokenValue]);
+  }, [clearStoredAuth]);
 
   const refreshToken = useCallback(async () => {
-    if (!refreshTokenValue) {
-      // No refresh token available; nothing to do
-      return false;
-    }
     try {
-      const res = await authService.refreshToken(refreshTokenValue);
-      if (res?.success && res?.token) {
-        setToken(res.token);
-        setRefreshTokenValue(res.refreshToken || null);
-        try {
-          // Update both storages just in case
-          [localStorage, sessionStorage].forEach((store) => {
-            try {
-              store.setItem('auth_token', res.token);
-              if (res.refreshToken) {
-                store.setItem('refresh_token', res.refreshToken);
-              }
-            } catch {}
-          });
-        } catch {}
-        return true;
+      const res = await authService.refreshToken();
+      if (!res?.success) return false;
+      const me = await authService.me();
+      if (me?.success && me?.user) {
+        persistUser(me.user);
       }
-      return false;
+      return true;
     } catch (err) {
       await logout();
       return false;
     }
-  }, [logout, refreshTokenValue]);
+  }, [logout, persistUser]);
 
   // keep latest refresh function in a ref for onUnauthorized
   useEffect(() => {
@@ -348,18 +325,14 @@ export function AuthProvider({ children }) {
     async (updates) => {
       try {
         const nextUser = { ...(user || {}), ...(updates || {}) };
-        // Reuse current token/refresh; persist to the same store based on rememberPref
-        persistAuth(
-          nextUser,
-          tokenRef.current || token,
-          refreshTokenValue || null
-        );
+        // Persist profile updates for display; auth cookies remain unchanged.
+        persistUser(nextUser);
         return true;
       } catch {
         return false;
       }
     },
-    [user, persistAuth, token, refreshTokenValue]
+    [user, persistUser]
   );
 
   return (

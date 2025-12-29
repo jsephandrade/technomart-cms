@@ -17,10 +17,11 @@ import {
 } from '@/lib/credentials';
 import { getMutedUser } from '@/lib/mutedUsers';
 
-const PASSWORD_MISMATCH_MESSAGE = 'Incorrect email and password.';
+const PASSWORD_MISMATCH_MESSAGE = 'Invalid email or password.';
 
 const isPasswordMismatchError = (result) => {
-  if (!result || (result?.status ?? null) !== 401) return false;
+  const status = result?.status ?? null;
+  if (!result || (status !== 401 && status !== 404)) return false;
   const raw = result?.error || result?.message || '';
   const code = result?.code || '';
 
@@ -37,7 +38,8 @@ const isPasswordMismatchError = (result) => {
   const rawMessage = normalize(raw);
   if (
     /invalid credential/i.test(rawMessage) ||
-    /incorrect password/i.test(rawMessage)
+    /incorrect password/i.test(rawMessage) ||
+    /invalid email or password/i.test(rawMessage)
   ) {
     return true;
   }
@@ -51,12 +53,16 @@ const isPasswordMismatchError = (result) => {
 
   const details = result?.details;
   if (typeof details === 'string') {
-    return /invalid credential|incorrect password/i.test(details);
+    return /invalid credential|incorrect password|invalid email or password/i.test(
+      details
+    );
   }
   if (details && typeof details === 'object') {
     const detailMessage = normalize(details.message || details.reason);
     if (detailMessage) {
-      return /invalid credential|incorrect password/i.test(detailMessage);
+      return /invalid credential|incorrect password|invalid email or password/i.test(
+        detailMessage
+      );
     }
   }
 
@@ -106,19 +112,16 @@ const LoginPage = () => {
   const resolveLoginErrorMessage = (result) => {
     const status = result?.status ?? null;
     const raw = result?.error || result?.message || '';
-    if (status === 401) {
-      if (isPasswordMismatchError(result)) {
-        return PASSWORD_MISMATCH_MESSAGE;
-      }
-      if (typeof raw === 'string' && raw.trim()) {
-        return raw;
-      }
+    if (status === 401 || status === 404) {
       return PASSWORD_MISMATCH_MESSAGE;
     }
-    if (status === 404) return 'Account not found.';
+    if (status === 423) {
+      if (typeof raw === 'string' && raw.trim()) return raw;
+      return 'Too many attempts. Try again later.';
+    }
     if (typeof raw === 'string') {
       if (/invalid credentials/i.test(raw)) return PASSWORD_MISMATCH_MESSAGE;
-      if (/account not found/i.test(raw)) return 'Account not found.';
+      return raw;
     }
     return raw || 'Something went wrong. Please try again.';
   };

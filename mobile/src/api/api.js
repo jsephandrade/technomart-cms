@@ -396,8 +396,8 @@ const normalizeNotifications = (payload) =>
     .filter(Boolean);
 
 export const fetchNotifications = async () => {
-  let token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!token) throw new Error('No access token found');
+  const token = await getValidToken();
+  if (!token) return [];
 
   const fetchWithToken = async (jwt) => {
     const res = await fetch(`${BASE_URL}/notifications/`, {

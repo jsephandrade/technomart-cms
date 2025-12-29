@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import analyticsService from '@/api/services/analyticsService';
+import { subscribeInventoryMutations } from '@/lib/inventoryMutations';
 
 /**
  * Hook for fetching sales report data
@@ -55,10 +56,27 @@ export const useInventoryReport = () => {
   const [inventoryData, setInventoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const isFetchingRef = useRef(false);
+  const pendingRefetchRef = useRef(null);
+  const lastFetchCompletedRef = useRef(0);
+  const hasLoadedRef = useRef(false);
 
-  const fetchInventoryReport = useCallback(async () => {
-    setLoading(true);
+  const fetchInventoryReport = useCallback(async (options = {}) => {
+    const { showLoading = !hasLoadedRef.current } = options;
+    if (isFetchingRef.current) {
+      if (!pendingRefetchRef.current) {
+        pendingRefetchRef.current = { showLoading };
+      } else if (showLoading) {
+        pendingRefetchRef.current.showLoading = true;
+      }
+      return;
+    }
+
+    if (showLoading) {
+      setLoading(true);
+    }
     setError(null);
+    isFetchingRef.current = true;
 
     try {
       const response = await analyticsService.getInventoryReport();
@@ -72,16 +90,30 @@ export const useInventoryReport = () => {
             item.expiryDate ?? item.expiry_date ?? item.expiry ?? null,
         }));
         setInventoryData(normalized);
+        lastFetchCompletedRef.current = Date.now();
+        hasLoadedRef.current = true;
       } else {
         throw new Error('Failed to fetch inventory report');
       }
     } catch (error) {
-      setError(error.message);
-      toast.error('Error Loading Inventory Report', {
-        description: 'Failed to load inventory report. Please try again.',
-      });
+      if (showLoading || !hasLoadedRef.current) {
+        setError(error.message);
+        toast.error('Error Loading Inventory Report', {
+          description: 'Failed to load inventory report. Please try again.',
+        });
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
+      isFetchingRef.current = false;
+      if (pendingRefetchRef.current) {
+        const pending = pendingRefetchRef.current;
+        pendingRefetchRef.current = null;
+        setTimeout(() => {
+          fetchInventoryReport(pending);
+        }, 0);
+      }
     }
   }, []);
 
@@ -89,8 +121,25 @@ export const useInventoryReport = () => {
     fetchInventoryReport();
   }, [fetchInventoryReport]);
 
-  const refetch = () => {
-    fetchInventoryReport();
+  useEffect(() => {
+    const unsubscribe = subscribeInventoryMutations(
+      ({ pendingCount, lastMutationAt }) => {
+        if (pendingCount > 0) return;
+        if (lastMutationAt <= lastFetchCompletedRef.current) return;
+        if (isFetchingRef.current) {
+          if (!pendingRefetchRef.current) {
+            pendingRefetchRef.current = { showLoading: false };
+          }
+          return;
+        }
+        fetchInventoryReport({ showLoading: false });
+      }
+    );
+    return unsubscribe;
+  }, [fetchInventoryReport]);
+
+  const refetch = (options = {}) => {
+    fetchInventoryReport({ showLoading: true, ...options });
   };
 
   return {

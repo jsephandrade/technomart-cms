@@ -14,6 +14,7 @@ from django.utils import timezone as dj_tz
 from django.db.models import Sum, Count, Q
 
 from .views_common import _actor_from_request, _has_permission
+from .inventory_services import get_current_stock
 
 
 logger = logging.getLogger(__name__)
@@ -384,13 +385,15 @@ def reports_inventory(request):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
     try:
         from .models import InventoryItem
-        items = InventoryItem.objects.all().order_by("name")
+        items = list(InventoryItem.objects.all().order_by("name"))
+        ids = [str(i.id) for i in items]
+        stock_map = get_current_stock(ids, location_id=None, as_of=None)
         data = [
             {
                 "id": str(i.id),
                 "name": i.name,
                 "category": i.category,
-                "quantity": float(i.quantity or 0),
+                "quantity": float(stock_map.get(str(i.id), 0)),
                 "unit": i.unit,
                 "minStock": float(i.min_stock or 0),
                 "expiryDate": i.expiry_date.isoformat() if i.expiry_date else None,

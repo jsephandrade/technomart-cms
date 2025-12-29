@@ -104,10 +104,11 @@ const CateringMenuSelection = ({
           category.items
             .filter(
               (item) =>
-                item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.description
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase())
+                item?.available !== false &&
+                (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  item.description
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase()))
             )
             .forEach((item) => {
               allItems.push({ ...item, categoryName: category.name });
@@ -362,7 +363,7 @@ const CateringMenuSelection = ({
             </div>
             {categories.map((category) => {
               const categoryItems = Array.isArray(category.items)
-                ? category.items
+                ? category.items.filter((item) => item?.available !== false)
                 : [];
               const showBadge = category.id === 'all' || category.id === 'All';
               return (

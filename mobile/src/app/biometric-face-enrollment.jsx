@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,21 +13,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 export default function BiometricFaceEnrollmentScreen() {
   const router = useRouter();
   const { autoPrompt } = useLocalSearchParams();
+  const [checkingSupport, setCheckingSupport] = useState(true);
 
-  useEffect(() => {
-    if (autoPrompt === 'true') {
-      handleFaceScan();
-    }
-  }, []);
-
-  const handleFaceScan = async () => {
+  const handleFaceScan = useCallback(async () => {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       if (!compatible) {
-        Alert.alert(
-          'Error',
-          'Face or fingerprint scanner not available on this device.'
-        );
+        router.replace('/home-dashboard');
         return;
       }
 
@@ -54,7 +46,35 @@ export default function BiometricFaceEnrollmentScreen() {
     } catch (error) {
       Alert.alert('Error', error.message);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkSupport = async () => {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      if (!compatible) {
+        router.replace('/home-dashboard');
+        return;
+      }
+      if (autoPrompt === 'true') {
+        handleFaceScan();
+      }
+    };
+    checkSupport().finally(() => {
+      if (isMounted) setCheckingSupport(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [autoPrompt, handleFaceScan, router]);
+
+  if (checkingSupport) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#FF8C00" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

@@ -16,8 +16,14 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking'; // ✅ Added for Telegram link
 
-// ✅ Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+const isNewArchitectureEnabled = Boolean(globalThis?.nativeFabricUIManager);
+
+// Enable LayoutAnimation on Android for the old architecture only.
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental &&
+  !isNewArchitectureEnabled
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 

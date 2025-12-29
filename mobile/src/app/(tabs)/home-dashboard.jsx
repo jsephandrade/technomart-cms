@@ -39,6 +39,8 @@ import { fetchMenuItems, fetchNotifications } from '../../api/api';
 import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
+const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const router = useRouter();
@@ -123,13 +125,16 @@ export default function HomeDashboardScreen() {
 
   useEffect(() => {
     loadAllData();
-    const interval = setInterval(() => loadAllData({ silent: true }), 600000);
+    const interval = setInterval(
+      () => loadAllData({ silent: true }),
+      MENU_REFRESH_INTERVAL_MS
+    );
     return () => clearInterval(interval);
   }, []);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    loadAllData().finally(() => setRefreshing(false));
+    loadAllData({ silent: false }).finally(() => setRefreshing(false));
   }, []);
 
   const categoriesData = useMemo(() => {

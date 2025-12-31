@@ -18,6 +18,7 @@ import {
   Roboto_400Regular,
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
+import { LinearGradient } from 'expo-linear-gradient';
 import api, { getValidToken, createOrder } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
@@ -59,6 +60,14 @@ export default function CustomerCartScreen() {
   );
 
   const finalTotal = total;
+
+  const handleDecrease = (item) => {
+    if (Number(item.quantity || 0) <= 1) {
+      removeFromCart(item.id);
+      return;
+    }
+    decreaseQuantity(item.id);
+  };
 
   // ------------------------------ FETCH USER DATA
   useEffect(() => {
@@ -252,10 +261,14 @@ export default function CustomerCartScreen() {
         </View>
         <View style={styles.controls}>
           <TouchableOpacity
-            onPress={() => decreaseQuantity(item.id)}
+            onPress={() => handleDecrease(item)}
             style={styles.controlBtn}
           >
-            <Ionicons name="remove" size={18} color="#fff" />
+            {item.quantity <= 1 ? (
+              <Text style={styles.controlBtnText}>0</Text>
+            ) : (
+              <Ionicons name="remove" size={18} color="#fff" />
+            )}
           </TouchableOpacity>
           <Text style={styles.qty}>{item.quantity}</Text>
           <TouchableOpacity
@@ -266,12 +279,6 @@ export default function CustomerCartScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      <TouchableOpacity
-        onPress={() => removeFromCart(item.id)}
-        style={styles.trashBtn}
-      >
-        <Ionicons name="trash-outline" size={22} color="#f97316" />
-      </TouchableOpacity>
     </View>
   );
 
@@ -329,7 +336,12 @@ export default function CustomerCartScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient
+      colors={['#FFF4E6', '#FFDAB5', '#FFC48B']}
+      start={[0, 0]}
+      end={[1, 1]}
+      style={styles.container}
+    >
       <ImageBackground
         source={require('../../../assets/drop_1.png')}
         resizeMode="cover"
@@ -368,13 +380,13 @@ export default function CustomerCartScreen() {
           <Text style={styles.proceedText}>Proceed to Payment</Text>
         </TouchableOpacity>
       )}
-    </View>
+    </LinearGradient>
   );
 }
 
 // ------------------------------ STYLES
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fdfdfd' },
+  container: { flex: 1 },
   headerBackground: {
     width: '100%',
     borderBottomLeftRadius: 20,
@@ -431,7 +443,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 8,
   },
-  price: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#F97316' },
+  price: { fontSize: 25, fontFamily: 'Roboto_700Bold', color: '#F97316' },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -450,6 +462,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  controlBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'Roboto_700Bold',
+  },
   qty: {
     fontSize: 14,
     fontFamily: 'Roboto_700Bold',
@@ -457,13 +474,6 @@ const styles = StyleSheet.create({
     minWidth: 24,
     textAlign: 'center',
     marginHorizontal: 8,
-  },
-  trashBtn: {
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#FFF0E0',
-    borderWidth: 1,
-    borderColor: '#FFE0C2',
   },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyText: {

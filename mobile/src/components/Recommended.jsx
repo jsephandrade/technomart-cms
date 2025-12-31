@@ -110,6 +110,21 @@ export default function Recommended({ items = [] }) {
     []
   );
 
+  const handleAddToCart = useCallback(
+    (item) => {
+      if (!item) return;
+      const source = item.source || {};
+      addToCart({
+        ...source,
+        id: source.id ?? item.id,
+        name: source.name || item.title || 'Menu Item',
+        price: source.price ?? item.price ?? 0,
+        image: source.image || source.thumbnail || item.image || null,
+      });
+    },
+    [addToCart]
+  );
+
   if (!fontsLoaded || data.length === 0) {
     return null;
   }
@@ -141,21 +156,6 @@ export default function Recommended({ items = [] }) {
   const handleClosePopup = () => {
     setFocusedItem(null);
   };
-
-  const handleAddToCart = useCallback(
-    (item) => {
-      if (!item) return;
-      const source = item.source || {};
-      addToCart({
-        ...source,
-        id: source.id ?? item.id,
-        name: source.name || item.title || 'Menu Item',
-        price: source.price ?? item.price ?? 0,
-        image: source.image || source.thumbnail || item.image || null,
-      });
-    },
-    [addToCart]
-  );
 
   return (
     <View style={styles.section}>

@@ -484,11 +484,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
+    marginTop: 4,
   },
   categoryWrap: {
     width: '48%',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   menuSection: {
     paddingHorizontal: 16,

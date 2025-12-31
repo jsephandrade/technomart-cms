@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -34,8 +35,10 @@ import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import AuthLayout from '../../components/AuthLayout';
 import TermsNotice from '../../components/TermsNotice';
 
-export default function FaceScanScreen({ navigation, route }) {
-  const autoPrompt = route?.params?.autoPrompt ?? false;
+export default function FaceScanScreen() {
+  const { autoPrompt } = useLocalSearchParams();
+  const router = useRouter();
+  const shouldAutoPrompt = autoPrompt === 'true' || autoPrompt === true;
   const autoPromptedRef = useRef(false);
 
   const [isSupported, setIsSupported] = useState(null);
@@ -186,12 +189,12 @@ export default function FaceScanScreen({ navigation, route }) {
   }, []);
 
   useEffect(() => {
-    if (autoPrompt && canScan && !autoPromptedRef.current) {
+    if (shouldAutoPrompt && canScan && !autoPromptedRef.current) {
       autoPromptedRef.current = true;
       const id = setTimeout(() => handleBiometricAuth(), 300);
       return () => clearTimeout(id);
     }
-  }, [autoPrompt, canScan]);
+  }, [shouldAutoPrompt, canScan]);
 
   useFocusEffect(
     useCallback(() => {
@@ -216,7 +219,7 @@ export default function FaceScanScreen({ navigation, route }) {
         AccessibilityInfo.announceForAccessibility?.(
           'Authenticated successfully'
         );
-        navigation.replace('/');
+        router.replace('/(tabs)');
       } else if (result.error === 'lockout') {
         setErrorMessage('Too many attempts. Try your password instead.');
       } else if (
@@ -231,7 +234,7 @@ export default function FaceScanScreen({ navigation, route }) {
     } finally {
       setAuthLoading(false);
     }
-  }, [authLoading, supportedLabel, navigation]);
+  }, [authLoading, router, supportedLabel]);
 
   const openSettings = useCallback(() => Linking.openSettings?.(), []);
   const openCamera = useCallback(async () => {
@@ -262,8 +265,8 @@ export default function FaceScanScreen({ navigation, route }) {
   }, [cameraOpen, closeCamera]);
 
   const goPasswordLogin = useCallback(() => {
-    navigation.replace?.('Login') || navigation.navigate('Login');
-  }, [navigation]);
+    router.replace('/account-login');
+  }, [router]);
 
   return (
     <AuthLayout>

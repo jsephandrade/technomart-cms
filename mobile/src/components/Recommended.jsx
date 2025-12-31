@@ -6,6 +6,7 @@ import {
   Image,
   Modal,
   Pressable,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -16,8 +17,12 @@ import {
 } from '@expo-google-fonts/roboto';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../styles/cn';
+import { resolveImageSource } from '../utils/image';
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = Math.min(width * 0.78, 320);
+const CARD_HEIGHT = Math.round(CARD_WIDTH * 0.62);
+const CARD_SPACING = 16;
 
 const formatCurrency = (value) => {
   const numeric = Number(value);
@@ -25,16 +30,6 @@ const formatCurrency = (value) => {
     return 'PHP --';
   }
   return `PHP ${numeric.toFixed(2)}`;
-};
-
-const imageSource = (image) => {
-  if (!image) {
-    return require('../../assets/reco1.jpg');
-  }
-  if (typeof image === 'string') {
-    return { uri: image };
-  }
-  return image;
 };
 
 export default function Recommended({ items = [] }) {
@@ -139,11 +134,16 @@ export default function Recommended({ items = [] }) {
   };
 
   return (
-    <View className="mt-4 px-2">
-      <Text className="font-heading text-xl text-neutral-900">
-        Recommended For You
-      </Text>
-      <View className="mt-1 h-1 w-14 rounded-full bg-primary-500" />
+    <View style={styles.section}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.headerTitle}>Recommended For You</Text>
+          <Text style={styles.headerSubtitle}>Handpicked favorites today</Text>
+        </View>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>{data.length} items</Text>
+        </View>
+      </View>
       <FlatList
         ref={flatListRef}
         data={data}
@@ -151,50 +151,61 @@ export default function Recommended({ items = [] }) {
         showsHorizontalScrollIndicator={false}
         pagingEnabled
         snapToAlignment="start"
-        snapToInterval={width * 0.7 + 16}
+        snapToInterval={CARD_WIDTH + CARD_SPACING}
         decelerationRate="fast"
-        contentContainerClassName="px-2 mt-3"
+        contentContainerStyle={styles.listContent}
         onScroll={(e) => {
           const index = Math.round(
-            e.nativeEvent.contentOffset.x / (width * 0.7 + 16)
+            e.nativeEvent.contentOffset.x / (CARD_WIDTH + CARD_SPACING)
           );
           if (Number.isFinite(index)) {
             setActiveIndex(index);
           }
         }}
         renderItem={({ item }) => (
-          <Pressable onLongPress={() => handleLongPress(item)}>
-            <View
-              className="mx-2 overflow-hidden rounded-2xl shadow-lg"
-              style={{
-                width: width * 0.7,
-                height: width * 0.45,
-                elevation: 5,
-              }} // NativeWind: dynamic card sizing & Android elevation require inline style
-            >
+          <Pressable
+            onLongPress={() => handleLongPress(item)}
+            style={({ pressed }) => [
+              styles.cardWrap,
+              pressed && styles.cardPressed,
+            ]}
+          >
+            <View style={styles.card}>
               <Image
-                source={imageSource(item.image)}
-                className="h-full w-full"
+                source={resolveImageSource(item.image)}
+                style={styles.cardImage}
+                resizeMode="cover"
               />
               <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.6)']}
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  width: '100%',
-                  height: '40%',
-                }} // NativeWind: expo-linear-gradient requires style prop
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
+                style={styles.cardOverlay}
               />
-              <Text className="absolute bottom-3 left-3 font-heading text-lg text-white">
-                {item.title}
-              </Text>
+              <View style={styles.cardInfo}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <View style={styles.cardMetaRow}>
+                  <View style={styles.pricePill}>
+                    <Text style={styles.priceText}>
+                      {formatCurrency(item.price)}
+                    </Text>
+                  </View>
+                  {Number.isFinite(item.rating) ? (
+                    <View style={styles.ratingPill}>
+                      <Text style={styles.ratingText}>
+                        {item.rating.toFixed(1)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
             </View>
           </Pressable>
         )}
         keyExtractor={(item) => item.id}
       />
 
-      <View className="flex-row items-center justify-center">
+      <View style={styles.indicatorRow}>
         {Array.from({ length: data.length }).map((_, index) => (
           <View
             key={`indicator-${index}`}
@@ -226,9 +237,10 @@ export default function Recommended({ items = [] }) {
               ]}
             >
               <Image
-                source={imageSource(focusedItem.image)}
+                source={resolveImageSource(focusedItem.image)}
                 className="mb-4 w-full rounded-xl"
                 style={{ height: width * 0.5 }} // NativeWind: dynamic image height requires inline style
+                resizeMode="cover"
               />
               <View className="items-center">
                 <Text className="mb-1.5 font-heading text-xl text-neutral-900">
@@ -258,3 +270,114 @@ export default function Recommended({ items = [] }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  section: {
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  headerBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  headerBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  listContent: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  cardWrap: {
+    marginRight: CARD_SPACING,
+  },
+  cardPressed: {
+    transform: [{ scale: 0.98 }],
+  },
+  card: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F7EDE2',
+  },
+  cardOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+    height: '55%',
+  },
+  cardInfo: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 14,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#fff',
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  pricePill: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  priceText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  ratingPill: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(17,24,39,0.75)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  ratingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  indicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

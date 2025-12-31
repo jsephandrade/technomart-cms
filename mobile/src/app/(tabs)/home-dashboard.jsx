@@ -481,6 +481,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   scrollContent: {
+    paddingTop: 12,
     paddingBottom: 40,
   },
   heroCard: {

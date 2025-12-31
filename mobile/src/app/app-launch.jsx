@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Image,
@@ -11,12 +11,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+  USER_CACHE_KEY,
+} from '../api/api';
 
 export default function AppLaunchScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated, initializing } = useAuth();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Animations
   const opacity = useRef(new Animated.Value(0)).current;
@@ -38,6 +44,35 @@ export default function AppLaunchScreen() {
       router.replace(isAuthenticated ? '/(tabs)' : '/account-login');
     });
   }, [fadeOut, isAuthenticated, router]);
+
+  useEffect(() => {
+    let active = true;
+    const checkAuth = async () => {
+      try {
+        const keys = [
+          ACCESS_TOKEN_KEY,
+          REFRESH_TOKEN_KEY,
+          USER_CACHE_KEY,
+          'accessToken',
+          'refreshToken',
+          'user',
+        ];
+        const entries = await AsyncStorage.multiGet(keys);
+        const hasStoredAuth = entries.some(([, value]) => Boolean(value));
+        if (active) {
+          setIsAuthenticated(hasStoredAuth);
+        }
+      } finally {
+        if (active) {
+          setAuthChecked(true);
+        }
+      }
+    };
+    checkAuth();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     AccessibilityInfo.announceForAccessibility?.('Techno Mart is loading');
@@ -104,12 +139,12 @@ export default function AppLaunchScreen() {
   }, [logoY, opacity, scale, spin1, spin2, spin3]);
 
   useEffect(() => {
-    if (initializing) {
+    if (!authChecked) {
       return undefined;
     }
     const timeout = setTimeout(goNext, 2500);
     return () => clearTimeout(timeout);
-  }, [goNext, initializing]);
+  }, [authChecked, goNext]);
 
   // Spins
   const rotate1 = spin1.interpolate({
@@ -127,7 +162,11 @@ export default function AppLaunchScreen() {
 
   return (
     <TouchableWithoutFeedback
-      onPress={goNext}
+      onPress={() => {
+        if (authChecked) {
+          goNext();
+        }
+      }}
       accessibilityRole="button"
       accessibilityLabel="Skip intro and continue to login"
     >

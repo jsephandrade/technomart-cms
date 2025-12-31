@@ -31,17 +31,33 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-const CATEGORY_IMAGE_OVERRIDES = {
-  combomeals: require('../../../assets/choices/combo.png'),
-  meals: require('../../../assets/choices/meals.png'),
-  drinks: require('../../../assets/choices/drinks.png'),
-  snacks: require('../../../assets/choices/snacks.png'),
-};
+const CATEGORY_IMAGE_OVERRIDES = [
+  { key: 'combo', image: require('../../../assets/choices/combo.png') },
+  { key: 'meal', image: require('../../../assets/choices/meals.png') },
+  { key: 'drink', image: require('../../../assets/choices/drinks.png') },
+  { key: 'snack', image: require('../../../assets/choices/snacks.png') },
+];
 
 const normalizeCategoryKey = (value) =>
   String(value || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
+
+const resolveCategoryImage = (category, itemName) => {
+  const normalizedKey = normalizeCategoryKey(category);
+  const match = CATEGORY_IMAGE_OVERRIDES.find((entry) =>
+    normalizedKey.includes(entry.key)
+  );
+  if (match) {
+    return match.image;
+  }
+  const normalizedName = String(itemName || '').toLowerCase();
+  if (normalizedName.includes('pinaypay')) {
+    return CATEGORY_IMAGE_OVERRIDES.find((entry) => entry.key === 'snack')
+      ?.image;
+  }
+  return null;
+};
 
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
@@ -113,8 +129,7 @@ export default function HomeDashboardScreen() {
     const categoryMap = {};
     menuItems.forEach((item) => {
       const cat = item.category || 'Others';
-      const normalizedKey = normalizeCategoryKey(cat);
-      const overrideImage = CATEGORY_IMAGE_OVERRIDES[normalizedKey];
+      const overrideImage = resolveCategoryImage(cat, item.name);
       if (!categoryMap[cat]) {
         categoryMap[cat] = {
           key: cat,
@@ -122,6 +137,10 @@ export default function HomeDashboardScreen() {
           itemCount: 0,
           image: overrideImage || item.image,
         };
+      } else if (overrideImage && categoryMap[cat].image !== overrideImage) {
+        categoryMap[cat].image = overrideImage;
+      } else if (!categoryMap[cat].image && item.image) {
+        categoryMap[cat].image = item.image;
       }
       categoryMap[cat].itemCount += 1;
     });

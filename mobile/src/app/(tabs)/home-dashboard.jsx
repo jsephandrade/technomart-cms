@@ -188,7 +188,6 @@ export default function HomeDashboardScreen() {
   }, [menuItems, userRole]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleLogout = async () => {
     try {
@@ -271,11 +270,7 @@ export default function HomeDashboardScreen() {
         >
           <View style={styles.heroRow}>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>Fresh today</Text>
               <Text style={styles.heroTitle}>TechnoMart</Text>
-              <Text style={styles.heroSubtitle}>
-                Order ahead and pick up in minutes.
-              </Text>
             </View>
             <View style={styles.heroActions}>
               <TouchableOpacity
@@ -306,41 +301,6 @@ export default function HomeDashboardScreen() {
                 <Gear size={18} color="#1F2937" />
               </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.heroMetaRow}>
-            <View style={styles.metaPill}>
-              <Text style={styles.metaText}>Pickup 15-20 min</Text>
-            </View>
-            <View style={styles.metaPill}>
-              <Text style={styles.metaText}>{menuItems.length} items</Text>
-            </View>
-            <View style={styles.metaPill}>
-              <Text style={styles.metaText}>
-                {userRole === 'faculty' ? 'Faculty access' : 'Student menu'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.cartPill,
-                cartCount === 0 && styles.cartPillDisabled,
-              ]}
-              onPress={handleCheckout}
-              disabled={cartCount === 0}
-            >
-              <Ionicons
-                name="cart-outline"
-                size={16}
-                color={cartCount === 0 ? '#9CA3AF' : '#1F2937'}
-              />
-              <Text
-                style={[
-                  styles.cartPillText,
-                  cartCount === 0 && styles.cartPillTextDisabled,
-                ]}
-              >
-                Cart {cartCount}
-              </Text>
-            </TouchableOpacity>
           </View>
           <View style={styles.searchBar}>
             <Search size={18} color="#6B7280" />
@@ -643,23 +603,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
   },
-  heroEyebrow: {
-    fontSize: 12,
-    letterSpacing: 1.4,
-    color: '#7C2D12',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
   heroTitle: {
     fontSize: 28,
     color: '#1F2937',
     fontFamily: 'Roboto_700Bold',
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    color: '#4B5563',
-    marginTop: 6,
-    maxWidth: 220,
   },
   heroActions: {
     flexDirection: 'row',
@@ -688,45 +635,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#fff',
-  },
-  heroMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 12,
-  },
-  metaPill: {
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  metaText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#7C2D12',
-  },
-  cartPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginBottom: 8,
-  },
-  cartPillDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  cartPillText: {
-    marginLeft: 6,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  cartPillTextDisabled: {
-    color: '#9CA3AF',
   },
   searchBar: {
     marginTop: 4,

@@ -7,14 +7,14 @@ export default function NotFoundScreen() {
   const router = useRouter();
 
   const handleGoHome = useCallback(() => {
-    router.replace('/(tabs)');
+    router.replace('/home-dashboard');
   }, [router]);
 
   const handleGoBack = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/');
+      router.replace('/account-login');
     }
   }, [router]);
 

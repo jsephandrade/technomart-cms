@@ -219,7 +219,7 @@ export default function FaceScanScreen() {
         AccessibilityInfo.announceForAccessibility?.(
           'Authenticated successfully'
         );
-        router.replace('/(tabs)');
+        router.replace('/home-dashboard');
       } else if (result.error === 'lockout') {
         setErrorMessage('Too many attempts. Try your password instead.');
       } else if (

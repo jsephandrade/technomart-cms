@@ -87,7 +87,7 @@ export default function CategoryScreen() {
           You are not allowed to view Catering items.
         </Text>
         <TouchableOpacity
-          onPress={() => router.push('/(tabs)/home-dashboard')}
+          onPress={() => router.push('/home-dashboard')}
           style={{
             marginTop: 24,
             backgroundColor: '#f97316',
@@ -111,7 +111,7 @@ export default function CategoryScreen() {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const handleCheckout = () => router.push('/customer-cart');
-  const handleAddMoreItems = () => router.push('/(tabs)/home-dashboard');
+  const handleAddMoreItems = () => router.push('/home-dashboard');
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff7ed' }}>

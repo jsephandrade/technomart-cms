@@ -108,7 +108,7 @@ export default function ComboMeals() {
   };
 
   const handleAddMoreItems = () => {
-    router.push('/(tabs)');
+    router.push('/home-dashboard');
   };
 
   return (

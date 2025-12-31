@@ -206,7 +206,7 @@ export default function HomeDashboardScreen() {
   };
 
   const handleCheckout = () => router.push('/customer-cart');
-  const handleAddMoreItems = () => router.push('/(tabs)');
+  const handleAddMoreItems = () => router.push('/home-dashboard');
   const handleOpenSearch = useCallback(() => {
     router.push('/search');
   }, [router]);
@@ -523,7 +523,7 @@ export default function HomeDashboardScreen() {
               <DropdownItem
                 icon={<User size={16} color="#374151" />}
                 label="Profile"
-                onPress={() => router.push('/(tabs)/account-profile')}
+                onPress={() => router.push('/account-profile')}
               />
               <DropdownItem
                 icon={<Gear size={16} color="#374151" />}

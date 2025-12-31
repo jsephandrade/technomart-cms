@@ -41,7 +41,7 @@ export default function AppLaunchScreen() {
       duration: 500,
       useNativeDriver: true,
     }).start(() => {
-      router.replace(isAuthenticated ? '/(tabs)' : '/account-login');
+      router.replace(isAuthenticated ? '/home-dashboard' : '/account-login');
     });
   }, [fadeOut, isAuthenticated, router]);
 

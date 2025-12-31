@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   menuPrice: {
-    fontSize: 18,
+    fontSize: 30,
     fontWeight: '700',
     color: '#FF7A18',
   },

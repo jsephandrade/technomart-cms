@@ -247,7 +247,7 @@ export default function CustomerCartScreen() {
 
   const renderItem = ({ item }) => (
     <LinearGradient
-      colors={['#FFFFFF', '#FFEAD1', '#FFD3A8']}
+      colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
       start={[0, 0]}
       end={[1, 1]}
       style={styles.card}
@@ -290,7 +290,7 @@ export default function CustomerCartScreen() {
   const renderFooter = () => (
     <View>
       <LinearGradient
-        colors={['#FFFFFF', '#FFEAD1', '#FFD3A8']}
+        colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
         start={[0, 0]}
         end={[1, 1]}
         style={styles.summaryCard}
@@ -300,7 +300,7 @@ export default function CustomerCartScreen() {
       </LinearGradient>
 
       <LinearGradient
-        colors={['#FFFFFF', '#FFEAD1', '#FFD3A8']}
+        colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
         start={[0, 0]}
         end={[1, 1]}
         style={styles.pickupContainer}

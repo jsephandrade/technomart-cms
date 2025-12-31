@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Dimensions,
@@ -18,6 +24,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../styles/cn';
 import { resolveImageSource } from '../utils/image';
+import { useCart } from '../context/CartContext';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(width * 0.78, 320);
@@ -35,6 +42,7 @@ const formatCurrency = (value) => {
 export default function Recommended({ items = [] }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [focusedItem, setFocusedItem] = useState(null);
+  const { addToCart } = useCart();
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -65,6 +73,7 @@ export default function Recommended({ items = [] }) {
           rating: ratingValue,
           reviews: reviewsValue,
           description: item.description || '',
+          source: item,
         };
       });
   }, [items]);
@@ -133,6 +142,21 @@ export default function Recommended({ items = [] }) {
     setFocusedItem(null);
   };
 
+  const handleAddToCart = useCallback(
+    (item) => {
+      if (!item) return;
+      const source = item.source || {};
+      addToCart({
+        ...source,
+        id: source.id ?? item.id,
+        name: source.name || item.title || 'Menu Item',
+        price: source.price ?? item.price ?? 0,
+        image: source.image || source.thumbnail || item.image || null,
+      });
+    },
+    [addToCart]
+  );
+
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
@@ -164,6 +188,7 @@ export default function Recommended({ items = [] }) {
         }}
         renderItem={({ item }) => (
           <Pressable
+            onPress={() => handleAddToCart(item)}
             onLongPress={() => handleLongPress(item)}
             style={({ pressed }) => [
               styles.cardWrap,

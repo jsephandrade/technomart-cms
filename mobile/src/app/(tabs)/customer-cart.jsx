@@ -246,7 +246,12 @@ export default function CustomerCartScreen() {
   };
 
   const renderItem = ({ item }) => (
-    <View style={styles.card}>
+    <LinearGradient
+      colors={['#FFFFFF', '#FFEAD1', '#FFD3A8']}
+      start={[0, 0]}
+      end={[1, 1]}
+      style={styles.card}
+    >
       <Image
         source={resolveImageSource(item.image)}
         style={styles.image}
@@ -279,17 +284,27 @@ export default function CustomerCartScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 
   const renderFooter = () => (
     <View>
-      <View style={styles.summaryCard}>
+      <LinearGradient
+        colors={['#FFFFFF', '#FFEAD1', '#FFD3A8']}
+        start={[0, 0]}
+        end={[1, 1]}
+        style={styles.summaryCard}
+      >
         <Text style={styles.summaryLabel}>Final Total</Text>
         <Text style={styles.finalTotal}>₱{finalTotal}</Text>
-      </View>
+      </LinearGradient>
 
-      <View style={styles.pickupContainer}>
+      <LinearGradient
+        colors={['#FFFFFF', '#FFEAD1', '#FFD3A8']}
+        start={[0, 0]}
+        end={[1, 1]}
+        style={styles.pickupContainer}
+      >
         <Text style={styles.pickupLabel}>Select Pickup Time:</Text>
         <View style={styles.pickupGrid}>
           {pickupTimes.map((time) => {
@@ -321,7 +336,7 @@ export default function CustomerCartScreen() {
             );
           })}
         </View>
-      </View>
+      </LinearGradient>
 
       {renderStatusTracker()}
     </View>
@@ -336,12 +351,7 @@ export default function CustomerCartScreen() {
   }
 
   return (
-    <LinearGradient
-      colors={['#FFF4E6', '#FFDAB5', '#FFC48B']}
-      start={[0, 0]}
-      end={[1, 1]}
-      style={styles.container}
-    >
+    <View style={styles.container}>
       <ImageBackground
         source={require('../../../assets/drop_1.png')}
         resizeMode="cover"
@@ -380,13 +390,13 @@ export default function CustomerCartScreen() {
           <Text style={styles.proceedText}>Proceed to Payment</Text>
         </TouchableOpacity>
       )}
-    </LinearGradient>
+    </View>
   );
 }
 
 // ------------------------------ STYLES
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#FFF7EE' },
   headerBackground: {
     width: '100%',
     borderBottomLeftRadius: 20,
@@ -407,7 +417,6 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 30, fontFamily: 'Roboto_700Bold', color: 'black' },
   card: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
     borderRadius: 18,
     padding: 14,
     marginVertical: 8,
@@ -483,7 +492,6 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   summaryCard: {
-    backgroundColor: '#fff',
     marginHorizontal: 12,
     marginTop: 14,
     borderRadius: 18,
@@ -504,7 +512,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   pickupContainer: {
-    backgroundColor: '#fff',
     marginHorizontal: 12,
     marginTop: 12,
     padding: 14,

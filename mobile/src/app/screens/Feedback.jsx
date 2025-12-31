@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { sendFeedback } from '../../api/api';
@@ -39,7 +38,6 @@ const Chip = ({ label, active, onPress }) => (
 );
 
 export default function ShareFeedbackScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [text, setText] = useState('');
@@ -69,7 +67,7 @@ export default function ShareFeedbackScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8fafc', paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       {/* Header */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>
@@ -83,12 +81,16 @@ export default function ShareFeedbackScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={{ padding: 10, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={{ padding: 10, paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Intro Card */}
           <View style={[styles.card, styles.visibleCard]}>
             <Text style={styles.cardTitle}>We value your feedback</Text>
             <Text style={styles.grayText}>
-              Tell us what’s working well or what we can improve. Every message is read carefully.
+              Tell us what’s working well or what we can improve. Every message
+              is read carefully.
             </Text>
           </View>
 
@@ -105,7 +107,12 @@ export default function ShareFeedbackScreen() {
                 'Payment / Checkout',
                 'Other',
               ].map((c) => (
-                <Chip key={c} label={c} active={category === c} onPress={() => setCategory(c)} />
+                <Chip
+                  key={c}
+                  label={c}
+                  active={category === c}
+                  onPress={() => setCategory(c)}
+                />
               ))}
             </View>
           </View>
@@ -124,19 +131,35 @@ export default function ShareFeedbackScreen() {
               style={styles.textInput}
               editable={!loading}
             />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              <Text style={{ fontSize: 12, color: text.trim().length < MIN ? '#EF4444' : '#6B7280' }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                marginTop: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: text.trim().length < MIN ? '#EF4444' : '#6B7280',
+                }}
+              >
                 {text.trim().length < MIN
                   ? `At least ${MIN} characters (${MIN - text.trim().length} more)`
                   : 'Looks good'}
               </Text>
-              <Text style={{ fontSize: 12, color: '#6B7280' }}>{remaining}</Text>
+              <Text style={{ fontSize: 12, color: '#6B7280' }}>
+                {remaining}
+              </Text>
             </View>
           </View>
 
           {/* Send Button */}
           <TouchableOpacity
-            style={[styles.btnOrange, { opacity: isValid && !loading ? 1 : 0.6 }]}
+            style={[
+              styles.btnOrange,
+              { opacity: isValid && !loading ? 1 : 0.6 },
+            ]}
             onPress={onSend}
             disabled={!isValid || loading}
           >
@@ -147,8 +170,16 @@ export default function ShareFeedbackScreen() {
             )}
           </TouchableOpacity>
 
-          <Text style={{ marginTop: 12, fontSize: 12, color: '#6B7280', textAlign: 'center' }}>
-            By sending, you agree that your feedback may be used to improve the app experience.
+          <Text
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              color: '#6B7280',
+              textAlign: 'center',
+            }}
+          >
+            By sending, you agree that your feedback may be used to improve the
+            app experience.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -182,7 +213,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: '#0f172a', marginBottom: 8 },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
   grayText: { color: '#6b7280', fontSize: 14 },
   chip: {
     paddingHorizontal: 12,

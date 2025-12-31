@@ -12,7 +12,6 @@ import {
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchMenuItems, USER_CACHE_KEY } from '../api/api';
 import { useCart } from '../context/CartContext';
 import { resolveImageSource } from '../utils/image';
@@ -21,7 +20,6 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 export default function SearchScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { cart, addToCart, decreaseQuantity } = useCart();
 
   const [query, setQuery] = useState('');
@@ -172,7 +170,7 @@ export default function SearchScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: 12 }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
           <Ionicons name="chevron-back" size={22} color="#111827" />
         </Pressable>

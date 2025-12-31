@@ -8,7 +8,6 @@ import {
   TextInput,
   StyleSheet,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useDietary } from '../../context/DietaryContext';
@@ -28,7 +27,6 @@ const Section = ({ title, children }) => (
 );
 
 export default function DietaryPreferencesScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { preferences, setPreferences } = useDietary(); // ✅ get context
 
@@ -99,7 +97,7 @@ export default function DietaryPreferencesScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>

@@ -8,7 +8,6 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNotifications } from '../../context/NotificationContext';
 
 const typeStyles = {
@@ -27,7 +26,6 @@ const formatTime = (value) => {
 };
 
 export default function NotificationsScreen() {
-  const insets = useSafeAreaInsets();
   const { notifications, loading, refresh } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -77,7 +75,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: 16 }]}>
         <Text style={styles.headerTitle}>Notifications</Text>
         <Text style={styles.headerSubtitle}>
           {sortedNotifications.length} updates

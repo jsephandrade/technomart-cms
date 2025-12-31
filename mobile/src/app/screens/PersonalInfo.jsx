@@ -15,10 +15,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
 
 import { useAuth } from '../../context/AuthContext';
 import { useUpdateProfile, useUploadAvatar } from '../../api/hooks';
@@ -125,7 +121,6 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function PersonalInfoScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { user, refreshProfile, setUser } = useAuth();
   const { mutateAsync: submitProfile, isPending: isSaving } =
     useUpdateProfile();
@@ -430,7 +425,7 @@ export default function PersonalInfoScreen() {
   const heroSubtitle = user?.email?.trim() || '';
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="chevron-left" size={28} color="#F07F13" />
@@ -625,7 +620,7 @@ export default function PersonalInfoScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

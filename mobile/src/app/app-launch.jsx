@@ -8,7 +8,6 @@ import {
   Easing,
   AccessibilityInfo,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,7 +18,6 @@ import {
 } from '../api/api';
 
 export default function AppLaunchScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
@@ -174,8 +172,8 @@ export default function AppLaunchScreen() {
         style={{
           flex: 1,
           backgroundColor: 'white',
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
+          paddingTop: 0,
+          paddingBottom: 0,
           alignItems: 'center',
           justifyContent: 'center',
           opacity: fadeOut, // fade-out applied here

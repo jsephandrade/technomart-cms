@@ -11,7 +11,6 @@ import {
   Modal,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 const PaymentRow = ({ type, last4, onPress }) => (
@@ -36,7 +35,6 @@ const PaymentRow = ({ type, last4, onPress }) => (
 );
 
 export default function PaymentMethodsScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [cards, setCards] = useState([
@@ -87,7 +85,7 @@ export default function PaymentMethodsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>

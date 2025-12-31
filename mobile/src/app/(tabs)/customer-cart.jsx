@@ -22,6 +22,61 @@ import { LinearGradient } from 'expo-linear-gradient';
 import api, { getValidToken, createOrder } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
+const PICKUP_RANGE_MINUTES = 30;
+const PICKUP_START_HOUR = 8;
+const PICKUP_END_HOUR = 16;
+
+const formatPickupTime = (date) => {
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const period = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return { time: `${hours}:${minutes}`, period };
+};
+
+const formatPickupRange = (start, end) => {
+  const startInfo = formatPickupTime(start);
+  const endInfo = formatPickupTime(end);
+  const startLabel =
+    startInfo.period === endInfo.period
+      ? startInfo.time
+      : `${startInfo.time} ${startInfo.period}`;
+  return `${startLabel} - ${endInfo.time} ${endInfo.period}`;
+};
+
+const buildPickupRanges = () => {
+  const ranges = [];
+  const start = new Date(2000, 0, 1, PICKUP_START_HOUR, 0);
+  const end = new Date(2000, 0, 1, PICKUP_END_HOUR, 0);
+  let current = new Date(start);
+  while (current < end) {
+    const next = new Date(current);
+    next.setMinutes(current.getMinutes() + PICKUP_RANGE_MINUTES);
+    ranges.push(formatPickupRange(current, next));
+    current = next;
+  }
+  return ranges;
+};
+
+const PICKUP_RANGES = buildPickupRanges();
+
+const parseRangeStart = (label) => {
+  const parts = label.split(' - ');
+  if (parts.length !== 2) return null;
+  const [startPart, endPart] = parts;
+  const endMatch = endPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!endMatch) return null;
+  const endPeriod = endMatch[3].toUpperCase();
+  const startMatch = startPart.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!startMatch) return null;
+  const period = (startMatch[3] || endPeriod).toUpperCase();
+  return {
+    hour: parseInt(startMatch[1], 10),
+    minute: parseInt(startMatch[2], 10),
+    period,
+  };
+};
+
 export default function CustomerCartScreen() {
   const router = useRouter();
   const {
@@ -37,20 +92,7 @@ export default function CustomerCartScreen() {
   const [customerName, setCustomerName] = useState('');
   const [orderStatus, setOrderStatus] = useState(null);
 
-  const pickupTimes = [
-    '10:00 AM',
-    '11:00 AM',
-    '12:00 PM',
-    '1:00 PM',
-    '2:00 PM',
-    '3:00 PM',
-    '4:00 PM',
-    '5:00 PM',
-    '6:00 PM',
-    '7:00 PM',
-    '8:00 PM',
-    '9:00 PM',
-  ];
+  const pickupTimes = PICKUP_RANGES;
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
 
@@ -93,15 +135,14 @@ export default function CustomerCartScreen() {
 
   // ------------------------------ DISABLE TIME FUNCTION
   const isTimeDisabled = (time) => {
-    const [hour, minutePart] = time.split(':');
-    let [minute, ampm] = minutePart.split(' ');
-    let hour24 = parseInt(hour, 10);
-    if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-    if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+    const parsed = parseRangeStart(time);
+    if (!parsed) return false;
+    let hour24 = parsed.hour % 12;
+    if (parsed.period === 'PM') hour24 += 12;
 
     const now = new Date();
     const slotTime = new Date(now);
-    slotTime.setHours(hour24, parseInt(minute), 0, 0);
+    slotTime.setHours(hour24, parsed.minute, 0, 0);
 
     if (hour24 >= 21 || hour24 < 4) return true; // Rule: disable 9 PM to 4 AM
     return slotTime <= now; // Disable past times
@@ -133,11 +174,12 @@ export default function CustomerCartScreen() {
       const token = await getValidToken();
       if (!token) throw new Error('No valid token found.');
 
-      const [hour, minutePart] = selectedTime.split(':');
-      let [minute, ampm] = minutePart.split(' ');
-      let hour24 = parseInt(hour, 10);
-      if (ampm === 'PM' && hour24 !== 12) hour24 += 12;
-      if (ampm === 'AM' && hour24 === 12) hour24 = 0;
+      const parsedTime = parseRangeStart(selectedTime);
+      if (!parsedTime) {
+        throw new Error('Invalid pickup time selected.');
+      }
+      let hour24 = parsedTime.hour % 12;
+      if (parsedTime.period === 'PM') hour24 += 12;
 
       const now = new Date();
       const pickupDate = new Date(
@@ -145,7 +187,7 @@ export default function CustomerCartScreen() {
         now.getMonth(),
         now.getDate(),
         hour24,
-        parseInt(minute),
+        parsedTime.minute,
         0
       );
 
@@ -262,26 +304,28 @@ export default function CustomerCartScreen() {
           <Text style={styles.name} numberOfLines={1}>
             {item.name}
           </Text>
-          <Text style={styles.price}>₱{item.price}</Text>
-        </View>
-        <View style={styles.controls}>
-          <TouchableOpacity
-            onPress={() => handleDecrease(item)}
-            style={styles.controlBtn}
-          >
-            {item.quantity <= 1 ? (
-              <Text style={styles.controlBtnText}>0</Text>
-            ) : (
-              <Ionicons name="remove" size={18} color="#fff" />
-            )}
-          </TouchableOpacity>
-          <Text style={styles.qty}>{item.quantity}</Text>
-          <TouchableOpacity
-            onPress={() => increaseQuantity(item.id)}
-            style={styles.controlBtn}
-          >
-            <Ionicons name="add" size={18} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.priceStack}>
+            <Text style={styles.price}>₱{item.price}</Text>
+            <View style={styles.controls}>
+              <TouchableOpacity
+                onPress={() => handleDecrease(item)}
+                style={styles.controlBtn}
+              >
+                {item.quantity <= 1 ? (
+                  <Text style={styles.controlBtnText}>0</Text>
+                ) : (
+                  <Ionicons name="remove" size={18} color="#fff" />
+                )}
+              </TouchableOpacity>
+              <Text style={styles.qty}>{item.quantity}</Text>
+              <TouchableOpacity
+                onPress={() => increaseQuantity(item.id)}
+                style={styles.controlBtn}
+              >
+                <Ionicons name="add" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </View>
     </LinearGradient>
@@ -442,8 +486,11 @@ const styles = StyleSheet.create({
   details: { flex: 1 },
   itemHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+  },
+  priceStack: {
+    alignItems: 'flex-end',
   },
   name: {
     fontSize: 16,
@@ -452,16 +499,22 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 8,
   },
-  price: { fontSize: 25, fontFamily: 'Roboto_700Bold', color: '#F97316' },
+  price: {
+    fontSize: 25,
+    fontFamily: 'Roboto_700Bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
     backgroundColor: '#FFF3E4',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    alignSelf: 'flex-start',
   },
   controlBtn: {
     width: 28,
@@ -536,7 +589,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   pickupTimeBtn: {
-    width: '30%',
+    width: '48%',
     borderWidth: 1,
     borderColor: '#F3D6B7',
     borderRadius: 12,
@@ -550,6 +603,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Roboto_400Regular',
     color: '#6B7280',
+    textAlign: 'center',
   },
   proceedBtn: {
     position: 'absolute',

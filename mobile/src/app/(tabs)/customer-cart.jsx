@@ -287,47 +287,54 @@ export default function CustomerCartScreen() {
     );
   };
 
-  const renderItem = ({ item }) => (
-    <LinearGradient
-      colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
-      start={[0, 0]}
-      end={[1, 1]}
-      style={styles.card}
+  const renderCartItemRow = (item, index) => (
+    <View
+      key={`${item.id ?? item.name}-${index}`}
+      style={[styles.itemRow, index < cart.length - 1 && styles.itemRowDivider]}
     >
       <Image
         source={resolveImageSource(item.image)}
         style={styles.image}
         resizeMode="cover"
       />
-      <View style={styles.details}>
-        <View style={styles.itemHeader}>
-          <Text style={styles.name} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <View style={styles.priceStack}>
-            <Text style={styles.price}>₱{item.price}</Text>
-            <View style={styles.controls}>
-              <TouchableOpacity
-                onPress={() => handleDecrease(item)}
-                style={styles.controlBtn}
-              >
-                {item.quantity <= 1 ? (
-                  <Text style={styles.controlBtnText}>0</Text>
-                ) : (
-                  <Ionicons name="remove" size={18} color="#fff" />
-                )}
-              </TouchableOpacity>
-              <Text style={styles.qty}>{item.quantity}</Text>
-              <TouchableOpacity
-                onPress={() => increaseQuantity(item.id)}
-                style={styles.controlBtn}
-              >
-                <Ionicons name="add" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
+      <View style={styles.itemDetails}>
+        <Text style={styles.name} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <View style={styles.itemMetaRow}>
+          <Text style={styles.price}>₱{item.price}</Text>
+          <View style={styles.controls}>
+            <TouchableOpacity
+              onPress={() => handleDecrease(item)}
+              style={styles.controlBtn}
+            >
+              {item.quantity <= 1 ? (
+                <Text style={styles.controlBtnText}>0</Text>
+              ) : (
+                <Ionicons name="remove" size={18} color="#fff" />
+              )}
+            </TouchableOpacity>
+            <Text style={styles.qty}>{item.quantity}</Text>
+            <TouchableOpacity
+              onPress={() => increaseQuantity(item.id)}
+              style={styles.controlBtn}
+            >
+              <Ionicons name="add" size={18} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
+    </View>
+  );
+
+  const renderCartItemsCard = () => (
+    <LinearGradient
+      colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
+      start={[0, 0]}
+      end={[1, 1]}
+      style={styles.cartItemsCard}
+    >
+      {cart.map(renderCartItemRow)}
     </LinearGradient>
   );
 
@@ -420,11 +427,11 @@ export default function CustomerCartScreen() {
         </View>
       ) : (
         <FlatList
-          data={cart}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderItem}
+          data={[{ key: 'cart-items' }]}
+          extraData={cart}
+          keyExtractor={(item) => item.key}
+          renderItem={renderCartItemsCard}
           contentContainerStyle={{ padding: 12, paddingBottom: 150 }}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListFooterComponent={renderFooter}
         />
       )}
@@ -459,13 +466,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerTitle: { fontSize: 30, fontFamily: 'Roboto_700Bold', color: 'black' },
-  card: {
-    flexDirection: 'row',
+  cartItemsCard: {
     borderRadius: 18,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     marginVertical: 8,
     marginHorizontal: 8,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -473,6 +479,15 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: '#FFE0C2',
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  itemRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.45)',
   },
   image: {
     width: 72,
@@ -483,21 +498,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFE0C2',
   },
-  details: { flex: 1 },
-  itemHeader: {
+  itemDetails: { flex: 1 },
+  itemMetaRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  priceStack: {
-    alignItems: 'flex-end',
+    marginTop: 6,
   },
   name: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Roboto_700Bold',
     color: '#111827',
-    flex: 1,
-    paddingRight: 8,
   },
   price: {
     fontSize: 25,
@@ -510,7 +521,6 @@ const styles = StyleSheet.create({
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
     backgroundColor: '#FFF3E4',
     borderRadius: 999,
     paddingHorizontal: 8,

@@ -16,7 +16,7 @@ if load_dotenv:
         pass
 
 # Core settings
-DEBUG = os.getenv("DJANGO_DEBUG", "1") in {"1", "true", "True"}
+DEBUG = os.getenv("DJANGO_DEBUG", "0") in {"1", "true", "True"}
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-secret-key")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 

@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
   Image,
+  ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -170,12 +171,22 @@ export default function SearchScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: 12 }]}>
-        <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={22} color="#111827" />
-        </Pressable>
-        <Text style={styles.headerTitle}>Search</Text>
-      </View>
+      <ImageBackground
+        source={require('../../assets/drop_1.png')}
+        resizeMode="cover"
+        style={styles.headerBackground}
+      >
+        <View style={styles.overlay} />
+        <View style={styles.headerContainer}>
+          <View style={styles.headerTopRow}>
+            <Pressable onPress={handleBack}>
+              <Ionicons name="arrow-back" size={26} color="black" />
+            </Pressable>
+            <Text style={styles.headerTitle}>Search</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+        </View>
+      </ImageBackground>
 
       <View style={styles.searchBar}>
         <Ionicons name="search-outline" size={18} color="#6B7280" />
@@ -234,25 +245,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFF7EE',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
+  headerBackground: {
+    width: '100%',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
     paddingBottom: 8,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff',
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(254,192,117,0.5)',
+  },
+  headerContainer: {
+    paddingTop: 50,
+    paddingBottom: 14,
+    paddingHorizontal: 14,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
+    justifyContent: 'space-between',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 30,
+    fontFamily: 'Roboto_700Bold',
+    color: 'black',
+  },
+  headerSpacer: {
+    width: 26,
   },
   searchBar: {
     marginHorizontal: 16,

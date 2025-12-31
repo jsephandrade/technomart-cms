@@ -220,7 +220,6 @@ export default function HomeDashboardScreen() {
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const handleCheckout = () => router.push('/customer-cart');
-  const handleAddMoreItems = () => router.push('/home-dashboard');
   const handleOpenSearch = useCallback(() => {
     router.push('/search');
   }, [router]);
@@ -429,27 +428,34 @@ export default function HomeDashboardScreen() {
       </ScrollView>
 
       {total > 0 && (
-        <View style={styles.checkoutBar}>
+        <LinearGradient
+          colors={['#FFFFFF', '#FFF3E4']}
+          start={[0, 0]}
+          end={[1, 1]}
+          style={styles.checkoutBar}
+        >
           <View style={styles.checkoutRow}>
-            <View>
-              <Text style={styles.checkoutLabel}>Your cart</Text>
+            <View style={styles.checkoutInfo}>
+              <View style={styles.checkoutBadge}>
+                <Ionicons name="cart-outline" size={14} color="#F97316" />
+                <Text style={styles.checkoutLabel}>Your cart</Text>
+              </View>
               <Text style={styles.checkoutValue}>₱{total}</Text>
             </View>
             <TouchableOpacity
               style={styles.checkoutButton}
               onPress={handleCheckout}
             >
-              <Ionicons name="cart-outline" size={18} color="#fff" />
               <Text style={styles.checkoutButtonText}>View Cart</Text>
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color="#fff"
+                style={styles.checkoutButtonIcon}
+              />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.checkoutSecondary}
-            onPress={handleAddMoreItems}
-          >
-            <Text style={styles.checkoutSecondaryText}>Continue browsing</Text>
-          </TouchableOpacity>
-        </View>
+        </LinearGradient>
       )}
     </View>
   );
@@ -697,57 +703,67 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     bottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   checkoutRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  checkoutInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  checkoutBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFF0E0',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   checkoutLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    fontWeight: '700',
+    color: '#9A3412',
+    marginLeft: 6,
   },
   checkoutValue: {
-    fontSize: 18,
+    fontSize: 26,
     fontFamily: 'Roboto_700Bold',
     color: '#111827',
-    marginTop: 2,
+    marginTop: 6,
   },
   checkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF7A18',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    justifyContent: 'center',
+    backgroundColor: '#F97316',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    shadowColor: '#F97316',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
   },
   checkoutButtonText: {
     color: '#fff',
     fontWeight: '700',
     fontSize: 14,
-    marginLeft: 6,
   },
-  checkoutSecondary: {
-    marginTop: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F3D6B7',
-    backgroundColor: '#FFF7EE',
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  checkoutSecondaryText: {
-    color: '#9A3412',
-    fontWeight: '700',
-    fontSize: 13,
+  checkoutButtonIcon: {
+    marginLeft: 8,
   },
   loadingContainer: {
     flex: 1,

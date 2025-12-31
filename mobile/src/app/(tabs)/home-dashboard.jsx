@@ -394,7 +394,7 @@ export default function HomeDashboardScreen() {
                       {item.description || 'No description available.'}
                     </Text>
                     <View style={styles.menuFooter}>
-                      <Text style={styles.menuPrice}>�,�{item.price}</Text>
+                      <Text style={styles.menuPrice}>₱{item.price}</Text>
                       {isAvailable ? (
                         <View style={styles.qtyControls}>
                           <TouchableOpacity
@@ -433,7 +433,7 @@ export default function HomeDashboardScreen() {
           <View style={styles.checkoutRow}>
             <View>
               <Text style={styles.checkoutLabel}>Your cart</Text>
-              <Text style={styles.checkoutValue}>�,�{total}</Text>
+              <Text style={styles.checkoutValue}>₱{total}</Text>
             </View>
             <TouchableOpacity
               style={styles.checkoutButton}
@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   menuPrice: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FF7A18',
   },

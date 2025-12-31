@@ -84,7 +84,7 @@ const resolveCategoryImage = (category, itemName) => {
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
+  const { cart, addToCart } = useCart();
 
   const [menuItems, setMenuItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -396,12 +396,6 @@ export default function HomeDashboardScreen() {
                       <Text style={styles.menuPrice}>₱{item.price}</Text>
                       {isAvailable ? (
                         <View style={styles.qtyControls}>
-                          <TouchableOpacity
-                            onPress={() => decreaseQuantity(item.id)}
-                            style={styles.qtyButton}
-                          >
-                            <Text style={styles.qtyButtonText}>-</Text>
-                          </TouchableOpacity>
                           <Text style={styles.qtyText}>{qty}</Text>
                           <TouchableOpacity
                             onPress={() => addToCart(item)}

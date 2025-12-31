@@ -16,7 +16,7 @@ if load_dotenv:
         pass
 
 # Core settings
-DEBUG = os.getenv("DJANGO_DEBUG", "1") in {"1", "true", "True"}
+DEBUG = os.getenv("DJANGO_DEBUG", "0") in {"1", "true", "True"}
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-secret-key")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
@@ -67,9 +67,11 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "api.middleware.CookieAuthMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "api.middleware.RequestIdMiddleware",
     # Gate API routes for pending/unauthorized users (JWT-aware)

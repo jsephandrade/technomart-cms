@@ -117,7 +117,6 @@ export const NotificationProvider = ({ children }) => {
   useEffect(() => {
     loadNotifications({ silent: false });
 
-    // Optional: refresh notifications every 30 seconds
     const interval = setInterval(
       () => loadNotifications({ silent: true }),
       NOTIFICATION_REFRESH_INTERVAL_MS

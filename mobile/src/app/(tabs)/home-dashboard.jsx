@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   RefreshControl,
@@ -40,7 +39,6 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-const SEARCH_DEBOUNCE_MS = 150;
 
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
@@ -51,8 +49,6 @@ export default function HomeDashboardScreen() {
   const [menuNotifications, setMenuNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const hasLoadedMenuRef = useRef(false);
@@ -74,18 +70,6 @@ export default function HomeDashboardScreen() {
     };
     getUserRole();
   }, []);
-
-  useEffect(() => {
-    const normalized = searchQuery.trim().toLowerCase();
-    if (!normalized) {
-      setSearchTerm('');
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      setSearchTerm(normalized);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
 
   const loadMenuItems = async ({ silent = false } = {}) => {
     const shouldUpdateLoading = !hasLoadedMenuRef.current && !silent;
@@ -182,22 +166,16 @@ export default function HomeDashboardScreen() {
 
   const filteredMainCategories = useMemo(() => {
     let cats = mainCategories;
-    if (searchTerm) {
-      cats = cats.filter((cat) => cat.title.toLowerCase().includes(searchTerm));
-    }
     if (userRole !== 'faculty') {
       cats = cats.filter((cat) => cat.title.toLowerCase() !== 'catering');
     }
     return cats;
-  }, [mainCategories, searchTerm, userRole]);
+  }, [mainCategories, userRole]);
 
   const filteredCatering = useMemo(() => {
     if (!cateringCategory || userRole !== 'faculty') return null;
-    if (!searchTerm) return cateringCategory;
-    return cateringCategory.title.toLowerCase().includes(searchTerm)
-      ? cateringCategory
-      : null;
-  }, [cateringCategory, searchTerm, userRole]);
+    return cateringCategory;
+  }, [cateringCategory, userRole]);
 
   const allItemsFiltered = useMemo(() => {
     let items = menuItems;
@@ -206,13 +184,8 @@ export default function HomeDashboardScreen() {
         (item) => (item.category || '').toLowerCase() !== 'catering'
       );
     }
-    if (searchTerm) {
-      items = items.filter((item) =>
-        item.name.toLowerCase().includes(searchTerm)
-      );
-    }
     return items;
-  }, [menuItems, searchTerm, userRole]);
+  }, [menuItems, userRole]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -234,22 +207,15 @@ export default function HomeDashboardScreen() {
 
   const handleCheckout = () => router.push('/customer-cart');
   const handleAddMoreItems = () => router.push('/(tabs)');
-  const handleClearSearch = () => {
-    setSearchQuery('');
-    setSearchTerm('');
-  };
-  const handleSearchSubmit = useCallback(() => {
-    setSearchTerm(searchQuery.trim().toLowerCase());
-  }, [searchQuery]);
+  const handleOpenSearch = useCallback(() => {
+    router.push('/search');
+  }, [router]);
   const handleFilterPress = () =>
     Alert.alert('Filters', 'Filters are coming soon.');
 
   const searchPlaceholder =
     userRole === 'faculty' ? 'Search menu & catering...' : 'Search menu...';
-  const hasSearch = searchQuery.trim().length > 0;
-  const emptyMessage = hasSearch
-    ? 'No items match your search yet.'
-    : 'No items available right now.';
+  const emptyMessage = 'No items available right now.';
 
   const DropdownItem = ({ icon, label, onPress, color }) => (
     <TouchableOpacity style={styles.dropdownItem} onPress={onPress}>
@@ -378,26 +344,11 @@ export default function HomeDashboardScreen() {
           </View>
           <View style={styles.searchBar}>
             <Search size={18} color="#6B7280" />
-            <TextInput
-              placeholder={searchPlaceholder}
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearchSubmit}
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-              style={styles.searchInput}
-            />
-            {searchQuery ? (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={handleClearSearch}
-              >
-                <Text style={styles.clearButtonText}>x</Text>
-              </TouchableOpacity>
-            ) : null}
+            <Pressable style={styles.searchInput} onPress={handleOpenSearch}>
+              <Text style={styles.searchPlaceholderText}>
+                {searchPlaceholder}
+              </Text>
+            </Pressable>
             <TouchableOpacity
               style={styles.filterButton}
               onPress={handleFilterPress}
@@ -406,39 +357,6 @@ export default function HomeDashboardScreen() {
             </TouchableOpacity>
           </View>
         </LinearGradient>
-
-        <View style={styles.quickActionsRow}>
-          <TouchableOpacity
-            style={styles.quickActionCard}
-            onPress={() => router.push('/(tabs)/order-tracking')}
-          >
-            <View style={styles.quickIconWrap}>
-              <Ionicons name="cart-outline" size={18} color="#F97316" />
-            </View>
-            <Text style={styles.quickActionTitle}>Orders</Text>
-            <Text style={styles.quickActionCaption}>Track status</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickActionCard}
-            onPress={() => router.push('/(tabs)/account-profile')}
-          >
-            <View style={styles.quickIconWrap}>
-              <Ionicons name="person-outline" size={18} color="#F97316" />
-            </View>
-            <Text style={styles.quickActionTitle}>Profile</Text>
-            <Text style={styles.quickActionCaption}>View account</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.quickActionCard}
-            onPress={() => router.push('/screens/FAQs')}
-          >
-            <View style={styles.quickIconWrap}>
-              <Ionicons name="help-circle-outline" size={18} color="#F97316" />
-            </View>
-            <Text style={styles.quickActionTitle}>Help</Text>
-            <Text style={styles.quickActionCaption}>FAQs & tips</Text>
-          </TouchableOpacity>
-        </View>
 
         {menuItems.length > 0 && (
           <View style={styles.recommendedWrap}>
@@ -822,22 +740,12 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginLeft: 8,
-    fontSize: 14,
-    color: '#111827',
-  },
-  clearButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    paddingVertical: 2,
   },
-  clearButtonText: {
+  searchPlaceholderText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#6B7280',
+    color: '#9CA3AF',
   },
   filterButton: {
     width: 34,
@@ -846,45 +754,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE7C7',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginTop: 8,
-  },
-  quickActionCard: {
-    width: '31%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  quickIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#FFF2E4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  quickActionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  quickActionCaption: {
-    fontSize: 11,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 2,
   },
   recommendedWrap: {
     marginTop: 6,

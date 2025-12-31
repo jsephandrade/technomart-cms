@@ -9,12 +9,14 @@ import {
 } from 'react-native';
 import { resolveImageSource } from '../utils/image';
 
-export default function CategoryItem({ image, title, onPress }) {
+const CARD_SIZE = 80; // ~0.5 in at 160 dpi (dp)
+
+export default function CategoryItem({ image, title, onPress, disabled }) {
   const imageSource = resolveImageSource(image);
   return (
     <TouchableOpacity
-      style={styles.container}
-      onPress={onPress}
+      style={[styles.container, disabled && styles.containerDisabled]}
+      onPress={disabled ? undefined : onPress}
       activeOpacity={0.85}
       accessibilityRole="button"
     >
@@ -36,9 +38,6 @@ export default function CategoryItem({ image, title, onPress }) {
           <Text style={styles.title} numberOfLines={1}>
             {title}
           </Text>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Browse</Text>
-          </View>
         </View>
       </ImageBackground>
     </TouchableOpacity>
@@ -47,17 +46,20 @@ export default function CategoryItem({ image, title, onPress }) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#F3D6B7',
-    height: 170,
+    width: CARD_SIZE,
+    height: CARD_SIZE,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
+  },
+  containerDisabled: {
+    opacity: 0.5,
   },
   background: {
     flex: 1,
@@ -67,44 +69,34 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 138, 61, 0.4)',
+    backgroundColor: 'rgba(255, 138, 61, 0.45)',
   },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 6,
   },
   imageWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   image: {
-    width: 70,
-    height: 70,
+    width: 28,
+    height: 28,
   },
   title: {
-    fontSize: 15,
+    fontSize: 12,
     fontFamily: 'Roboto_700Bold',
-    color: '#1F2937',
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 6,
-  },
-  tag: {
-    backgroundColor: 'rgba(255, 231, 199, 0.9)',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  tagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#9A3412',
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });

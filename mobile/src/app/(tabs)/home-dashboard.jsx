@@ -38,10 +38,26 @@ const CATEGORY_IMAGE_OVERRIDES = [
   { key: 'snack', image: require('../../../assets/choices/snacks.png') },
 ];
 const CATEGORY_ROW_ORDER = [
-  { label: 'Meals', match: 'meal' },
-  { label: 'Drinks', match: 'drink' },
-  { label: 'Combo Meals', match: 'combo' },
-  { label: 'Snack', match: 'snack' },
+  {
+    label: 'Meals',
+    match: 'meal',
+    image: require('../../../assets/choices/meals.png'),
+  },
+  {
+    label: 'Drinks',
+    match: 'drink',
+    image: require('../../../assets/choices/drinks.png'),
+  },
+  {
+    label: 'Combo Meals',
+    match: 'combo',
+    image: require('../../../assets/choices/combo.png'),
+  },
+  {
+    label: 'Snack',
+    match: 'snack',
+    image: require('../../../assets/choices/snacks.png'),
+  },
 ];
 
 const normalizeCategoryKey = (value) =>
@@ -180,6 +196,7 @@ export default function HomeDashboardScreen() {
       );
       return {
         label: entry.label,
+        image: entry.image,
         category: match || null,
       };
     });
@@ -298,29 +315,19 @@ export default function HomeDashboardScreen() {
           {categoryRowItems.map((item) => {
             const isDisabled = !item.category;
             return (
-              <TouchableOpacity
-                key={item.label}
-                style={[
-                  styles.categoryPill,
-                  isDisabled && styles.categoryPillDisabled,
-                ]}
-                onPress={() => {
-                  if (!item.category) return;
-                  router.push(
-                    `/categories/${makeCategorySlug(item.category.title)}`
-                  );
-                }}
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[
-                    styles.categoryPillText,
-                    isDisabled && styles.categoryPillTextDisabled,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
+              <View key={item.label} style={styles.categoryCardWrap}>
+                <CategoryItem
+                  image={item.image}
+                  title={item.label}
+                  disabled={isDisabled}
+                  onPress={() => {
+                    if (!item.category) return;
+                    router.push(
+                      `/categories/${makeCategorySlug(item.category.title)}`
+                    );
+                  }}
+                />
+              </View>
             );
           })}
         </ScrollView>
@@ -554,32 +561,11 @@ const styles = StyleSheet.create({
   categoriesRow: {
     paddingHorizontal: 16,
     paddingVertical: 6,
-    gap: 10,
+    gap: 12,
   },
-  categoryPill: {
-    backgroundColor: '#fff',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#F3D6B7',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  categoryPillText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  categoryPillDisabled: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-  },
-  categoryPillTextDisabled: {
-    color: '#9CA3AF',
+  categoryCardWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   menuSection: {
     paddingHorizontal: 16,

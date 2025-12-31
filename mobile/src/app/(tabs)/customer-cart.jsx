@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ImageBackground,
-  ScrollView,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -20,10 +19,17 @@ import {
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
 import api, { getValidToken, createOrder } from '../../api/api';
+import { resolveImageSource } from '../../utils/image';
 
 export default function CustomerCartScreen() {
   const router = useRouter();
-  const { cart, removeFromCart, increaseQuantity, decreaseQuantity, clearCart } = useCart();
+  const {
+    cart,
+    removeFromCart,
+    increaseQuantity,
+    decreaseQuantity,
+    clearCart,
+  } = useCart();
 
   const [selectedTime, setSelectedTime] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -31,7 +37,18 @@ export default function CustomerCartScreen() {
   const [orderStatus, setOrderStatus] = useState(null);
 
   const pickupTimes = [
-    '10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM'
+    '10:00 AM',
+    '11:00 AM',
+    '12:00 PM',
+    '1:00 PM',
+    '2:00 PM',
+    '3:00 PM',
+    '4:00 PM',
+    '5:00 PM',
+    '6:00 PM',
+    '7:00 PM',
+    '8:00 PM',
+    '9:00 PM',
   ];
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
@@ -55,7 +72,10 @@ export default function CustomerCartScreen() {
         const user = userRes.data;
         if (user) setCustomerName(user.name || '');
       } catch (err) {
-        console.error('Failed to fetch user data:', err.response?.data || err.message);
+        console.error(
+          'Failed to fetch user data:',
+          err.response?.data || err.message
+        );
         Alert.alert('Error', 'Failed to fetch user info. Please log in again.');
       }
     };
@@ -85,7 +105,10 @@ export default function CustomerCartScreen() {
       return;
     }
     if (!selectedTime) {
-      Alert.alert('Pickup Time Required', 'Please select a pickup time before proceeding.');
+      Alert.alert(
+        'Pickup Time Required',
+        'Please select a pickup time before proceeding.'
+      );
       return;
     }
     if (cart.length === 0) {
@@ -168,7 +191,13 @@ export default function CustomerCartScreen() {
   };
 
   // ------------------------------ STATUS TRACKING
-  const statusSteps = ['pending', 'in_prep', 'in_progress', 'ready', 'completed'];
+  const statusSteps = [
+    'pending',
+    'in_prep',
+    'in_progress',
+    'ready',
+    'completed',
+  ];
 
   const renderStatusTracker = () => {
     if (!orderStatus) return null;
@@ -178,11 +207,28 @@ export default function CustomerCartScreen() {
           const active = statusSteps.indexOf(orderStatus) >= index;
           return (
             <View key={step} style={styles.statusStep}>
-              <View style={[styles.statusCircle, { backgroundColor: active ? '#27ae60' : '#ccc' }]} />
-              <Text style={[styles.statusText, { color: active ? '#27ae60' : '#999' }]}>
+              <View
+                style={[
+                  styles.statusCircle,
+                  { backgroundColor: active ? '#27ae60' : '#ccc' },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: active ? '#27ae60' : '#999' },
+                ]}
+              >
                 {step.replace('_', ' ').toUpperCase()}
               </Text>
-              {index < statusSteps.length - 1 && <View style={[styles.statusLine, { backgroundColor: active ? '#27ae60' : '#ccc' }]} />}
+              {index < statusSteps.length - 1 && (
+                <View
+                  style={[
+                    styles.statusLine,
+                    { backgroundColor: active ? '#27ae60' : '#ccc' },
+                  ]}
+                />
+              )}
             </View>
           );
         })}
@@ -192,21 +238,38 @@ export default function CustomerCartScreen() {
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      <Image source={item.image} style={styles.image} />
+      <Image
+        source={resolveImageSource(item.image)}
+        style={styles.image}
+        resizeMode="cover"
+      />
       <View style={styles.details}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.price}>₱{item.price}</Text>
+        <View style={styles.itemHeader}>
+          <Text style={styles.name} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={styles.price}>₱{item.price}</Text>
+        </View>
         <View style={styles.controls}>
-          <TouchableOpacity onPress={() => decreaseQuantity(item.id)} style={styles.controlBtn}>
+          <TouchableOpacity
+            onPress={() => decreaseQuantity(item.id)}
+            style={styles.controlBtn}
+          >
             <Ionicons name="remove" size={18} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.qty}>{item.quantity}</Text>
-          <TouchableOpacity onPress={() => increaseQuantity(item.id)} style={styles.controlBtn}>
+          <TouchableOpacity
+            onPress={() => increaseQuantity(item.id)}
+            style={styles.controlBtn}
+          >
             <Ionicons name="add" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
-      <TouchableOpacity onPress={() => removeFromCart(item.id)} style={styles.trashBtn}>
+      <TouchableOpacity
+        onPress={() => removeFromCart(item.id)}
+        style={styles.trashBtn}
+      >
         <Ionicons name="trash-outline" size={22} color="#f97316" />
       </TouchableOpacity>
     </View>
@@ -214,13 +277,14 @@ export default function CustomerCartScreen() {
 
   const renderFooter = () => (
     <View>
-      <View style={{ paddingHorizontal: 12, marginTop: 14 }}>
-        <Text style={styles.finalTotal}>Final Total: ₱{finalTotal}</Text>
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryLabel}>Final Total</Text>
+        <Text style={styles.finalTotal}>₱{finalTotal}</Text>
       </View>
 
       <View style={styles.pickupContainer}>
         <Text style={styles.pickupLabel}>Select Pickup Time:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.pickupGrid}>
           {pickupTimes.map((time) => {
             const disabled = isTimeDisabled(time);
             return (
@@ -230,15 +294,18 @@ export default function CustomerCartScreen() {
                 style={[
                   styles.pickupTimeBtn,
                   selectedTime === time && styles.pickupTimeSelected,
-                  disabled && { opacity: 0.4 }
+                  disabled && { opacity: 0.4 },
                 ]}
                 onPress={() => setSelectedTime(time)}
               >
                 <Text
                   style={[
                     styles.pickupTimeText,
-                    selectedTime === time && { color: '#fff', fontFamily: 'Roboto_700Bold' },
-                    disabled && { color: '#777' }
+                    selectedTime === time && {
+                      color: '#fff',
+                      fontFamily: 'Roboto_700Bold',
+                    },
+                    disabled && { color: '#777' },
                   ]}
                 >
                   {time}
@@ -246,7 +313,7 @@ export default function CustomerCartScreen() {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
       </View>
 
       {renderStatusTracker()}
@@ -308,31 +375,184 @@ export default function CustomerCartScreen() {
 // ------------------------------ STYLES
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fdfdfd' },
-  headerBackground: { width: '100%', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: 'hidden', paddingBottom: 8 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(254,192,117,0.5)' },
+  headerBackground: {
+    width: '100%',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+    paddingBottom: 8,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(254,192,117,0.5)',
+  },
   headerContainer: { paddingTop: 50, paddingBottom: 14, paddingHorizontal: 14 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   headerTitle: { fontSize: 30, fontFamily: 'Roboto_700Bold', color: 'black' },
-  card: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginVertical: 6, marginHorizontal: 8, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2, borderWidth: 2, borderColor: '#f97316' },
-  image: { width: 60, height: 60, borderRadius: 10, marginRight: 14 },
+  card: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 14,
+    marginVertical: 8,
+    marginHorizontal: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
+  },
+  image: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginRight: 12,
+    backgroundColor: '#F7EDE2',
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
+  },
   details: { flex: 1 },
-  name: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333' },
-  price: { fontSize: 14, fontFamily: 'Roboto_400Regular', color: '#777', marginVertical: 6 },
-  controls: { flexDirection: 'row', alignItems: 'center' },
-  controlBtn: { backgroundColor: '#e67e22', padding: 6, borderRadius: 20, marginHorizontal: 6 },
-  qty: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333', minWidth: 20, textAlign: 'center' },
-  trashBtn: { padding: 8, borderRadius: 10, backgroundColor: '#fff5eb' },
+  itemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  name: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    flex: 1,
+    paddingRight: 8,
+  },
+  price: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#F97316' },
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    backgroundColor: '#FFF3E4',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  controlBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F97316',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qty: {
+    fontSize: 14,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    minWidth: 24,
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  trashBtn: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFF0E0',
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
+  },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { marginTop: 5, fontSize: 18, fontFamily: 'Roboto_400Regular', color: '#999' },
-  pickupContainer: { paddingHorizontal: 12, marginVertical: 10 },
-  pickupLabel: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333', marginBottom: 6 },
-  pickupTimeBtn: { borderWidth: 1, borderColor: '#f97316', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 12, marginRight: 10, marginBottom: 10 },
-  pickupTimeSelected: { backgroundColor: '#f97316' },
-  pickupTimeText: { fontSize: 14, fontFamily: 'Roboto_400Regular', color: '#333' },
-  finalTotal: { fontSize: 20, fontFamily: 'Roboto_700Bold', color: '#27ae60', marginTop: 8, paddingHorizontal: 12 },
-  proceedBtn: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#27ae60', paddingVertical: 14, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 4 },
+  emptyText: {
+    marginTop: 5,
+    fontSize: 18,
+    fontFamily: 'Roboto_400Regular',
+    color: '#999',
+  },
+  summaryCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginTop: 14,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  summaryLabel: { fontSize: 12, fontWeight: '700', color: '#6B7280' },
+  finalTotal: {
+    fontSize: 24,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    marginTop: 6,
+  },
+  pickupContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  pickupLabel: {
+    fontSize: 14,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  pickupGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  pickupTimeBtn: {
+    width: '30%',
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    borderRadius: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    alignItems: 'center',
+    backgroundColor: '#FFF7EE',
+  },
+  pickupTimeSelected: { backgroundColor: '#F97316', borderColor: '#F97316' },
+  pickupTimeText: {
+    fontSize: 12,
+    fontFamily: 'Roboto_400Regular',
+    color: '#6B7280',
+  },
+  proceedBtn: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: '#27ae60',
+    paddingVertical: 14,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+  },
   proceedText: { color: '#fff', fontFamily: 'Roboto_700Bold', fontSize: 16 },
-  statusContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, paddingHorizontal: 12 },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    paddingHorizontal: 12,
+  },
   statusStep: { flexDirection: 'row', alignItems: 'center' },
   statusCircle: { width: 16, height: 16, borderRadius: 8 },
   statusText: { fontSize: 12, marginHorizontal: 4 },

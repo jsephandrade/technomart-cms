@@ -31,6 +31,17 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const CATEGORY_IMAGE_OVERRIDES = {
+  combomeals: require('../../../assets/choices/combo.png'),
+  meals: require('../../../assets/choices/meals.png'),
+  drinks: require('../../../assets/choices/drinks.png'),
+  snacks: require('../../../assets/choices/snacks.png'),
+};
+
+const normalizeCategoryKey = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
@@ -102,12 +113,14 @@ export default function HomeDashboardScreen() {
     const categoryMap = {};
     menuItems.forEach((item) => {
       const cat = item.category || 'Others';
+      const normalizedKey = normalizeCategoryKey(cat);
+      const overrideImage = CATEGORY_IMAGE_OVERRIDES[normalizedKey];
       if (!categoryMap[cat]) {
         categoryMap[cat] = {
           key: cat,
           title: cat,
           itemCount: 0,
-          image: item.image,
+          image: overrideImage || item.image,
         };
       }
       categoryMap[cat].itemCount += 1;

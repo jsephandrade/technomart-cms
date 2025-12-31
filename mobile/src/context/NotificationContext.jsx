@@ -12,6 +12,7 @@ import { fetchNotifications, getValidToken } from '../api/api';
 
 const TOAST_DURATION_MS = 2500;
 const TOAST_FADE_MS = 200;
+const NOTIFICATION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 const NotificationContext = createContext();
 
@@ -64,9 +65,12 @@ export const NotificationProvider = ({ children }) => {
     [toastOpacity, toastTranslate]
   );
 
-  const loadNotifications = async () => {
+  const loadNotifications = async ({ silent = false } = {}) => {
+    const shouldUpdateLoading = !silent;
     try {
-      setLoading(true);
+      if (shouldUpdateLoading) {
+        setLoading(true);
+      }
       const token = await getValidToken();
       const hasToken = Boolean(token);
       if (hadTokenRef.current === null) {
@@ -74,7 +78,7 @@ export const NotificationProvider = ({ children }) => {
       }
       if (!hasToken) {
         setNotifications([]);
-        if (hadTokenRef.current) {
+        if (!silent && hadTokenRef.current) {
           showToast('You are logged out. Sign in to see notifications.');
         }
         hadTokenRef.current = false;
@@ -83,23 +87,41 @@ export const NotificationProvider = ({ children }) => {
       hadTokenRef.current = true;
       const data = await fetchNotifications(); // fetch from backend
       const list = Array.isArray(data) ? data : [];
-      // Optional: filter only menu updates
-      const menuUpdates = list.filter(
-        (n) => n.type === 'new' || n.type === 'sold'
-      );
-      setNotifications(menuUpdates);
+      setNotifications(list);
     } catch (err) {
-      console.error('Failed to load notifications:', err);
+      const status = err?.status ?? err?.response?.status;
+      const code = err?.code ?? err?.response?.data?.code;
+      const message = err?.message || '';
+      if (
+        status === 401 ||
+        code === 'token_not_valid' ||
+        /token/i.test(message)
+      ) {
+        setNotifications([]);
+        if (!silent && hadTokenRef.current) {
+          showToast('Session expired. Please sign in again.');
+        }
+      } else {
+        console.error('Failed to load notifications:', err);
+        if (!silent) {
+          showToast('Unable to refresh notifications right now.');
+        }
+      }
     } finally {
-      setLoading(false);
+      if (shouldUpdateLoading) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadNotifications();
+    loadNotifications({ silent: false });
 
     // Optional: refresh notifications every 30 seconds
-    const interval = setInterval(loadNotifications, 30000);
+    const interval = setInterval(
+      () => loadNotifications({ silent: true }),
+      NOTIFICATION_REFRESH_INTERVAL_MS
+    );
     return () => clearInterval(interval);
   }, []);
 

@@ -86,7 +86,8 @@ export default function AccountLoginScreen() {
   // ✅ Auto redirect if already logged in
   useEffect(() => {
     const checkUser = async () => {
-      const storedUser = await AsyncStorage.getItem('user');
+      const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+      const storedUser = entries[0][1] || entries[1][1];
       if (storedUser) {
         setUser(JSON.parse(storedUser));
         router.replace('/home-dashboard');
@@ -199,15 +200,17 @@ export default function AccountLoginScreen() {
       const loginData = await loginResponse.json();
 
       if (loginResponse.ok && loginData.access) {
-        await AsyncStorage.setItem('accessToken', loginData.access);
-        await AsyncStorage.setItem('refreshToken', loginData.refresh);
+        await storeTokens({
+          accessToken: loginData.access,
+          refreshToken: loginData.refresh,
+        });
 
         const profileRes = await fetch(`${API_BASE}/profile/`, {
           headers: { Authorization: `Bearer ${loginData.access}` },
         });
 
         const profile = await profileRes.json();
-        await AsyncStorage.setItem('user', JSON.stringify(profile));
+        await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
         setUser(profile);
 
         await runBiometricGate();

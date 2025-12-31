@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_CACHE_KEY } from '../../api/api';
 
 export default function TabsLayout() {
   const [role, setRole] = useState('student');
@@ -10,7 +11,8 @@ export default function TabsLayout() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const json = await AsyncStorage.getItem('@sanaol/auth/user');
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const json = entries[0][1] || entries[1][1];
         if (json) {
           const user = JSON.parse(json);
           setRole(user.role);
@@ -69,6 +71,16 @@ export default function TabsLayout() {
           title: 'Orders',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Alerts',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications-outline" size={size} color={color} />
           ),
         }}
       />

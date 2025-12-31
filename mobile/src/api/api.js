@@ -89,8 +89,12 @@ export async function refreshAccessToken() {
 export const getGuestToken = async () => {
   try {
     // Clear old tokens
-    await AsyncStorage.removeItem('accessToken');
-    await AsyncStorage.removeItem('refreshToken');
+    await AsyncStorage.multiRemove([
+      ACCESS_TOKEN_KEY,
+      REFRESH_TOKEN_KEY,
+      'accessToken',
+      'refreshToken',
+    ]);
 
     const res = await fetch(`${API_BASE}/guest-login/`, {
       method: 'GET',
@@ -107,8 +111,12 @@ export const getGuestToken = async () => {
     }
 
     // Save tokens if they exist
-    if (data.access) await AsyncStorage.setItem('accessToken', data.access);
-    if (data.refresh) await AsyncStorage.setItem('refreshToken', data.refresh);
+    if (data.access || data.refresh) {
+      await storeTokens({
+        accessToken: data.access,
+        refreshToken: data.refresh,
+      });
+    }
     if (data.user)
       await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
 
@@ -208,6 +216,9 @@ export async function clearStoredTokens() {
     ACCESS_TOKEN_KEY,
     REFRESH_TOKEN_KEY,
     USER_CACHE_KEY,
+    'accessToken',
+    'refreshToken',
+    'user',
   ]);
 }
 // api.js — improved createCateringEvent
@@ -450,12 +461,17 @@ export const fetchNotifications = async () => {
         if (!newToken) return [];
         return await fetchWithToken(newToken);
       } catch (refreshErr) {
+        const refreshStatus = refreshErr?.response?.status;
+        const refreshCode = refreshErr?.response?.data?.code;
+        if (refreshStatus === 401 || refreshCode === 'token_not_valid') {
+          return [];
+        }
         console.error('Token refresh failed:', refreshErr);
-        throw refreshErr;
+        return [];
       }
     } else {
       console.error('Fetch notifications failed:', err.data || err.message);
-      throw err;
+      return [];
     }
   }
 };

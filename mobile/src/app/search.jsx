@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchMenuItems } from '../api/api';
+import { fetchMenuItems, USER_CACHE_KEY } from '../api/api';
 import { useCart } from '../context/CartContext';
 import { resolveImageSource } from '../utils/image';
 
@@ -33,7 +33,8 @@ export default function SearchScreen() {
   useEffect(() => {
     const getUserRole = async () => {
       try {
-        const userData = await AsyncStorage.getItem('@sanaol/auth/user');
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const userData = entries[0][1] || entries[1][1];
         if (userData) {
           const parsed = JSON.parse(userData);
           setUserRole(parsed.role || 'student');

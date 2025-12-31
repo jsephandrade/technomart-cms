@@ -21,20 +21,12 @@ import {
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  LogOut,
-  User,
-  Settings as Gear,
-  HelpCircle,
-  MessageCircle,
-  Bell,
-  Search,
-} from 'lucide-react-native';
+import { Search } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import CategoryItem from '../../components/CategoryItem';
 import Recommended from '../../components/Recommended';
-import { fetchMenuItems, fetchNotifications } from '../../api/api';
+import { fetchMenuItems, USER_CACHE_KEY } from '../../api/api';
 import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
@@ -46,17 +38,16 @@ export default function HomeDashboardScreen() {
   const { cart, addToCart, decreaseQuantity } = useCart();
 
   const [menuItems, setMenuItems] = useState([]);
-  const [menuNotifications, setMenuNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [openDropdown, setOpenDropdown] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const hasLoadedMenuRef = useRef(false);
 
   useEffect(() => {
     const getUserRole = async () => {
       try {
-        const userData = await AsyncStorage.getItem('@sanaol/auth/user');
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const userData = entries[0][1] || entries[1][1];
         if (userData) {
           const parsed = JSON.parse(userData);
           setUserRole(parsed.role);
@@ -89,36 +80,8 @@ export default function HomeDashboardScreen() {
     }
   };
 
-  const loadBackendNotifications = async () => {
-    try {
-      const backend = await fetchNotifications();
-      const list = Array.isArray(backend) ? backend : [];
-      setMenuNotifications((prev) => {
-        const merged = [...prev];
-        list.forEach((n) => {
-          if (!prev.find((p) => p.id === n.id)) {
-            const createdAt = n.created_at || n.createdAt || n.created || null;
-            merged.push({
-              id: n.id || `${n.type || 'notif'}-${createdAt || Date.now()}`,
-              type: n.type,
-              title: n.title || n.item?.name || 'Notification',
-              message: n.message || '',
-              created_at: createdAt || new Date().toISOString(),
-            });
-          }
-        });
-        return merged.sort(
-          (a, b) => new Date(b.created_at) - new Date(a.created_at)
-        );
-      });
-    } catch (err) {
-      console.error('Failed to fetch backend notifications:', err);
-    }
-  };
-
   const loadAllData = async ({ silent = false } = {}) => {
     await loadMenuItems({ silent });
-    await loadBackendNotifications();
   };
 
   useEffect(() => {
@@ -189,21 +152,6 @@ export default function HomeDashboardScreen() {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const handleLogout = async () => {
-    try {
-      await AsyncStorage.multiRemove([
-        '@sanaol/auth/accessToken',
-        '@sanaol/auth/refreshToken',
-        '@sanaol/auth/user',
-      ]);
-      setOpenDropdown(null);
-      router.replace('/account-login');
-    } catch (error) {
-      console.error('Logout error:', error);
-      Alert.alert('Error', 'Failed to log out. Please try again.');
-    }
-  };
-
   const handleCheckout = () => router.push('/customer-cart');
   const handleAddMoreItems = () => router.push('/home-dashboard');
   const handleOpenSearch = useCallback(() => {
@@ -215,22 +163,6 @@ export default function HomeDashboardScreen() {
   const searchPlaceholder =
     userRole === 'faculty' ? 'Search menu & catering...' : 'Search menu...';
   const emptyMessage = 'No items available right now.';
-
-  const DropdownItem = ({ icon, label, onPress, color }) => (
-    <TouchableOpacity style={styles.dropdownItem} onPress={onPress}>
-      <View style={styles.dropdownIcon}>{icon}</View>
-      <Text style={[styles.dropdownLabel, color ? { color } : null]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const renderDropdownContainer = (children) => (
-    <View style={styles.dropdownContainer}>
-      <View style={styles.dropdownPointer} />
-      <View style={styles.dropdownPanel}>{children}</View>
-    </View>
-  );
 
   if (!fontsLoaded || loading || userRole === null) {
     return (
@@ -269,52 +201,25 @@ export default function HomeDashboardScreen() {
           style={styles.heroCard}
         >
           <View style={styles.heroRow}>
-            <View style={styles.heroCopy}>
-              <Text style={styles.heroTitle}>TechnoMart</Text>
-            </View>
-            <View style={styles.heroActions}>
+            <Image
+              source={require('../../../assets/logo.png')}
+              style={styles.heroLogo}
+              resizeMode="contain"
+            />
+            <View style={styles.searchBar}>
+              <Search size={18} color="#6B7280" />
+              <Pressable style={styles.searchInput} onPress={handleOpenSearch}>
+                <Text style={styles.searchPlaceholderText}>
+                  {searchPlaceholder}
+                </Text>
+              </Pressable>
               <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() =>
-                  setOpenDropdown(
-                    openDropdown === 'notifications' ? null : 'notifications'
-                  )
-                }
+                style={styles.filterButton}
+                onPress={handleFilterPress}
               >
-                <Bell size={18} color="#1F2937" />
-                {menuNotifications.length > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {menuNotifications.length}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() =>
-                  setOpenDropdown(
-                    openDropdown === 'settings' ? null : 'settings'
-                  )
-                }
-              >
-                <Gear size={18} color="#1F2937" />
+                <Ionicons name="options-outline" size={18} color="#1F2937" />
               </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.searchBar}>
-            <Search size={18} color="#6B7280" />
-            <Pressable style={styles.searchInput} onPress={handleOpenSearch}>
-              <Text style={styles.searchPlaceholderText}>
-                {searchPlaceholder}
-              </Text>
-            </Pressable>
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={handleFilterPress}
-            >
-              <Ionicons name="options-outline" size={18} color="#1F2937" />
-            </TouchableOpacity>
           </View>
         </LinearGradient>
 
@@ -468,94 +373,6 @@ export default function HomeDashboardScreen() {
           </TouchableOpacity>
         </View>
       )}
-
-      <>
-        {openDropdown && (
-          <Pressable
-            style={StyleSheet.absoluteFillObject}
-            onPress={() => setOpenDropdown(null)}
-          />
-        )}
-        {openDropdown === 'settings' &&
-          renderDropdownContainer(
-            <>
-              <Text style={styles.dropdownHeader}>Account</Text>
-              <DropdownItem
-                icon={<User size={16} color="#374151" />}
-                label="Profile"
-                onPress={() => router.push('/account-profile')}
-              />
-              <DropdownItem
-                icon={<Gear size={16} color="#374151" />}
-                label="App Settings"
-                onPress={() => router.push('/screens/Settings')}
-              />
-              <DropdownItem
-                icon={<HelpCircle size={16} color="#374151" />}
-                label="Help"
-                onPress={() => router.push('/screens/FAQs')}
-              />
-              <DropdownItem
-                icon={<MessageCircle size={16} color="#374151" />}
-                label="Feedback"
-                onPress={() => router.push('/screens/Feedback')}
-              />
-              <DropdownItem
-                icon={<LogOut size={16} color="red" />}
-                label="Logout"
-                onPress={handleLogout}
-                color="red"
-              />
-            </>
-          )}
-
-        {openDropdown === 'notifications' &&
-          renderDropdownContainer(
-            <>
-              <Text style={styles.dropdownHeader}>Notifications</Text>
-              {menuNotifications.length === 0 ? (
-                <Text style={styles.dropdownEmpty}>No updates yet</Text>
-              ) : (
-                menuNotifications.slice(0, 5).map((n, idx) => (
-                  <View key={idx} style={styles.notificationItem}>
-                    <Text
-                      style={[
-                        styles.notificationTitle,
-                        {
-                          color:
-                            n.type === 'new'
-                              ? '#16a34a'
-                              : n.type === 'soldout'
-                                ? '#ef4444'
-                                : n.type === 'deleted'
-                                  ? '#9ca3af'
-                                  : '#374151',
-                        },
-                      ]}
-                    >
-                      {n.type === 'new'
-                        ? 'New:'
-                        : n.type === 'soldout'
-                          ? 'Sold Out:'
-                          : n.type === 'deleted'
-                            ? 'Removed:'
-                            : ''}{' '}
-                      {n.title}
-                    </Text>
-                    <Text style={styles.notificationTime}>
-                      {new Date(n.created_at).toLocaleString()}
-                    </Text>
-                    {n.message ? (
-                      <Text style={styles.notificationMessage}>
-                        {n.message}
-                      </Text>
-                    ) : null}
-                  </View>
-                ))
-              )}
-            </>
-          )}
-      </>
     </View>
   );
 }
@@ -596,45 +413,12 @@ const styles = StyleSheet.create({
   },
   heroRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  heroCopy: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  heroTitle: {
-    fontSize: 28,
-    color: '#1F2937',
-    fontFamily: 'Roboto_700Bold',
-  },
-  heroActions: {
-    flexDirection: 'row',
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.75)',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
   },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#fff',
+  heroLogo: {
+    width: 54,
+    height: 54,
+    marginRight: 12,
   },
   searchBar: {
     marginTop: 4,
@@ -644,6 +428,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
+    flex: 1,
   },
   searchInput: {
     flex: 1,
@@ -885,88 +670,6 @@ const styles = StyleSheet.create({
     color: '#9A3412',
     fontWeight: '700',
     fontSize: 13,
-  },
-  dropdownContainer: {
-    position: 'absolute',
-    top: 84,
-    right: 16,
-    width: 240,
-    zIndex: 200,
-  },
-  dropdownPointer: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 10,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: '#fff',
-    alignSelf: 'flex-end',
-    marginRight: 10,
-  },
-  dropdownPanel: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-  },
-  dropdownIcon: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dropdownLabel: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  dropdownHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    paddingHorizontal: 6,
-    marginBottom: 6,
-  },
-  dropdownEmpty: {
-    color: '#6B7280',
-    textAlign: 'center',
-    padding: 8,
-  },
-  notificationItem: {
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  notificationTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  notificationTime: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    marginTop: 2,
-  },
-  notificationMessage: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
   },
   loadingContainer: {
     flex: 1,

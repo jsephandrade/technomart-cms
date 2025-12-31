@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchMenuItems } from '../../../api/api';
+import { fetchMenuItems, USER_CACHE_KEY } from '../../../api/api';
 import { useCart } from '../../../context/CartContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
@@ -27,7 +27,8 @@ export default function CategoryScreen() {
   useEffect(() => {
     const load = async () => {
       try {
-        const userData = await AsyncStorage.getItem('@sanaol/auth/user');
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const userData = entries[0][1] || entries[1][1];
         const parsed = userData ? JSON.parse(userData) : null;
         setRole(parsed?.role || 'student');
 

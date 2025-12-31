@@ -40,6 +40,7 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const SEARCH_DEBOUNCE_MS = 150;
 
 export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
@@ -51,6 +52,7 @@ export default function HomeDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const hasLoadedMenuRef = useRef(false);
@@ -72,6 +74,18 @@ export default function HomeDashboardScreen() {
     };
     getUserRole();
   }, []);
+
+  useEffect(() => {
+    const normalized = searchQuery.trim().toLowerCase();
+    if (!normalized) {
+      setSearchTerm('');
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      setSearchTerm(normalized);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const loadMenuItems = async ({ silent = false } = {}) => {
     const shouldUpdateLoading = !hasLoadedMenuRef.current && !silent;
@@ -168,26 +182,22 @@ export default function HomeDashboardScreen() {
 
   const filteredMainCategories = useMemo(() => {
     let cats = mainCategories;
-    if (searchQuery) {
-      cats = cats.filter((cat) =>
-        cat.title.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+    if (searchTerm) {
+      cats = cats.filter((cat) => cat.title.toLowerCase().includes(searchTerm));
     }
     if (userRole !== 'faculty') {
       cats = cats.filter((cat) => cat.title.toLowerCase() !== 'catering');
     }
     return cats;
-  }, [mainCategories, searchQuery, userRole]);
+  }, [mainCategories, searchTerm, userRole]);
 
   const filteredCatering = useMemo(() => {
     if (!cateringCategory || userRole !== 'faculty') return null;
-    if (!searchQuery) return cateringCategory;
-    return cateringCategory.title
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
+    if (!searchTerm) return cateringCategory;
+    return cateringCategory.title.toLowerCase().includes(searchTerm)
       ? cateringCategory
       : null;
-  }, [cateringCategory, searchQuery, userRole]);
+  }, [cateringCategory, searchTerm, userRole]);
 
   const allItemsFiltered = useMemo(() => {
     let items = menuItems;
@@ -196,13 +206,13 @@ export default function HomeDashboardScreen() {
         (item) => (item.category || '').toLowerCase() !== 'catering'
       );
     }
-    if (searchQuery) {
+    if (searchTerm) {
       items = items.filter((item) =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase())
+        item.name.toLowerCase().includes(searchTerm)
       );
     }
     return items;
-  }, [menuItems, searchQuery, userRole]);
+  }, [menuItems, searchTerm, userRole]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -224,13 +234,20 @@ export default function HomeDashboardScreen() {
 
   const handleCheckout = () => router.push('/customer-cart');
   const handleAddMoreItems = () => router.push('/(tabs)');
-  const handleClearSearch = () => setSearchQuery('');
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setSearchTerm('');
+  };
+  const handleSearchSubmit = useCallback(() => {
+    setSearchTerm(searchQuery.trim().toLowerCase());
+  }, [searchQuery]);
   const handleFilterPress = () =>
     Alert.alert('Filters', 'Filters are coming soon.');
 
   const searchPlaceholder =
     userRole === 'faculty' ? 'Search menu & catering...' : 'Search menu...';
-  const emptyMessage = searchQuery
+  const hasSearch = searchQuery.trim().length > 0;
+  const emptyMessage = hasSearch
     ? 'No items match your search yet.'
     : 'No items available right now.';
 
@@ -366,6 +383,11 @@ export default function HomeDashboardScreen() {
               placeholderTextColor="#9CA3AF"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearchSubmit}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              clearButtonMode="while-editing"
               style={styles.searchInput}
             />
             {searchQuery ? (

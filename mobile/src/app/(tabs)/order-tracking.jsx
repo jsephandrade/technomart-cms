@@ -16,10 +16,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
-import { fetchUserOrders } from '../../api/api';
+import { fetchMenuItems, fetchUserOrders } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
 const BACKEND = 'http://192.168.166.179:8000';
+const COLLAGE_GAP = 3;
 const STATUS_STEPS = [
   'pending',
   'in_prep',
@@ -121,6 +122,11 @@ const formatDate = (value) => {
   });
 };
 
+const normalizeItemKey = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
 const resolveOrderItems = (order) => {
   if (!order || typeof order !== 'object') return [];
   const items =
@@ -196,16 +202,133 @@ const resolveItemPrice = (item) => {
 const resolveItemSize = (item) =>
   item?.size || item?.variant || item?.menu_item_size || item?.menuItemSize;
 
-const resolveItemImage = (item) =>
-  item?.image ||
-  item?.image_url ||
-  item?.imageUrl ||
-  item?.thumbnail ||
-  item?.menu_item?.image ||
-  item?.menu_item?.image_url ||
-  item?.menuItem?.image ||
-  item?.menuItem?.image_url ||
-  null;
+const resolveItemImage = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.thumbnail,
+    item?.image?.url,
+    item?.menu_item?.image,
+    item?.menu_item?.image_url,
+    item?.menuItem?.image,
+    item?.menuItem?.image_url,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed) return trimmed;
+      continue;
+    }
+    return candidate;
+  }
+  return null;
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboItem = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients = resolveIngredientEntries(item);
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveItemImage(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  return sources.filter((src, index, arr) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return arr.indexOf(src) === index;
+  });
+};
+
+const resolveMenuItemMatch = (orderItem, menuById, menuByName) => {
+  if (!orderItem) return null;
+  const id =
+    orderItem?.menu_item_id ??
+    orderItem?.menuItemId ??
+    orderItem?.menu_item?.id ??
+    orderItem?.menuItem?.id ??
+    null;
+  if (id !== null && id !== undefined) {
+    const match = menuById.get(String(id));
+    if (match) return match;
+  }
+  const nameKey = normalizeItemKey(resolveItemName(orderItem));
+  if (nameKey && menuByName.has(nameKey)) {
+    return menuByName.get(nameKey);
+  }
+  return null;
+};
+
+const resolveOrderItemImage = (orderItem, menuItem) => {
+  const menuImage = menuItem ? resolveItemImage(menuItem) : null;
+  const orderImage = resolveItemImage(orderItem);
+  return menuImage || orderImage || null;
+};
+
+const resolveOrderItemCollage = (orderItem, menuItem, imageById) => {
+  const source = menuItem || orderItem;
+  if (!source || !isComboItem(source)) return [];
+  return resolveComboImages(source, imageById).slice(0, 3);
+};
 
 const resolveOrderTotal = (order, items) => {
   const candidates = [
@@ -240,6 +363,7 @@ export default function OrderTrackingScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const [currentOrders, setCurrentOrders] = useState([]);
   const [previousOrders, setPreviousOrders] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -266,11 +390,69 @@ export default function OrderTrackingScreen() {
     })
   ).current;
 
-  const loadOrders = async ({ silent = false } = {}) => {
+  const menuItemsById = useMemo(() => {
+    const map = new Map();
+    menuItems.forEach((entry) => {
+      if (!entry) return;
+      const id =
+        entry.id ??
+        entry.menu_item_id ??
+        entry.menuItemId ??
+        entry.menu_item?.id ??
+        entry.menuItem?.id ??
+        null;
+      if (id !== null && id !== undefined) {
+        map.set(String(id), entry);
+      }
+    });
+    return map;
+  }, [menuItems]);
+
+  const menuItemsByName = useMemo(() => {
+    const map = new Map();
+    menuItems.forEach((entry) => {
+      if (!entry) return;
+      const name = entry.name || entry.title || entry.label || '';
+      const key = normalizeItemKey(name);
+      if (key && !map.has(key)) {
+        map.set(key, entry);
+      }
+    });
+    return map;
+  }, [menuItems]);
+
+  const menuImageById = useMemo(() => {
+    const map = new Map();
+    menuItems.forEach((entry) => {
+      if (!entry) return;
+      const id =
+        entry.id ??
+        entry.menu_item_id ??
+        entry.menuItemId ??
+        entry.menu_item?.id ??
+        entry.menuItem?.id ??
+        null;
+      const src = resolveItemImage(entry);
+      if (id !== null && id !== undefined && src) {
+        map.set(String(id), src);
+      }
+    });
+    return map;
+  }, [menuItems]);
+
+  const loadData = async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const data = await fetchUserOrders();
-      const orders = Array.isArray(data) ? data : [];
+      const [orderData, menuData] = await Promise.all([
+        fetchUserOrders(),
+        fetchMenuItems().catch((err) => {
+          console.error('Failed to fetch menu items:', err);
+          return [];
+        }),
+      ]);
+      const orders = Array.isArray(orderData) ? orderData : [];
+      const menus = Array.isArray(menuData) ? menuData : [];
+      setMenuItems(menus);
       const sorted = [...orders].sort((a, b) => {
         const dateA = new Date(resolveOrderDate(a)).getTime() || 0;
         const dateB = new Date(resolveOrderDate(b)).getTime() || 0;
@@ -295,12 +477,12 @@ export default function OrderTrackingScreen() {
   };
 
   useEffect(() => {
-    loadOrders();
+    loadData();
   }, []);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadOrders({ silent: true }).finally(() => setRefreshing(false));
+    loadData({ silent: true }).finally(() => setRefreshing(false));
   };
 
   const handleOpenModal = (order) => {
@@ -349,7 +531,7 @@ export default function OrderTrackingScreen() {
             }
             Alert.alert('Order cancelled', 'Your order has been cancelled.');
             handleCloseModal();
-            await loadOrders({ silent: true });
+            await loadData({ silent: true });
           } catch (err) {
             console.error('Cancel order failed:', err);
             Alert.alert('Cancel failed', err.message || 'Try again.');
@@ -411,6 +593,82 @@ export default function OrderTrackingScreen() {
     );
   };
 
+  const getOrderItemVisual = (item) => {
+    const menuItem = resolveMenuItemMatch(item, menuItemsById, menuItemsByName);
+    const collageSources = resolveOrderItemCollage(
+      item,
+      menuItem,
+      menuImageById
+    );
+    const imageSource = resolveOrderItemImage(item, menuItem);
+    return { collageSources, imageSource };
+  };
+
+  const renderOrderItemRow = (item, index, totalItems) => {
+    const name = resolveItemName(item);
+    const qty = resolveItemQuantity(item);
+    const size = resolveItemSize(item);
+    const price = resolveItemPrice(item) * qty;
+    const { collageSources, imageSource } = getOrderItemVisual(item);
+    const showCollage =
+      Array.isArray(collageSources) && collageSources.length === 3;
+    return (
+      <View
+        key={`${name}-${index}`}
+        style={[
+          styles.itemRow,
+          index < totalItems - 1 && styles.itemRowDivider,
+        ]}
+      >
+        {showCollage ? (
+          <View style={styles.itemCollage}>
+            <View style={styles.itemCollageMain}>
+              <Image
+                source={resolveImageSource(collageSources[0])}
+                style={styles.itemCollageImage}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={styles.itemCollageSide}>
+              <View style={[styles.itemCollageTile, styles.itemCollageTileTop]}>
+                <Image
+                  source={resolveImageSource(collageSources[1])}
+                  style={styles.itemCollageImage}
+                  resizeMode="cover"
+                />
+              </View>
+              <View style={styles.itemCollageTile}>
+                <Image
+                  source={resolveImageSource(collageSources[2])}
+                  style={styles.itemCollageImage}
+                  resizeMode="cover"
+                />
+              </View>
+            </View>
+          </View>
+        ) : (
+          <Image
+            source={resolveImageSource(imageSource)}
+            style={styles.itemImage}
+            resizeMode="cover"
+          />
+        )}
+        <View style={styles.itemDetails}>
+          <Text style={styles.itemName} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.itemMeta} numberOfLines={1}>
+            {size ? `Size: ${size}  ` : ''}
+            Qty: {qty}
+          </Text>
+        </View>
+        <View style={styles.itemPriceContainer}>
+          <Text style={styles.itemPrice}>{formatPeso(price)}</Text>
+        </View>
+      </View>
+    );
+  };
+
   const renderOrderCard = (order, variant = 'current', index = 0) => {
     const items = resolveOrderItems(order);
     const statusKey = normalizeStatusKey(order?.status);
@@ -444,39 +702,9 @@ export default function OrderTrackingScreen() {
         {!isPrevious && renderStatusBar(statusKey)}
 
         <View style={styles.itemsPreview}>
-          {previewItems.map((item, index) => {
-            const name = resolveItemName(item);
-            const qty = resolveItemQuantity(item);
-            const size = resolveItemSize(item);
-            const price = resolveItemPrice(item) * qty;
-            return (
-              <View
-                key={`${name}-${index}`}
-                style={[
-                  styles.itemRow,
-                  index < previewItems.length - 1 && styles.itemRowDivider,
-                ]}
-              >
-                <Image
-                  source={resolveImageSource(resolveItemImage(item))}
-                  style={styles.itemImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName} numberOfLines={1}>
-                    {name}
-                  </Text>
-                  <Text style={styles.itemMeta} numberOfLines={1}>
-                    {size ? `Size: ${size}  ` : ''}
-                    Qty: {qty}
-                  </Text>
-                </View>
-                <View style={styles.itemPriceContainer}>
-                  <Text style={styles.itemPrice}>{formatPeso(price)}</Text>
-                </View>
-              </View>
-            );
-          })}
+          {previewItems.map((item, itemIndex) =>
+            renderOrderItemRow(item, itemIndex, previewItems.length)
+          )}
           {items.length > previewItems.length && (
             <Text style={styles.moreItemsText}>
               +{items.length - previewItems.length} more items
@@ -534,7 +762,6 @@ export default function OrderTrackingScreen() {
     () => resolveOrderItems(selectedOrder),
     [selectedOrder]
   );
-  const selectedStatusKey = normalizeStatusKey(selectedOrder?.status);
   const selectedTotal = resolveOrderTotal(selectedOrder, selectedItems);
   const selectedOrderNumber = resolveOrderNumber(selectedOrder);
   const selectedOrderDate = resolveOrderDate(selectedOrder);
@@ -648,42 +875,9 @@ export default function OrderTrackingScreen() {
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Items</Text>
                 <View style={styles.modalItemsCard}>
-                  {selectedItems.map((item, index) => {
-                    const name = resolveItemName(item);
-                    const qty = resolveItemQuantity(item);
-                    const size = resolveItemSize(item);
-                    const price = resolveItemPrice(item) * qty;
-                    return (
-                      <View
-                        key={`${name}-${index}`}
-                        style={[
-                          styles.itemRow,
-                          index < selectedItems.length - 1 &&
-                            styles.itemRowDivider,
-                        ]}
-                      >
-                        <Image
-                          source={resolveImageSource(resolveItemImage(item))}
-                          style={styles.itemImage}
-                          resizeMode="cover"
-                        />
-                        <View style={styles.itemDetails}>
-                          <Text style={styles.itemName} numberOfLines={1}>
-                            {name}
-                          </Text>
-                          <Text style={styles.itemMeta} numberOfLines={1}>
-                            {size ? `Size: ${size}  ` : ''}
-                            Qty: {qty}
-                          </Text>
-                        </View>
-                        <View style={styles.itemPriceContainer}>
-                          <Text style={styles.itemPrice}>
-                            {formatPeso(price)}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
+                  {selectedItems.map((item, itemIndex) =>
+                    renderOrderItemRow(item, itemIndex, selectedItems.length)
+                  )}
                 </View>
               </View>
 
@@ -935,6 +1129,38 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginRight: 10,
     backgroundColor: '#F7EDE2',
+  },
+  itemCollage: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    marginRight: 10,
+    backgroundColor: '#F7EDE2',
+    overflow: 'hidden',
+    padding: COLLAGE_GAP,
+    flexDirection: 'row',
+  },
+  itemCollageMain: {
+    flex: 2,
+    marginRight: COLLAGE_GAP,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  itemCollageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  itemCollageTile: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  itemCollageTileTop: {
+    marginBottom: COLLAGE_GAP,
+  },
+  itemCollageImage: {
+    width: '100%',
+    height: '100%',
   },
   itemDetails: {
     flex: 1,

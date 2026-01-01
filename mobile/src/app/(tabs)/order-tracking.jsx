@@ -934,12 +934,6 @@ export default function OrderTrackingScreen() {
                     </Text>
                   </View>
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Payment</Text>
-                    <Text style={styles.infoValue}>
-                      {resolvePaymentMethod(selectedOrder)}
-                    </Text>
-                  </View>
-                  <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Status</Text>
                     <Text style={styles.infoValue}>
                       {formatStatusLabel(selectedOrder?.status)}

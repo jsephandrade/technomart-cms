@@ -1,5 +1,5 @@
 // ComboMeals.jsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Dimensions,
   ImageBackground,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -18,29 +19,168 @@ import {
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
 import { useCart } from '../../../context/CartContext';
+import { fetchMenuItems } from '../../../api/api';
 
 const { width } = Dimensions.get('window');
 const GRID_GUTTER = 12;
-const CARD_WIDTH = (width - GRID_GUTTER * 4) / 3;
+const CARD_WIDTH = (width - GRID_GUTTER * 3) / 2;
 const CARD_HEIGHT = CARD_WIDTH;
-const COMBO_MEAL_IMAGES = [
-  { id: 'combo-1', image: require('../../../../assets/chicken.png') },
-  { id: 'combo-2', image: require('../../../../assets/ginaling.png') },
-  { id: 'combo-3', image: require('../../../../assets/ngohiong.png') },
-];
+
+const resolveImageSrc = (item) => {
+  if (!item) return null;
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.photo,
+    item.picture,
+    item.thumbnail,
+    item.img,
+    item?.image?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboMeal = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients =
+    item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveImageSrc(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  if (sources.length === 0) {
+    const fallback = resolveImageSrc(item);
+    if (fallback) sources.push(fallback);
+  }
+
+  return sources.filter((src) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return true;
+  });
+};
+
+const toImageSource = (src) => {
+  if (!src) return null;
+  if (typeof src === 'string') return { uri: src };
+  if (typeof src === 'number') return src;
+  if (typeof src === 'object' && src.uri) return src;
+  return null;
+};
 
 export default function ComboMeals() {
   const router = useRouter();
   const { cart } = useCart();
+  const [comboMeals, setComboMeals] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [fontsLoaded] = useFonts({
     Roboto_400Regular,
     Roboto_700Bold,
   });
 
-  if (!fontsLoaded) {
+  useEffect(() => {
+    const loadComboMeals = async () => {
+      try {
+        const items = await fetchMenuItems();
+        const imageById = new Map();
+        (items || []).forEach((entry) => {
+          if (!entry || entry.id === undefined || entry.id === null) return;
+          const src = resolveImageSrc(entry);
+          if (src) imageById.set(String(entry.id), src);
+        });
+
+        const combos = (items || [])
+          .filter((entry) => isComboMeal(entry))
+          .map((entry) => {
+            const collageSources = resolveComboImages(entry, imageById).slice(
+              0,
+              3
+            );
+            return { ...entry, collageSources };
+          })
+          .filter((entry) => entry.collageSources.length === 3);
+
+        setComboMeals(combos);
+      } catch (error) {
+        console.error('Error fetching combo meals:', error);
+        setComboMeals([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadComboMeals();
+  }, []);
+
+  if (!fontsLoaded || loading) {
     return (
       <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#e67e22" />
         <Text
           style={{
             marginTop: 8,
@@ -54,11 +194,46 @@ export default function ComboMeals() {
     );
   }
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <Image source={item.image} style={styles.image} resizeMode="cover" />
-    </View>
-  );
+  const renderItem = ({ item }) => {
+    const [mainSrc, topSrc, bottomSrc] = item.collageSources || [];
+    const mainImage = toImageSource(mainSrc);
+    const topImage = toImageSource(topSrc);
+    const bottomImage = toImageSource(bottomSrc);
+
+    if (!mainImage || !topImage || !bottomImage) {
+      return null;
+    }
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.collageGrid}>
+          <View style={styles.collageMain}>
+            <Image
+              source={mainImage}
+              style={styles.collageImage}
+              resizeMode="cover"
+            />
+          </View>
+          <View style={styles.collageSide}>
+            <View style={[styles.collageTile, styles.collageTileTop]}>
+              <Image
+                source={topImage}
+                style={styles.collageImage}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={styles.collageTile}>
+              <Image
+                source={bottomImage}
+                style={styles.collageImage}
+                resizeMode="cover"
+              />
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -92,10 +267,12 @@ export default function ComboMeals() {
 
       {/* Combo Meals List */}
       <FlatList
-        data={COMBO_MEAL_IMAGES}
+        data={comboMeals}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        numColumns={3}
+        keyExtractor={(item, index) =>
+          item?.id ? String(item.id) : `combo-${index}`
+        }
+        numColumns={2}
         columnWrapperStyle={{ justifyContent: 'space-between' }}
         contentContainerStyle={{
           padding: GRID_GUTTER,
@@ -159,6 +336,7 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     marginVertical: 8,
     borderRadius: 12,
+    padding: 6,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.1,
@@ -167,7 +345,32 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#f97316',
   },
-  image: { width: '100%', height: '100%' },
+  collageGrid: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  collageMain: {
+    flex: 1,
+    marginRight: 6,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  collageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  collageTile: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  collageTileTop: {
+    marginBottom: 6,
+  },
+  collageImage: {
+    width: '100%',
+    height: '100%',
+  },
   floatingContainer: {
     position: 'absolute',
     bottom: 20,

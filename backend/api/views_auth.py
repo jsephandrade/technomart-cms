@@ -35,6 +35,24 @@ def _wants_cookie_auth(request, data=None):
             return True
     return False
 
+
+def _wants_auth_optional(request, data=None):
+    header_mode = (request.META.get("HTTP_X_AUTH_OPTIONAL", "") or "").lower()
+    if header_mode in {"1", "true", "yes", "on"}:
+        return True
+    query_mode = (request.GET.get("auth_optional") or request.GET.get("silent") or "").lower()
+    if query_mode in {"1", "true", "yes", "on"}:
+        return True
+    if data and isinstance(data, dict):
+        mode = data.get("authOptional")
+        if mode is None:
+            mode = data.get("auth_optional")
+        if mode is None:
+            mode = data.get("silent")
+        if str(mode).lower() in {"1", "true", "yes", "on"}:
+            return True
+    return False
+
 from .views_common import (
     rate_limit,
     _login_rate_key,
@@ -648,15 +666,43 @@ def auth_logout(request):
 @ensure_csrf_cookie
 @require_http_methods(["GET"]) 
 def auth_me(request):
+    optional = _wants_auth_optional(request)
     auth = request.META.get("HTTP_AUTHORIZATION", "")
     if not auth.startswith("Bearer "):
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "missing_token",
+                    "message": "Missing token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Missing token"}, status=401)
     token = auth.split(" ", 1)[1].strip()
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "token_expired",
+                    "message": "Token expired",
+                }
+            )
         return JsonResponse({"success": False, "message": "Token expired"}, status=401)
     except Exception:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "invalid_token",
+                    "message": "Invalid token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Invalid token"}, status=401)
 
     user_id = str(payload.get("sub") or "")
@@ -670,6 +716,15 @@ def auth_me(request):
         if not u and email:
             u = AppUser.objects.filter(email=email).first()
         if not u:
+            if optional:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "authenticated": False,
+                        "reason": "user_not_found",
+                        "message": "User not found",
+                    }
+                )
             raise OperationalError("not found")
         return JsonResponse({"success": True, "user": _safe_user_from_db(u)})
     except (OperationalError, ProgrammingError):
@@ -684,6 +739,15 @@ def auth_me(request):
     if not user and user_id:
         user = next((x for x in USERS if str(x.get("id")) == user_id), None)
     if not user:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "user_not_found",
+                    "message": "User not found",
+                }
+            )
         return JsonResponse({"success": False, "message": "User not found"}, status=404)
     safe_user = {k: v for k, v in user.items() if k != "password"}
     return JsonResponse({"success": True, "user": safe_user})
@@ -1333,10 +1397,19 @@ def refresh_token(request):
     except Exception:
         data = {}
     return_tokens = not _wants_cookie_auth(request, data)
+    optional = _wants_auth_optional(request, data)
     rtoken = (data.get("refreshToken") or "").strip()
     if not rtoken:
         rtoken = _get_refresh_token_from_request(request)
     if not rtoken:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "reason": "missing_refresh_token",
+                    "message": "Missing refresh token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Missing refresh token"}, status=400)
 
     try:
@@ -1345,6 +1418,14 @@ def refresh_token(request):
         rhash = hashlib.sha256(rtoken.encode("utf-8")).hexdigest()
         rt = RefreshToken.objects.select_related("user").filter(token_hash=rhash).first()
         if not rt or not rt.is_active:
+            if optional:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "reason": "invalid_refresh_token",
+                        "message": "Invalid or expired refresh token",
+                    }
+                )
             return JsonResponse({"success": False, "message": "Invalid or expired refresh token"}, status=401)
         user = rt.user
         status_l = (user.status or "").lower()
@@ -1391,6 +1472,14 @@ def refresh_token(request):
 
     out = _rotate_refresh_token_mem(rtoken, request=request)
     if not out:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "reason": "invalid_refresh_token",
+                    "message": "Invalid or expired refresh token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Invalid or expired refresh token"}, status=401)
     try:
         # We don't have DB user here; capture via token decode in _rotate helper is absent

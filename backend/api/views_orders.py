@@ -31,6 +31,71 @@ logger = logging.getLogger(__name__)
 
 
 ORDER_NUMBER_RANDOM_CHARS = "0123456789"
+PAYMENT_CASH_ALIASES = {
+    "cash",
+    "counter",
+    "pay_at_counter",
+    "pay-at-counter",
+    "pay at counter",
+    "cod",
+}
+WALK_IN_CHANNEL_ALIASES = {
+    "walk-in",
+    "walkin",
+    "walk_in",
+    "walk in",
+    "counter",
+}
+
+
+def _normalize_payment_method(value: Optional[str]) -> str:
+    return str(value or "").strip().lower()
+
+
+def _is_cash_method(value: Optional[str]) -> bool:
+    return _normalize_payment_method(value) in PAYMENT_CASH_ALIASES
+
+
+def _is_walk_in_channel(value: Optional[str]) -> bool:
+    return str(value or "").strip().lower() in WALK_IN_CHANNEL_ALIASES
+
+
+def _should_create_pending_cash_payment(payment_method: Optional[str], channel: Optional[str]) -> bool:
+    if not _is_cash_method(payment_method):
+        return False
+    if _is_walk_in_channel(channel):
+        return False
+    return True
+
+
+def _ensure_pending_cash_payment(order, *, amount: Decimal, customer_name: str, channel: str):
+    try:
+        from .models import PaymentTransaction
+    except Exception:
+        return None
+
+    order_ids = [str(order.id)]
+    if order.order_number:
+        order_ids.append(str(order.order_number))
+
+    existing = (
+        PaymentTransaction.objects.filter(order_id__in=order_ids)
+        .exclude(status=PaymentTransaction.STATUS_REFUNDED)
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        return existing
+
+    meta = {"source": "online", "orderNumber": order.order_number}
+    return PaymentTransaction.objects.create(
+        order_id=str(order.id),
+        amount=amount,
+        method=PaymentTransaction.METHOD_CASH,
+        status=PaymentTransaction.STATUS_PENDING,
+        customer=customer_name or "",
+        meta=meta,
+    )
 
 
 def _normalize_order_number_candidate(value: Optional[str]) -> str:
@@ -676,6 +741,45 @@ def _safe_order(o, with_items=True):
             o.auto_advance_duration_seconds or AUTO_ADVANCE_DEFAULT_SECONDS
         ),
     }
+    try:
+        from .models import PaymentTransaction
+
+        order_ids = [str(o.id)]
+        if o.order_number:
+            order_ids.append(str(o.order_number))
+        completed_payment = (
+            PaymentTransaction.objects.filter(
+                order_id__in=order_ids, status=PaymentTransaction.STATUS_COMPLETED
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        payment = completed_payment or (
+            PaymentTransaction.objects.filter(order_id__in=order_ids)
+            .order_by("-created_at")
+            .first()
+        )
+        if payment:
+            data["paymentStatus"] = payment.status
+            data["isPaid"] = payment.status == PaymentTransaction.STATUS_COMPLETED
+            data["payment"] = {
+                "id": str(payment.id),
+                "orderId": str(payment.order_id),
+                "orderNumber": o.order_number,
+                "amount": float(payment.amount),
+                "method": payment.method,
+                "status": payment.status,
+                "reference": payment.reference or "",
+                "customer": payment.customer or "",
+                "processedBy": (
+                    payment.processed_by.email
+                    if getattr(payment, "processed_by", None)
+                    else ""
+                ),
+                "date": (payment.created_at or dj_tz.now()).isoformat(),
+            }
+    except Exception:
+        pass
     data["autoAdvance"] = {
         "phaseSequence": data["phaseSequence"],
         "phaseStartedAt": data["phaseStartedAt"],
@@ -916,6 +1020,14 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
             created_items.append(item)
 
         recalc_order_counters(o, created_items)
+
+        if _should_create_pending_cash_payment(payment_method, requested_channel):
+            _ensure_pending_cash_payment(
+                o,
+                amount=total,
+                customer_name=customer_name,
+                channel=requested_channel,
+            )
 
         order_payload = _safe_order(o, with_items=with_items)
         record_order_event(

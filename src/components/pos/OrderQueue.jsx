@@ -26,6 +26,7 @@ import {
 import { useAuth } from '@/components/AuthContext';
 import { formatOrderNumber } from '@/lib/utils';
 import { toast } from 'sonner';
+import { orderService } from '@/api/services/orderService';
 import {
   buildOrderChecklistItemKeys,
   getOrderChecklist,
@@ -38,6 +39,14 @@ const CHECKLIST_AUTO_PAUSE_REASON = 'checklist_incomplete';
 
 const truthyValues = new Set([true, 'true', 1, '1']);
 const falsyValues = new Set([false, 'false', 0, '0']);
+const PAYMENT_CASH_ALIASES = new Set([
+  'cash',
+  'counter',
+  'pay_at_counter',
+  'pay-at-counter',
+  'pay at counter',
+  'cod',
+]);
 
 const normalizeStatus = (value) => {
   if (!value) return '';
@@ -65,58 +74,6 @@ const STATUS_CANONICAL_MAP = {
 const toCanonicalStatus = (status) => {
   const normalized = normalizeStatus(status);
   return STATUS_CANONICAL_MAP[normalized] || normalized;
-};
-
-const isOrderPaid = (order) => {
-  if (!order || typeof order !== 'object') return false;
-
-  const booleanCandidates = [
-    order.isPaid,
-    order.paid,
-    order.hasPaid,
-    order.payment?.isPaid,
-    order.payment?.paid,
-    order.payment?.hasPaid,
-  ];
-
-  for (const value of booleanCandidates) {
-    if (truthyValues.has(value)) return true;
-    if (falsyValues.has(value)) return false;
-  }
-
-  const statusCandidates = [
-    order.paymentStatus,
-    order.payment_status,
-    order.payment?.status,
-    order.payment?.paymentStatus,
-  ]
-    .map(normalizeStatus)
-    .filter(Boolean);
-
-  const paidStatuses = new Set([
-    'paid',
-    'settled',
-    'complete',
-    'completed',
-    'success',
-    'succeeded',
-  ]);
-  const unpaidStatuses = new Set([
-    'unpaid',
-    'pending',
-    'due',
-    'failed',
-    'declined',
-    'void',
-    'voided',
-  ]);
-
-  for (const status of statusCandidates) {
-    if (paidStatuses.has(status)) return true;
-    if (unpaidStatuses.has(status)) return false;
-  }
-
-  return true;
 };
 
 const getOrderStatus = (order) => {
@@ -164,6 +121,93 @@ const getOrderChannel = (order) => {
   return 'walk-in';
 };
 
+const normalizePaymentMethod = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase();
+
+const getPaymentMethod = (order) => {
+  const candidates = [
+    order?.paymentMethod,
+    order?.payment_method,
+    order?.payment?.method,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      return normalizePaymentMethod(value);
+    }
+  }
+  return '';
+};
+
+const getPaymentStatus = (order) => {
+  const candidates = [
+    order?.paymentStatus,
+    order?.payment_status,
+    order?.payment?.status,
+    order?.payment?.paymentStatus,
+  ];
+  for (const value of candidates) {
+    const normalized = normalizeStatus(value);
+    if (normalized) return normalized;
+  }
+  return '';
+};
+
+const isCashMethod = (method) =>
+  method ? PAYMENT_CASH_ALIASES.has(normalizePaymentMethod(method)) : false;
+
+const isOrderPaid = (order) => {
+  if (!order || typeof order !== 'object') return false;
+
+  const booleanCandidates = [
+    order.isPaid,
+    order.paid,
+    order.hasPaid,
+    order.payment?.isPaid,
+    order.payment?.paid,
+    order.payment?.hasPaid,
+  ];
+
+  for (const value of booleanCandidates) {
+    if (truthyValues.has(value)) return true;
+    if (falsyValues.has(value)) return false;
+  }
+
+  const statusCandidates = [getPaymentStatus(order)].filter(Boolean);
+
+  const paidStatuses = new Set([
+    'paid',
+    'settled',
+    'complete',
+    'completed',
+    'success',
+    'succeeded',
+  ]);
+  const unpaidStatuses = new Set([
+    'unpaid',
+    'pending',
+    'due',
+    'failed',
+    'declined',
+    'void',
+    'voided',
+  ]);
+
+  for (const status of statusCandidates) {
+    if (paidStatuses.has(status)) return true;
+    if (unpaidStatuses.has(status)) return false;
+  }
+
+  const channel = getOrderChannel(order);
+  const method = getPaymentMethod(order);
+  if (channel !== 'walk-in' && isCashMethod(method)) {
+    return false;
+  }
+
+  return true;
+};
+
 const READY_STATUS_SET = new Set(['ready', 'staged', 'handoff']);
 
 const shouldDisableReadyAutoAdvance = (order, statusOverride = null) => {
@@ -202,6 +246,32 @@ const formatStatusLabel = (status) => {
     .join(' ');
 };
 
+const formatPaymentStatusLabel = (status) => {
+  const normalized = normalizeStatus(status);
+  if (!normalized) return 'Pending';
+  const map = {
+    paid: 'Paid',
+    settled: 'Paid',
+    complete: 'Paid',
+    completed: 'Paid',
+    success: 'Paid',
+    succeeded: 'Paid',
+    pending: 'Pending',
+    unpaid: 'Pending',
+    due: 'Pending',
+    failed: 'Failed',
+    declined: 'Failed',
+    void: 'Voided',
+    voided: 'Voided',
+    refunded: 'Refunded',
+  };
+  if (map[normalized]) return map[normalized];
+  return normalized
+    .split(/[_\s-]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 const formatCountdown = (seconds) => {
   const value = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
   const mins = Math.floor(value / 60);
@@ -209,9 +279,15 @@ const formatCountdown = (seconds) => {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 };
 
-const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
+const OrderQueue = ({
+  orderQueue,
+  refreshQueue,
+  updateOrderStatus,
+  updateOrderAutoFlow,
+}) => {
   const { can } = useAuth();
   const [statusUpdating, setStatusUpdating] = useState({});
+  const [paymentUpdating, setPaymentUpdating] = useState({});
   const [checkedItems, setCheckedItems] = useState(() => getOrderChecklist());
   const autoFlowInFlightRef = useRef(new Set());
   const queueOrders = useMemo(() => {
@@ -249,9 +325,13 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
   }, []);
 
   const visibleOrders = useMemo(() => {
-    return queueOrders
-      .filter((order) => isOrderPaid(order))
-      .filter((order) => getOrderStatus(order) !== 'completed');
+    return queueOrders.filter((order) => {
+      if (getOrderStatus(order) === 'completed') return false;
+      if (isOrderPaid(order)) return true;
+      const channel = getOrderChannel(order);
+      const method = getPaymentMethod(order);
+      return channel !== 'walk-in' && isCashMethod(method);
+    });
   }, [queueOrders]);
 
   const walkInOrders = useMemo(
@@ -343,6 +423,50 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
       await runStatusUpdates(orderId, targetStatus);
     },
     [runStatusUpdates]
+  );
+
+  const handleMarkPaid = useCallback(
+    async (order) => {
+      if (!order?.id) return;
+      const totalValue = Number(
+        order.total ?? order.total_amount ?? order.totalAmount ?? 0
+      );
+      const amount = Number.isFinite(totalValue) ? totalValue : 0;
+      if (!amount) {
+        toast.error('Payment Failed', {
+          description: 'Order total is missing.',
+        });
+        return;
+      }
+      setPaymentUpdating((prev) => ({ ...prev, [order.id]: true }));
+      try {
+        const response = await orderService.processPayment(order.id, {
+          amount,
+          method: 'cash',
+          tenderedAmount: amount,
+        });
+        if (!response?.success) {
+          throw new Error(response?.message || 'Failed to confirm payment');
+        }
+        const label =
+          formatOrderNumber(order.orderNumber) || order.orderNumber || order.id;
+        toast.success('Payment Confirmed', {
+          description: `Order #${label} marked as paid.`,
+        });
+        if (typeof refreshQueue === 'function') {
+          await refreshQueue();
+        }
+      } catch (err) {
+        const message =
+          err?.message || err?.details?.message || 'Failed to confirm payment';
+        toast.error('Payment Failed', {
+          description: message,
+        });
+      } finally {
+        setPaymentUpdating((prev) => ({ ...prev, [order.id]: false }));
+      }
+    },
+    [refreshQueue]
   );
 
   const handleStartPreparing = useCallback(
@@ -753,6 +877,20 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                     can('order.status.update') &&
                     !disableAutoAdvance
                 );
+                const channel = getOrderChannel(order);
+                const paymentMethod = getPaymentMethod(order);
+                const paymentStatus = getPaymentStatus(order);
+                const isPaid = isOrderPaid(order);
+                const showPayment =
+                  channel !== 'walk-in' && isCashMethod(paymentMethod);
+                const showMarkPaid =
+                  showPayment && !isPaid && can('payment.process');
+                const paymentLabel = isPaid
+                  ? 'Paid'
+                  : formatPaymentStatusLabel(paymentStatus);
+                const paymentBadgeClasses = isPaid
+                  ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                  : 'border-amber-200 bg-amber-100 text-amber-800';
 
                 return (
                   <div key={order.id} className="p-4 flex flex-col gap-3">
@@ -783,6 +921,40 @@ const OrderQueue = ({ orderQueue, updateOrderStatus, updateOrderAutoFlow }) => {
                         {renderAutoBadge(order)}
                       </div>
                     </div>
+
+                    {showPayment && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-slate-200 bg-white/70 px-3 py-2 text-xs">
+                        <span className="text-muted-foreground">
+                          Payment ({paymentMethod || 'cash'})
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={paymentBadgeClasses}
+                          >
+                            {paymentLabel}
+                          </Badge>
+                          {showMarkPaid && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              disabled={paymentUpdating[order.id]}
+                              onClick={() => handleMarkPaid(order)}
+                            >
+                              {paymentUpdating[order.id] ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  Updating
+                                </>
+                              ) : (
+                                'Mark Paid'
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(

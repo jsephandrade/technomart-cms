@@ -11,7 +11,7 @@ from rest_framework import serializers
 from decimal import Decimal
 
 from django.http import JsonResponse
-from api.models import Order, OrderItem, MenuItem
+from api.models import Order, OrderItem, MenuItem, PaymentTransaction
 from .serializers import OrderSerializer
 from notifications.models import Notification
 from decimal import Decimal
@@ -20,6 +20,47 @@ from django.utils import timezone as dj_tz
 import uuid
 from menu.models import MenuItem  # adjust import to your menu app
 from django.views.decorators.http import require_POST
+
+PAYMENT_CASH_ALIASES = {
+    "cash",
+    "counter",
+    "pay_at_counter",
+    "pay-at-counter",
+    "pay at counter",
+    "cod",
+}
+
+
+def _normalize_payment_method(value):
+    return str(value or "").strip().lower()
+
+
+def _is_cash_method(value):
+    return _normalize_payment_method(value) in PAYMENT_CASH_ALIASES
+
+
+def _ensure_pending_cash_payment(order, *, customer_name=""):
+    order_ids = [str(order.id)]
+    if order.order_number:
+        order_ids.append(str(order.order_number))
+    existing = (
+        PaymentTransaction.objects.filter(order_id__in=order_ids)
+        .exclude(status=PaymentTransaction.STATUS_REFUNDED)
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        return existing
+
+    meta = {"source": "online", "orderNumber": order.order_number}
+    return PaymentTransaction.objects.create(
+        order_id=str(order.id),
+        amount=order.total_amount or Decimal("0.00"),
+        method=PaymentTransaction.METHOD_CASH,
+        status=PaymentTransaction.STATUS_PENDING,
+        customer=customer_name or order.customer_name or "",
+        meta=meta,
+    )
 from django.utils.crypto import get_random_string
 
 ORDER_NUMBER_RANDOM_CHARS = "0123456789"
@@ -236,6 +277,12 @@ def confirm_payment(request, order_number):
         order.payment_method = method
         order.status = "pending"  # start at pending
         order.save()
+
+        if _is_cash_method(method):
+            _ensure_pending_cash_payment(
+                order,
+                customer_name=request.user.get_full_name() or request.user.username,
+            )
 
         # Optionally, add credit points if needed
         user = order.placed_by

@@ -425,6 +425,42 @@ def order_payment(request, order_id: str):
     if already_paid and not payload.get("idempotency_key"):
         return JsonResponse({"success": True, "data": _serialize_payment(already_paid, order)})
 
+    pending_payment = (
+        PaymentTransaction.objects.filter(
+            order_id=str(order_id), status=PaymentTransaction.STATUS_PENDING
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if pending_payment:
+        pending_payment.status = PaymentTransaction.STATUS_COMPLETED
+        pending_payment.amount = payload["amount"]
+        pending_payment.reference = payload["reference"] or pending_payment.reference
+        pending_payment.customer = payload["customer"] or pending_payment.customer
+        pending_payment.processed_by = actor if hasattr(actor, "id") else None
+        meta = pending_payment.meta or {}
+        meta.update(_payment_meta(payload))
+        pending_payment.meta = meta
+        pending_payment.save(
+            update_fields=[
+                "status",
+                "amount",
+                "reference",
+                "customer",
+                "processed_by",
+                "meta",
+                "updated_at",
+            ]
+        )
+
+        _update_order_after_payment(order, payload["method"])
+        _reward_loyalty_points(order.placed_by_id or getattr(actor, "id", None))
+        _audit_payment(request, actor, pending_payment)
+
+        return JsonResponse(
+            {"success": True, "data": _serialize_payment(pending_payment, order)}
+        )
+
     payment = PaymentTransaction.objects.create(
         order_id=str(order_id),
         amount=payload["amount"],

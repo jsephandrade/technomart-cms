@@ -27,7 +27,7 @@ const CARD_WIDTH = (width - 40) / 2;
 
 export default function ComboMeals() {
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
+  const { cart, addToCart, decreaseQuantity, removeFromCart } = useCart();
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,6 +72,14 @@ export default function ComboMeals() {
     );
   }
 
+  const handleDecrease = (itemId, qty) => {
+    if (qty <= 1) {
+      removeFromCart(itemId);
+      return;
+    }
+    decreaseQuantity(itemId);
+  };
+
   const renderItem = ({ item }) => {
     const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
 
@@ -84,7 +92,7 @@ export default function ComboMeals() {
         <View style={styles.controls}>
           <TouchableOpacity
             style={styles.controlBtn}
-            onPress={() => decreaseQuantity(item.id)}
+            onPress={() => handleDecrease(item.id, qty)}
           >
             <Ionicons name="remove" size={18} color="#fff" />
           </TouchableOpacity>

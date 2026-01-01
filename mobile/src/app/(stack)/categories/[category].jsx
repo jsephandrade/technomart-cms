@@ -18,7 +18,7 @@ import { resolveImageSource } from '../../../utils/image';
 export default function CategoryScreen() {
   const { category } = useLocalSearchParams();
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
+  const { cart, addToCart, decreaseQuantity, removeFromCart } = useCart();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +113,13 @@ export default function CategoryScreen() {
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const handleCheckout = () => router.push('/customer-cart');
   const handleAddMoreItems = () => router.push('/home-dashboard');
+  const handleDecrease = (itemId, qty) => {
+    if (qty <= 1) {
+      removeFromCart(itemId);
+      return;
+    }
+    decreaseQuantity(itemId);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff7ed' }}>
@@ -265,7 +272,7 @@ export default function CategoryScreen() {
                       }}
                     >
                       <TouchableOpacity
-                        onPress={() => decreaseQuantity(item.id)}
+                        onPress={() => handleDecrease(item.id, qty)}
                         style={{
                           backgroundColor: '#f97316',
                           padding: 6,

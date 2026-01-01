@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   price: {
-    fontSize: 14,
+    fontSize: 18,
     fontFamily: 'Roboto_400Regular',
     color: '#777',
     marginBottom: 8,

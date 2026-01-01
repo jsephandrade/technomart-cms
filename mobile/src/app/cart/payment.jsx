@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ImageBackground,
   Image,
+  Switch,
   Modal,
   Animated,
   Alert,
@@ -18,7 +19,7 @@ import {
   Roboto_400Regular,
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
-import { getGcashLink, confirmPayment } from '../../api/api';
+import { getGcashLink, confirmPayment, getCreditPoints } from '../../api/api';
 
 export default function PaymentPage() {
   const router = useRouter();
@@ -26,7 +27,10 @@ export default function PaymentPage() {
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [creditPoints, setCreditPoints] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const totalAmount = Number(total) || 0;
+  const pointsEligible = creditPoints >= totalAmount && totalAmount > 0;
 
   useEffect(() => {
     if (showSuccess) {
@@ -37,6 +41,27 @@ export default function PaymentPage() {
       }).start();
     } else fadeAnim.setValue(0);
   }, [showSuccess]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadPoints = async () => {
+      try {
+        const points = await getCreditPoints();
+        if (isMounted) {
+          setCreditPoints(Number(points) || 0);
+        }
+      } catch (err) {
+        console.warn('Failed to load credit points', err);
+        if (isMounted) {
+          setCreditPoints(0);
+        }
+      }
+    };
+    loadPoints();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   let [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
   if (!fontsLoaded) return null;
@@ -100,6 +125,31 @@ export default function PaymentPage() {
       } catch {
         Alert.alert('Error', 'Could not confirm counter payment.');
       }
+    } else if (method === 'points') {
+      if (!pointsEligible) {
+        Alert.alert(
+          'Not enough points',
+          'Your credit points are not enough to cover this order.'
+        );
+        return;
+      }
+      try {
+        const res = await confirmPayment(orderId, method);
+        if (res.success) {
+          setShowSuccess(true);
+          setTimeout(() => {
+            setShowSuccess(false);
+            router.push({
+              pathname: '/order-tracking',
+              params: { orderId: orderId },
+            });
+          }, 4000);
+        } else {
+          Alert.alert('Payment Failed', res.message);
+        }
+      } catch {
+        Alert.alert('Error', 'Could not confirm points payment.');
+      }
     }
   };
 
@@ -149,7 +199,7 @@ export default function PaymentPage() {
         <View style={styles.receiptRow}>
           <Text style={[styles.label, { fontWeight: 'bold' }]}>Total</Text>
           <Text style={[styles.value, { fontWeight: 'bold' }]}>
-            ₱{parseFloat(total).toFixed(2)}
+            ₱{totalAmount.toFixed(2)}
           </Text>
         </View>
       </View>
@@ -159,7 +209,9 @@ export default function PaymentPage() {
         style={[
           styles.paymentBtn,
           selectedPayment === 'gcash' && styles.selectedBtn,
+          selectedPayment === 'points' && styles.disabledBtn,
         ]}
+        disabled={selectedPayment === 'points'}
         onPress={() => handlePaymentSelect('gcash')}
       >
         <Image
@@ -173,7 +225,9 @@ export default function PaymentPage() {
         style={[
           styles.paymentBtn,
           selectedPayment === 'counter' && styles.selectedBtn,
+          selectedPayment === 'points' && styles.disabledBtn,
         ]}
+        disabled={selectedPayment === 'points'}
         onPress={() => handlePaymentSelect('counter')}
       >
         <Image
@@ -182,6 +236,33 @@ export default function PaymentPage() {
         />
         <Text style={styles.paymentText}>Pay at Counter</Text>
       </TouchableOpacity>
+
+      <View style={styles.pointsCard}>
+        <View style={styles.pointsInfo}>
+          <Text style={styles.pointsTitle}>Use Points</Text>
+          <Text style={styles.pointsSubtitle}>
+            Available: {creditPoints.toFixed(2)} pts
+          </Text>
+          {!pointsEligible && (
+            <Text style={styles.pointsHint}>
+              Not enough points to cover this order.
+            </Text>
+          )}
+        </View>
+        <Switch
+          value={selectedPayment === 'points'}
+          onValueChange={(value) => {
+            if (value) {
+              handlePaymentSelect('points');
+            } else {
+              setSelectedPayment(null);
+            }
+          }}
+          disabled={!pointsEligible}
+          thumbColor={selectedPayment === 'points' ? '#f97316' : '#f3f4f6'}
+          trackColor={{ false: '#e5e7eb', true: '#fed7aa' }}
+        />
+      </View>
 
       {loading && (
         <Text style={{ textAlign: 'center', marginTop: 10 }}>
@@ -251,8 +332,44 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#22c55e',
   },
+  disabledBtn: {
+    opacity: 0.6,
+  },
   icon: { width: 50, height: 40 },
   paymentText: { fontSize: 16, fontWeight: '600', marginLeft: 10 },
+  pointsCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '85%',
+    alignSelf: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 6,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#f3d6b7',
+  },
+  pointsInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  pointsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  pointsSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  pointsHint: {
+    fontSize: 11,
+    color: '#b45309',
+    marginTop: 6,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.3)',

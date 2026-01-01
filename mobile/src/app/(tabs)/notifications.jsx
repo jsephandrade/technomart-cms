@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { useNotifications } from '../../context/NotificationContext';
 
 const typeStyles = {
@@ -28,6 +30,7 @@ const formatTime = (value) => {
 export default function NotificationsScreen() {
   const { notifications, loading, refresh } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
+  const [fontsLoaded] = useFonts({ Roboto_700Bold });
 
   const sortedNotifications = useMemo(() => {
     const list = Array.isArray(notifications) ? notifications : [];
@@ -73,14 +76,59 @@ export default function NotificationsScreen() {
     );
   };
 
+  const renderHeader = () => (
+    <>
+      <LinearGradient
+        colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
+        start={[0, 0]}
+        end={[1, 1]}
+        style={styles.heroCard}
+      >
+        <View style={styles.heroRow}>
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="notifications-outline" size={22} color="#1F2937" />
+          </View>
+          <View style={styles.heroContent}>
+            <Text style={styles.heroTitle}>Alerts</Text>
+            <Text style={styles.heroSubtitle}>
+              Latest updates and reminders
+            </Text>
+          </View>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>
+              {sortedNotifications.length} updates
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <View style={styles.sectionHeader}>
+        <View>
+          <Text style={styles.sectionTitle}>Notifications</Text>
+          <Text style={styles.sectionSubtitle}>Stay in the loop</Text>
+        </View>
+        <View style={styles.sectionBadge}>
+          <Text style={styles.sectionBadgeText}>
+            {sortedNotifications.length}
+          </Text>
+        </View>
+      </View>
+    </>
+  );
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#F97316" />
+        <Text style={styles.loadingText}>Loading alerts...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: 16 }]}>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <Text style={styles.headerSubtitle}>
-          {sortedNotifications.length} updates
-        </Text>
-      </View>
+      <View style={styles.backgroundGlowTop} />
+      <View style={styles.backgroundGlowBottom} />
 
       {loading && !sortedNotifications.length ? (
         <View style={styles.loadingWrap}>
@@ -93,6 +141,7 @@ export default function NotificationsScreen() {
             item?.id ? String(item.id) : `${item?.title || 'notif'}-${index}`
           }
           renderItem={renderItem}
+          ListHeaderComponent={renderHeader}
           contentContainerStyle={[
             styles.listContent,
             !sortedNotifications.length && styles.emptyContent,
@@ -105,7 +154,7 @@ export default function NotificationsScreen() {
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
+            <View style={styles.emptyCard}>
               <Ionicons name="notifications-off" size={42} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>All caught up</Text>
               <Text style={styles.emptySubtitle}>
@@ -124,22 +173,99 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFF7EE',
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+  backgroundGlowTop: {
+    position: 'absolute',
+    top: -120,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: '#FFE5C8',
+    opacity: 0.7,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+  backgroundGlowBottom: {
+    position: 'absolute',
+    bottom: -140,
+    left: -100,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: '#FFD6AE',
+    opacity: 0.6,
+  },
+  heroCard: {
+    margin: 16,
+    borderRadius: 24,
+    padding: 16,
+    overflow: 'hidden',
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FFE7C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroContent: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontFamily: 'Roboto_700Bold',
     color: '#111827',
   },
-  headerSubtitle: {
-    marginTop: 4,
+  heroSubtitle: {
     fontSize: 12,
     color: '#6B7280',
+    marginTop: 2,
+  },
+  heroBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  heroBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  sectionBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  sectionBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
   },
   listContent: {
-    paddingHorizontal: 16,
     paddingBottom: 40,
   },
   emptyContent: {
@@ -151,12 +277,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     backgroundColor: '#fff',
     borderRadius: 18,
-    padding: 14,
+    padding: 12,
+    marginHorizontal: 16,
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
   iconWrap: {
@@ -192,11 +319,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 6,
   },
-  emptyState: {
+  emptyCard: {
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 18,
     padding: 24,
+    marginHorizontal: 16,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -219,5 +347,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF7EE',
+  },
+  loadingText: {
+    marginTop: 8,
+    color: '#F97316',
+    fontFamily: 'Roboto_700Bold',
   },
 });

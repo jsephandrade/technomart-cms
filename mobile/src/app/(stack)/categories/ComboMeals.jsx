@@ -233,7 +233,7 @@ export default function ComboMeals() {
           </View>
         </View>
         <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.price}>ƒ,ñ{item.price}</Text>
+        <Text style={styles.price}>₱{item.price}</Text>
 
         <View style={styles.controls}>
           <TouchableOpacity

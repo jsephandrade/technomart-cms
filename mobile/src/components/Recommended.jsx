@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   priceText: {
-    fontSize: 12,
+    fontSize: 25,
     fontWeight: '700',
     color: '#9A3412',
   },

@@ -6,6 +6,7 @@ import os
 import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from django.db import connection
@@ -644,6 +645,7 @@ def auth_logout(request):
     return resp
 
 
+@ensure_csrf_cookie
 @require_http_methods(["GET"]) 
 def auth_me(request):
     auth = request.META.get("HTTP_AUTHORIZATION", "")

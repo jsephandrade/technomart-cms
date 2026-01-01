@@ -25,6 +25,7 @@ const { width } = Dimensions.get('window');
 const GRID_GUTTER = 12;
 const CARD_WIDTH = (width - GRID_GUTTER * 3) / 2;
 const CARD_HEIGHT = CARD_WIDTH;
+const COLLAGE_GAP = 6;
 
 const resolveImageSrc = (item) => {
   if (!item) return null;
@@ -336,7 +337,7 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     marginVertical: 8,
     borderRadius: 12,
-    padding: 6,
+    padding: COLLAGE_GAP,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.1,
@@ -350,8 +351,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   collageMain: {
-    flex: 1,
-    marginRight: 6,
+    flex: 2,
+    marginRight: COLLAGE_GAP,
     borderRadius: 10,
     overflow: 'hidden',
   },
@@ -365,7 +366,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   collageTileTop: {
-    marginBottom: 6,
+    marginBottom: COLLAGE_GAP,
   },
   collageImage: {
     width: '100%',

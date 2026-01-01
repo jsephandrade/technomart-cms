@@ -35,9 +35,9 @@ const COLLAGE_GAP = 6;
 const formatCurrency = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return 'PHP --';
+    return '\u20b1 --';
   }
-  return `PHP ${numeric.toFixed(2)}`;
+  return `\u20b1 ${numeric.toFixed(2)}`;
 };
 
 const resolveItemImage = (item) => {

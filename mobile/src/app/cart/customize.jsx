@@ -21,16 +21,39 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const SIZE_OPTIONS = [
-  { label: 'Regular', value: 'Regular', price: 0, hint: 'Standard serving' },
-  { label: 'Large', value: 'Large', price: 15, hint: 'More to enjoy' },
-  { label: 'Family', value: 'Family', price: 30, hint: 'Shareable size' },
+  {
+    label: 'Regular',
+    value: 'Regular',
+    price: 0,
+    hint: 'Standard serving',
+    icon: 'restaurant-outline',
+  },
+  {
+    label: 'Large',
+    value: 'Large',
+    price: 15,
+    hint: 'More to enjoy',
+    icon: 'restaurant',
+  },
+  {
+    label: 'Family',
+    value: 'Family',
+    price: 30,
+    hint: 'Shareable size',
+    icon: 'people-outline',
+  },
 ];
 
 const ADD_ONS = [
-  { key: 'extra_rice', label: 'Extra Rice', price: 10 },
-  { key: 'extra_sauce', label: 'Extra Sauce', price: 5 },
-  { key: 'cheese', label: 'Cheese', price: 12 },
-  { key: 'bacon', label: 'Bacon', price: 20 },
+  { key: 'extra_rice', label: 'Extra Rice', price: 10, icon: 'nutrition' },
+  {
+    key: 'extra_sauce',
+    label: 'Extra Sauce',
+    price: 5,
+    icon: 'color-fill-outline',
+  },
+  { key: 'cheese', label: 'Cheese', price: 12, icon: 'pizza-outline' },
+  { key: 'bacon', label: 'Bacon', price: 20, icon: 'flame-outline' },
 ];
 
 const formatPeso = (value) => `\u20b1${Number(value || 0)}`;
@@ -181,15 +204,32 @@ export default function CustomizeOrderScreen() {
           </View>
         </View>
         <View style={styles.optionCard}>
-          {SIZE_OPTIONS.map((option) => {
+          {SIZE_OPTIONS.map((option, index) => {
             const selected = option.value === selectedSize?.value;
+            const isLast = index === SIZE_OPTIONS.length - 1;
             return (
               <TouchableOpacity
                 key={option.value}
-                style={[styles.optionRow, selected && styles.optionRowActive]}
+                style={[
+                  styles.optionRow,
+                  !isLast && styles.optionRowSpacing,
+                  selected && styles.optionRowActive,
+                ]}
                 onPress={() => setSelectedSize(option)}
               >
-                <View>
+                <View
+                  style={[
+                    styles.optionIconWrap,
+                    selected && styles.optionIconWrapActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={selected ? '#fff' : '#F97316'}
+                  />
+                </View>
+                <View style={styles.optionBody}>
                   <Text
                     style={[
                       styles.optionLabel,
@@ -201,21 +241,28 @@ export default function CustomizeOrderScreen() {
                   <Text style={styles.optionHint}>{option.hint}</Text>
                 </View>
                 <View style={styles.optionMeta}>
-                  <Text
+                  <View
                     style={[
-                      styles.optionPrice,
-                      selected && styles.optionPriceActive,
+                      styles.optionPriceChip,
+                      selected && styles.optionPriceChipActive,
                     ]}
                   >
-                    {option.price ? `+${formatPeso(option.price)}` : 'Included'}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.optionPrice,
+                        selected && styles.optionPriceActive,
+                      ]}
+                    >
+                      {option.price
+                        ? `+${formatPeso(option.price)}`
+                        : 'Included'}
+                    </Text>
+                  </View>
                   {selected && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color="#F97316"
-                      style={styles.optionCheck}
-                    />
+                    <View style={styles.optionSelectedBadge}>
+                      <Ionicons name="checkmark" size={12} color="#9A3412" />
+                      <Text style={styles.optionSelectedText}>Selected</Text>
+                    </View>
                   )}
                 </View>
               </TouchableOpacity>
@@ -230,15 +277,32 @@ export default function CustomizeOrderScreen() {
           </View>
         </View>
         <View style={styles.optionCard}>
-          {ADD_ONS.map((option) => {
+          {ADD_ONS.map((option, index) => {
             const selected = selectedAddOns.includes(option.key);
+            const isLast = index === ADD_ONS.length - 1;
             return (
               <TouchableOpacity
                 key={option.key}
-                style={[styles.optionRow, selected && styles.optionRowActive]}
+                style={[
+                  styles.optionRow,
+                  !isLast && styles.optionRowSpacing,
+                  selected && styles.optionRowActive,
+                ]}
                 onPress={() => toggleAddon(option.key)}
               >
-                <View>
+                <View
+                  style={[
+                    styles.optionIconWrap,
+                    selected && styles.optionIconWrapActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={selected ? '#fff' : '#F97316'}
+                  />
+                </View>
+                <View style={styles.optionBody}>
                   <Text
                     style={[
                       styles.optionLabel,
@@ -249,21 +313,26 @@ export default function CustomizeOrderScreen() {
                   </Text>
                 </View>
                 <View style={styles.optionMeta}>
-                  <Text
+                  <View
                     style={[
-                      styles.optionPrice,
-                      selected && styles.optionPriceActive,
+                      styles.optionPriceChip,
+                      selected && styles.optionPriceChipActive,
                     ]}
                   >
-                    +{formatPeso(option.price)}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.optionPrice,
+                        selected && styles.optionPriceActive,
+                      ]}
+                    >
+                      +{formatPeso(option.price)}
+                    </Text>
+                  </View>
                   {selected && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color="#F97316"
-                      style={styles.optionCheck}
-                    />
+                    <View style={styles.optionSelectedBadge}>
+                      <Ionicons name="checkmark" size={12} color="#9A3412" />
+                      <Text style={styles.optionSelectedText}>Selected</Text>
+                    </View>
                   )}
                 </View>
               </TouchableOpacity>
@@ -418,7 +487,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     backgroundColor: '#fff',
     borderRadius: 18,
-    paddingVertical: 6,
+    padding: 12,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -427,15 +496,34 @@ const styles = StyleSheet.create({
   },
   optionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3D6B7',
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFF7EE',
+  },
+  optionRowSpacing: {
+    marginBottom: 10,
   },
   optionRowActive: {
-    backgroundColor: '#FFF3E4',
+    backgroundColor: '#FFE7C7',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  optionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#FFF0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  optionIconWrapActive: {
+    backgroundColor: '#F97316',
+  },
+  optionBody: {
+    flex: 1,
   },
   optionLabel: {
     fontSize: 14,
@@ -451,8 +539,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   optionMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  optionPriceChip: {
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+  },
+  optionPriceChipActive: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
   },
   optionPrice: {
     fontSize: 12,
@@ -460,10 +560,22 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   optionPriceActive: {
-    color: '#F97316',
+    color: '#9A3412',
   },
-  optionCheck: {
-    marginLeft: 8,
+  optionSelectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF0E0',
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginTop: 6,
+  },
+  optionSelectedText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9A3412',
+    marginLeft: 4,
   },
   summaryCard: {
     marginHorizontal: 16,

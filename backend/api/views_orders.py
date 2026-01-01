@@ -1709,6 +1709,16 @@ def order_item_state(request, oid, item_id):
                 )
                 update_order_fields.append("handoff_code")
             order.save(update_fields=update_order_fields)
+            if auto_transition in {"staged", "handoff"} and previous_order_state not in {
+                "staged",
+                "handoff",
+            }:
+                try:
+                    from .notification_triggers import trigger_order_ready_for_pickup
+
+                    trigger_order_ready_for_pickup(order)
+                except Exception:
+                    pass
             record_order_event(
                 order,
                 event_type="order.status_auto",
@@ -2016,6 +2026,19 @@ def order_status(request, oid):
             o.save(update_fields=update_fields)
         else:
             o.save(update_fields=["updated_at"])
+
+        if status_changed:
+            new_canonical = canonical_status(o.status)
+            if new_canonical in {"staged", "handoff"} and previous_canonical not in {
+                "staged",
+                "handoff",
+            }:
+                try:
+                    from .notification_triggers import trigger_order_ready_for_pickup
+
+                    trigger_order_ready_for_pickup(o)
+                except Exception:
+                    pass
 
         # Optional: decrement inventory on completion using simple recipe from MenuItem.ingredients
         if canonical_status(o.status) == "completed":

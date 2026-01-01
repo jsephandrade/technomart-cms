@@ -228,6 +228,51 @@ def trigger_order_completed(order):
         logger.error(f"Failed to trigger order completed notification: {e}")
 
 
+def _build_pickup_instructions(order) -> str:
+    parts: List[str] = []
+    shelf_slot = getattr(order, "shelf_slot", None)
+    if shelf_slot:
+        parts.append(f" Pick up at shelf {shelf_slot}.")
+    handoff_code = getattr(order, "handoff_code", None)
+    if handoff_code:
+        parts.append(f" Handoff code: {handoff_code}.")
+    return "".join(parts)
+
+
+def trigger_order_ready_for_pickup(order):
+    """
+    Trigger notification when an order is ready for pickup.
+
+    Args:
+        order: Order instance
+    """
+    try:
+        user_id = getattr(order, "placed_by_id", None)
+        if not user_id:
+            return
+
+        order_number = getattr(order, "order_number", None) or getattr(order, "id", "")
+        pickup_instructions = _build_pickup_instructions(order)
+        notification_data = format_notification(
+            'order_ready',
+            order_number=order_number,
+            pickup_instructions=pickup_instructions,
+        )
+
+        _create_notification(
+            user_id=user_id,
+            title=notification_data['title'],
+            message=notification_data['message'],
+            notification_type=notification_data['type'],
+            meta={'order_id': str(order.id), 'event_type': 'order_ready'},
+        )
+
+        logger.info(f"Order ready notification triggered for order {order.id}")
+
+    except Exception as e:
+        logger.error(f"Failed to trigger order ready notification: {e}")
+
+
 # ========== Payment Triggers ==========
 
 def trigger_payment_received(order, amount, payment_method):

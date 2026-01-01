@@ -263,6 +263,17 @@ def auto_advance_orders(limit: int = 50):
                 update_fields = list(dict.fromkeys(update_fields))
                 order.save(update_fields=update_fields)
 
+                if target_canonical in {"staged", "handoff"} and current_canonical not in {
+                    "staged",
+                    "handoff",
+                }:
+                    try:
+                        from .notification_triggers import trigger_order_ready_for_pickup
+
+                        trigger_order_ready_for_pickup(order)
+                    except Exception:
+                        pass
+
                 try:
                     recalc_order_counters(order)
                 except Exception:

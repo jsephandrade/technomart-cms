@@ -55,6 +55,12 @@ NEW_ORDER = NotificationTemplate(
     notification_type="info"
 )
 
+ORDER_READY = NotificationTemplate(
+    title="Order Ready for Pickup",
+    message_template="Order #{order_number} is ready for pickup.{pickup_instructions}",
+    notification_type="success"
+)
+
 ORDER_COMPLETED = NotificationTemplate(
     title="Order Completed",
     message_template="Order #{order_number} has been completed. Total: ₱{total_amount}.",
@@ -166,6 +172,7 @@ TEMPLATES = {
 
     # Orders
     'new_order': NEW_ORDER,
+    'order_ready': ORDER_READY,
     'order_completed': ORDER_COMPLETED,
     'order_cancelled': ORDER_CANCELLED,
 

@@ -40,6 +40,7 @@ class PendingUserGateMiddleware:
         "/api/orders/apply-voucher/",
         '/api/menu/menu-items/',
         "/api/accounts/change-password/",
+        "/api/accounts/update-avatar/",
         "/api/create_order/",
         "/api/feedback/",
         "/orders/user-credit-points/",

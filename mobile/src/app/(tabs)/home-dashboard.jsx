@@ -391,7 +391,7 @@ export default function HomeDashboardScreen() {
 
         {menuItems.length > 0 && (
           <View style={styles.recommendedWrap}>
-            <Recommended items={menuItems.slice(0, 6)} />
+            <Recommended items={menuItems.slice(0, 6)} allItems={menuItems} />
           </View>
         )}
 

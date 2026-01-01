@@ -129,7 +129,7 @@ const resolveComboImages = (item, imageById) => {
   });
 };
 
-export default function Recommended({ items = [] }) {
+export default function Recommended({ items = [], allItems = [] }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [focusedItem, setFocusedItem] = useState(null);
   const { addToCart } = useCart();
@@ -144,13 +144,15 @@ export default function Recommended({ items = [] }) {
 
   const imageById = useMemo(() => {
     const map = new Map();
-    items.forEach((entry) => {
+    const sourceItems =
+      Array.isArray(allItems) && allItems.length > 0 ? allItems : items;
+    sourceItems.forEach((entry) => {
       if (!entry || entry.id === undefined || entry.id === null) return;
       const src = resolveItemImage(entry);
       if (src) map.set(String(entry.id), src);
     });
     return map;
-  }, [items]);
+  }, [allItems, items]);
 
   const data = useMemo(() => {
     return items

@@ -1,5 +1,5 @@
 // ComboMeals.jsx
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Dimensions,
   ImageBackground,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -19,46 +18,29 @@ import {
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
 import { useCart } from '../../../context/CartContext';
-import { fetchMenuItems } from '../../../api/api';
-import { resolveImageSource } from '../../../utils/image';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 40) / 2;
+const GRID_GUTTER = 12;
+const CARD_WIDTH = (width - GRID_GUTTER * 4) / 3;
+const CARD_HEIGHT = CARD_WIDTH;
+const COMBO_MEAL_IMAGES = [
+  { id: 'combo-1', image: require('../../../../assets/chicken.png') },
+  { id: 'combo-2', image: require('../../../../assets/ginaling.png') },
+  { id: 'combo-3', image: require('../../../../assets/ngohiong.png') },
+];
 
 export default function ComboMeals() {
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
-  const [menuItems, setMenuItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { cart } = useCart();
 
   const [fontsLoaded] = useFonts({
     Roboto_400Regular,
     Roboto_700Bold,
   });
 
-  useEffect(() => {
-    loadComboMeals();
-  }, []);
-
-  const loadComboMeals = async () => {
-    try {
-      const items = await fetchMenuItems();
-      const filtered = items.filter(
-        (item) =>
-          item.category && item.category.toLowerCase().includes('combo meals')
-      );
-      setMenuItems(filtered);
-    } catch (error) {
-      console.error('Error fetching combo meals:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!fontsLoaded || loading) {
+  if (!fontsLoaded) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#e67e22" />
         <Text
           style={{
             marginTop: 8,
@@ -72,35 +54,11 @@ export default function ComboMeals() {
     );
   }
 
-  const renderItem = ({ item }) => {
-    const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
-
-    return (
-      <View style={styles.card}>
-        <Image source={resolveImageSource(item.image)} style={styles.image} />
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.price}>₱{item.price}</Text>
-
-        <View style={styles.controls}>
-          <TouchableOpacity
-            style={styles.controlBtn}
-            onPress={() => decreaseQuantity(item.id)}
-          >
-            <Ionicons name="remove" size={18} color="#fff" />
-          </TouchableOpacity>
-
-          <Text style={styles.qty}>{qty}</Text>
-
-          <TouchableOpacity
-            style={styles.controlBtn}
-            onPress={() => addToCart(item)}
-          >
-            <Ionicons name="add" size={18} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
+  const renderItem = ({ item }) => (
+    <View style={styles.card}>
+      <Image source={item.image} style={styles.image} resizeMode="cover" />
+    </View>
+  );
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -133,25 +91,17 @@ export default function ComboMeals() {
       </ImageBackground>
 
       {/* Combo Meals List */}
-      {menuItems.length > 0 ? (
-        <FlatList
-          data={menuItems}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
-          numColumns={2}
-          columnWrapperStyle={{ justifyContent: 'space-between' }}
-          contentContainerStyle={{
-            padding: 12,
-            paddingBottom: total > 0 ? 130 : 50,
-          }}
-        />
-      ) : (
-        <View style={styles.centered}>
-          <Text style={{ fontFamily: 'Roboto_700Bold', color: '#555' }}>
-            No Combo Meals found.
-          </Text>
-        </View>
-      )}
+      <FlatList
+        data={COMBO_MEAL_IMAGES}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id}
+        numColumns={3}
+        columnWrapperStyle={{ justifyContent: 'space-between' }}
+        contentContainerStyle={{
+          padding: GRID_GUTTER,
+          paddingBottom: total > 0 ? 130 : 50,
+        }}
+      />
 
       {/* Floating Cart */}
       {total > 0 && (
@@ -206,10 +156,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     width: CARD_WIDTH,
-    marginVertical: 10,
+    height: CARD_HEIGHT,
+    marginVertical: 8,
     borderRadius: 12,
-    padding: 10,
-    alignItems: 'center',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -217,39 +167,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#f97316',
   },
-  image: { width: '100%', height: 100, borderRadius: 8, marginBottom: 8 },
-  name: {
-    fontSize: 16,
-    fontFamily: 'Roboto_700Bold',
-    color: '#333',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  price: {
-    fontSize: 14,
-    fontFamily: 'Roboto_400Regular',
-    color: '#777',
-    marginBottom: 8,
-  },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-  },
-  controlBtn: {
-    backgroundColor: '#e67e22',
-    padding: 6,
-    borderRadius: 20,
-    marginHorizontal: 6,
-  },
-  qty: {
-    fontSize: 16,
-    fontFamily: 'Roboto_700Bold',
-    color: '#333',
-    minWidth: 20,
-    textAlign: 'center',
-  },
+  image: { width: '100%', height: '100%' },
   floatingContainer: {
     position: 'absolute',
     bottom: 20,

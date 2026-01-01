@@ -343,6 +343,7 @@ def list_orders(request):
             "order_number": order.order_number,
             "status": order.status,
             "total_amount": float(order.total_amount),
+            "created_at": order.created_at.isoformat() if order.created_at else None,
             "items": items,
         })
 

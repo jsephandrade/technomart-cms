@@ -30,6 +30,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(width * 0.78, 320);
 const CARD_HEIGHT = Math.round(CARD_WIDTH * 0.62);
 const CARD_SPACING = 16;
+const COLLAGE_GAP = 6;
 
 const formatCurrency = (value) => {
   const numeric = Number(value);
@@ -37,6 +38,95 @@ const formatCurrency = (value) => {
     return 'PHP --';
   }
   return `PHP ${numeric.toFixed(2)}`;
+};
+
+const resolveItemImage = (item) => {
+  if (!item) return '';
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.thumbnail,
+    item?.image?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return '';
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboItem = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients = resolveIngredientEntries(item);
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveItemImage(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  return sources.filter((src, index, arr) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return arr.indexOf(src) === index;
+  });
 };
 
 export default function Recommended({ items = [] }) {
@@ -52,6 +142,16 @@ export default function Recommended({ items = [] }) {
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
 
+  const imageById = useMemo(() => {
+    const map = new Map();
+    items.forEach((entry) => {
+      if (!entry || entry.id === undefined || entry.id === null) return;
+      const src = resolveItemImage(entry);
+      if (src) map.set(String(entry.id), src);
+    });
+    return map;
+  }, [items]);
+
   const data = useMemo(() => {
     return items
       .filter((entry) => entry && !entry.archived && entry.available !== false)
@@ -65,6 +165,10 @@ export default function Recommended({ items = [] }) {
             ? Number(item.reviews)
             : null;
 
+        const collageSources = isComboItem(item)
+          ? resolveComboImages(item, imageById).slice(0, 3)
+          : [];
+
         return {
           id: item.id || `recommended-${index}`,
           image: item.image || item.thumbnail || null,
@@ -74,9 +178,10 @@ export default function Recommended({ items = [] }) {
           reviews: reviewsValue,
           description: item.description || '',
           source: item,
+          collageSources,
         };
       });
-  }, [items]);
+  }, [imageById, items]);
 
   useEffect(() => {
     if (focusedItem || data.length <= 1) {
@@ -186,47 +291,80 @@ export default function Recommended({ items = [] }) {
             setActiveIndex(index);
           }
         }}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => handleAddToCart(item)}
-            onLongPress={() => handleLongPress(item)}
-            style={({ pressed }) => [
-              styles.cardWrap,
-              pressed && styles.cardPressed,
-            ]}
-          >
-            <View style={styles.card}>
-              <Image
-                source={resolveImageSource(item.image)}
-                style={styles.cardImage}
-                resizeMode="cover"
-              />
-              <LinearGradient
-                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
-                style={styles.cardOverlay}
-              />
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <View style={styles.cardMetaRow}>
-                  <View style={styles.pricePill}>
-                    <Text style={styles.priceText}>
-                      {formatCurrency(item.price)}
-                    </Text>
+        renderItem={({ item }) => {
+          const showCollage =
+            Array.isArray(item.collageSources) &&
+            item.collageSources.length === 3;
+          return (
+            <Pressable
+              onPress={() => handleAddToCart(item)}
+              onLongPress={() => handleLongPress(item)}
+              style={({ pressed }) => [
+                styles.cardWrap,
+                pressed && styles.cardPressed,
+              ]}
+            >
+              <View style={styles.card}>
+                {showCollage ? (
+                  <View style={styles.collageGrid}>
+                    <View style={styles.collageMain}>
+                      <Image
+                        source={{ uri: item.collageSources[0] }}
+                        style={styles.collageImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.collageSide}>
+                      <View style={[styles.collageTile, styles.collageTileTop]}>
+                        <Image
+                          source={{ uri: item.collageSources[1] }}
+                          style={styles.collageImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                      <View style={styles.collageTile}>
+                        <Image
+                          source={{ uri: item.collageSources[2] }}
+                          style={styles.collageImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    </View>
                   </View>
-                  {Number.isFinite(item.rating) ? (
-                    <View style={styles.ratingPill}>
-                      <Text style={styles.ratingText}>
-                        {item.rating.toFixed(1)}
+                ) : (
+                  <Image
+                    source={resolveImageSource(item.image)}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                )}
+                <LinearGradient
+                  colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
+                  style={styles.cardOverlay}
+                />
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <View style={styles.cardMetaRow}>
+                    <View style={styles.pricePill}>
+                      <Text style={styles.priceText}>
+                        {formatCurrency(item.price)}
                       </Text>
                     </View>
-                  ) : null}
+                    {Number.isFinite(item.rating) ? (
+                      <View style={styles.ratingPill}>
+                        <Text style={styles.ratingText}>
+                          {item.rating.toFixed(1)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               </View>
-            </View>
-          </Pressable>
-        )}
+            </Pressable>
+          );
+        }}
         keyExtractor={(item) => item.id}
       />
 
@@ -349,6 +487,35 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 5,
+  },
+  collageGrid: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    padding: COLLAGE_GAP,
+    backgroundColor: '#F7EDE2',
+  },
+  collageMain: {
+    flex: 2,
+    marginRight: COLLAGE_GAP,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  collageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  collageTile: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  collageTileTop: {
+    marginBottom: COLLAGE_GAP,
+  },
+  collageImage: {
+    width: '100%',
+    height: '100%',
   },
   cardImage: {
     width: '100%',

@@ -29,6 +29,22 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = 140;
 const SPACING = 16;
 
+const getInitials = (value) => {
+  const safe = String(value || '').trim();
+  if (!safe) return 'NA';
+  const parts = safe.split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'NA';
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  const first = parts[0][0] || '';
+  const last = parts[parts.length - 1][0] || '';
+  return `${first}${last}`.toUpperCase();
+};
+
+const resolveImagePickerMediaTypes = () =>
+  ImagePicker?.MediaType?.Images || ImagePicker?.MediaTypeOptions?.Images;
+
 export default function AccountProfile() {
   const { clearCart } = useCart();
   const [profile, setProfile] = useState(null);
@@ -212,8 +228,9 @@ export default function AccountProfile() {
         );
         return;
       }
+      const mediaTypes = resolveImagePickerMediaTypes();
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        ...(mediaTypes ? { mediaTypes } : {}),
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -294,6 +311,8 @@ export default function AccountProfile() {
 
   const creditValue = Number(creditPoints || 0).toFixed(2);
   const rewardCount = Array.isArray(specialOffers) ? specialOffers.length : 0;
+  const avatarUrl = profile.avatar || profile.image || '';
+  const initials = getInitials(profile.name || profile.email || '');
   const profileDetails = [
     {
       key: 'id',
@@ -343,15 +362,13 @@ export default function AccountProfile() {
               onPress={pickAvatar}
               activeOpacity={0.85}
             >
-              <Image
-                source={{
-                  uri:
-                    profile.avatar ||
-                    profile.image ||
-                    'https://cdn-icons-png.flaticon.com/512/847/847969.png',
-                }}
-                style={styles.avatar}
-              />
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitials}>{initials}</Text>
+                </View>
+              )}
               <View style={styles.avatarBadge}>
                 <Ionicons name="camera-outline" size={14} color="#9A3412" />
               </View>
@@ -568,6 +585,17 @@ const styles = StyleSheet.create({
   avatar: {
     width: '100%',
     height: '100%',
+  },
+  avatarFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF3E4',
+  },
+  avatarInitials: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#9A3412',
   },
   avatarBadge: {
     position: 'absolute',

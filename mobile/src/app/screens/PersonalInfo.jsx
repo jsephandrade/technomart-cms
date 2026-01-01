@@ -36,6 +36,22 @@ const splitName = (fullName) => {
   };
 };
 
+const getInitials = (value) => {
+  const safe = String(value || '').trim();
+  if (!safe) return 'NA';
+  const parts = safe.split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'NA';
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  const first = parts[0][0] || '';
+  const last = parts[parts.length - 1][0] || '';
+  return `${first}${last}`.toUpperCase();
+};
+
+const resolveImagePickerMediaTypes = () =>
+  ImagePicker?.MediaType?.Images || ImagePicker?.MediaTypeOptions?.Images;
+
 const FieldCard = ({ title, subtitle, icon, children }) => (
   <View style={styles.card}>
     <View style={styles.cardHeader}>
@@ -225,6 +241,11 @@ export default function PersonalInfoScreen() {
     return '';
   }, [firstName, lastName, user?.name]);
 
+  const initials = useMemo(
+    () => getInitials(displayName || user?.email || ''),
+    [displayName, user?.email]
+  );
+
   const roleLabel = useMemo(() => {
     if (!user?.role) return null;
     return user.role
@@ -286,8 +307,9 @@ export default function PersonalInfoScreen() {
       );
       return;
     }
+    const mediaTypes = resolveImagePickerMediaTypes();
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
+      ...(mediaTypes ? { mediaTypes } : {}),
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
@@ -448,7 +470,7 @@ export default function PersonalInfoScreen() {
               <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarFallback}>
-                <Feather name="camera" size={24} color="#F07F13" />
+                <Text style={styles.avatarInitials}>{initials}</Text>
               </View>
             )}
             <View style={styles.avatarBadge}>
@@ -675,6 +697,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(240,127,19,0.4)',
+  },
+  avatarInitials: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#9a3412',
   },
   avatarBadge: {
     position: 'absolute',

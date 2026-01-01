@@ -117,6 +117,17 @@ export default function CustomerCartScreen() {
     }
     decreaseQuantity(item.id);
   };
+  const handleEditItem = (item) => {
+    const itemId = item.id ?? item.menu_item_id;
+    if (itemId === null || itemId === undefined) {
+      Alert.alert('Unavailable', 'This item cannot be customized right now.');
+      return;
+    }
+    router.push({
+      pathname: '/cart/customize',
+      params: { itemId: String(itemId) },
+    });
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -286,14 +297,6 @@ export default function CustomerCartScreen() {
     );
   };
 
-  const getItemSubtitle = (item) => {
-    const details = [];
-    if (item.size) details.push(`Size: ${item.size}`);
-    if (item.customize) details.push(item.customize);
-    const combined = details.filter(Boolean).join(' \u2022 ');
-    return combined || item.description || 'No description available.';
-  };
-
   const renderCartItemsCard = () => (
     <View style={styles.cartItemsCard}>
       {cart.map((item, index) => (
@@ -315,9 +318,13 @@ export default function CustomerCartScreen() {
                 {item.name}
               </Text>
             </View>
-            <Text style={styles.cartItemDesc} numberOfLines={2}>
-              {getItemSubtitle(item)}
-            </Text>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => handleEditItem(item)}
+            >
+              <Ionicons name="create-outline" size={14} color="#9A3412" />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
             <View style={styles.cartItemFooter}>
               <Text style={styles.cartItemPrice}>{`\u20b1${item.price}`}</Text>
               <View style={styles.qtyControls}>
@@ -656,10 +663,21 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 8,
   },
-  cartItemDesc: {
+  editButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
+  editButtonText: {
     fontSize: 12,
-    color: '#6B7280',
-    marginTop: 4,
+    fontWeight: '700',
+    color: '#9A3412',
+    marginLeft: 6,
   },
   cartItemFooter: {
     flexDirection: 'row',

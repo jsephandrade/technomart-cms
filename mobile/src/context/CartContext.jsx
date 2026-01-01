@@ -42,7 +42,16 @@ export const CartProvider = ({ children }) => {
           i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
-      return [...prev, { ...item, quantity: 1 }];
+      const basePrice = Number(item.basePrice ?? item.price ?? 0);
+      return [
+        ...prev,
+        {
+          ...item,
+          basePrice,
+          price: basePrice,
+          quantity: 1,
+        },
+      ];
     });
   };
 
@@ -60,6 +69,14 @@ export const CartProvider = ({ children }) => {
     );
 
   const clearCart = () => setCart([]);
+  const updateCartItem = (id, updates) =>
+    setCart((prev) =>
+      prev.map((item) =>
+        String(item.id ?? item.menu_item_id) === String(id)
+          ? { ...item, ...updates }
+          : item
+      )
+    );
 
   return (
     <CartContext.Provider
@@ -70,6 +87,7 @@ export const CartProvider = ({ children }) => {
         increaseQuantity,
         decreaseQuantity,
         clearCart,
+        updateCartItem,
       }}
     >
       {children}

@@ -49,7 +49,7 @@ export default function ComboMeals() {
       );
       setMenuItems(filtered);
     } catch (error) {
-      console.error('Error fetching snacks:', error);
+      console.error('Error fetching Snacks:', error);
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ export default function ComboMeals() {
             fontFamily: 'Roboto_700Bold',
           }}
         >
-          Loading Combo snacks...
+          Loading Combo Snacks...
         </Text>
       </View>
     );
@@ -126,7 +126,7 @@ export default function ComboMeals() {
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={26} color="black" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>snacks</Text>
+            <Text style={styles.headerTitle}>Snacks</Text>
             <Ionicons name="fast-food-outline" size={26} color="black" />
           </View>
         </View>
@@ -148,7 +148,7 @@ export default function ComboMeals() {
       ) : (
         <View style={styles.centered}>
           <Text style={{ fontFamily: 'Roboto_700Bold', color: '#555' }}>
-            No Combo Meals found.
+            No Snacks found.
           </Text>
         </View>
       )}

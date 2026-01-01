@@ -22,10 +22,9 @@ import { useCart } from '../../../context/CartContext';
 import { fetchMenuItems } from '../../../api/api';
 
 const { width } = Dimensions.get('window');
-const GRID_GUTTER = 12;
-const CARD_WIDTH = (width - GRID_GUTTER * 3) / 2;
-const CARD_HEIGHT = CARD_WIDTH;
+const CARD_WIDTH = (width - 40) / 2;
 const COLLAGE_GAP = 6;
+const COLLAGE_HEIGHT = 100;
 
 const resolveImageSrc = (item) => {
   if (!item) return null;
@@ -135,7 +134,7 @@ const toImageSource = (src) => {
 
 export default function ComboMeals() {
   const router = useRouter();
-  const { cart } = useCart();
+  const { cart, addToCart, decreaseQuantity } = useCart();
   const [comboMeals, setComboMeals] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -196,6 +195,7 @@ export default function ComboMeals() {
   }
 
   const renderItem = ({ item }) => {
+    const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
     const [mainSrc, topSrc, bottomSrc] = item.collageSources || [];
     const mainImage = toImageSource(mainSrc);
     const topImage = toImageSource(topSrc);
@@ -232,6 +232,26 @@ export default function ComboMeals() {
             </View>
           </View>
         </View>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.price}>ƒ,ñ{item.price}</Text>
+
+        <View style={styles.controls}>
+          <TouchableOpacity
+            style={styles.controlBtn}
+            onPress={() => decreaseQuantity(item.id)}
+          >
+            <Ionicons name="remove" size={18} color="#fff" />
+          </TouchableOpacity>
+
+          <Text style={styles.qty}>{qty}</Text>
+
+          <TouchableOpacity
+            style={styles.controlBtn}
+            onPress={() => addToCart(item)}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -267,19 +287,27 @@ export default function ComboMeals() {
       </ImageBackground>
 
       {/* Combo Meals List */}
-      <FlatList
-        data={comboMeals}
-        renderItem={renderItem}
-        keyExtractor={(item, index) =>
-          item?.id ? String(item.id) : `combo-${index}`
-        }
-        numColumns={2}
-        columnWrapperStyle={{ justifyContent: 'space-between' }}
-        contentContainerStyle={{
-          padding: GRID_GUTTER,
-          paddingBottom: total > 0 ? 130 : 50,
-        }}
-      />
+      {comboMeals.length > 0 ? (
+        <FlatList
+          data={comboMeals}
+          renderItem={renderItem}
+          keyExtractor={(item, index) =>
+            item?.id ? String(item.id) : `combo-${index}`
+          }
+          numColumns={2}
+          columnWrapperStyle={{ justifyContent: 'space-between' }}
+          contentContainerStyle={{
+            padding: 12,
+            paddingBottom: total > 0 ? 130 : 50,
+          }}
+        />
+      ) : (
+        <View style={styles.centered}>
+          <Text style={{ fontFamily: 'Roboto_700Bold', color: '#555' }}>
+            No Combo Meals found.
+          </Text>
+        </View>
+      )}
 
       {/* Floating Cart */}
       {total > 0 && (
@@ -334,11 +362,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    marginVertical: 8,
+    marginVertical: 10,
     borderRadius: 12,
-    padding: COLLAGE_GAP,
-    overflow: 'hidden',
+    padding: 10,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -347,8 +374,10 @@ const styles = StyleSheet.create({
     borderColor: '#f97316',
   },
   collageGrid: {
-    flex: 1,
+    width: '100%',
+    height: COLLAGE_HEIGHT,
     flexDirection: 'row',
+    marginBottom: 8,
   },
   collageMain: {
     flex: 2,
@@ -371,6 +400,38 @@ const styles = StyleSheet.create({
   collageImage: {
     width: '100%',
     height: '100%',
+  },
+  name: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#333',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  price: {
+    fontSize: 14,
+    fontFamily: 'Roboto_400Regular',
+    color: '#777',
+    marginBottom: 8,
+  },
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  controlBtn: {
+    backgroundColor: '#e67e22',
+    padding: 6,
+    borderRadius: 20,
+    marginHorizontal: 6,
+  },
+  qty: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#333',
+    minWidth: 20,
+    textAlign: 'center',
   },
   floatingContainer: {
     position: 'absolute',

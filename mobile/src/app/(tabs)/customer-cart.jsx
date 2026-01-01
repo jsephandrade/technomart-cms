@@ -289,7 +289,7 @@ export default function CustomerCartScreen() {
     const details = [];
     if (item.size) details.push(`Size: ${item.size}`);
     if (item.customize) details.push(item.customize);
-    const combined = details.filter(Boolean).join(' • ');
+    const combined = details.filter(Boolean).join(' \u2022 ');
     return combined || item.description || 'No description available.';
   };
 
@@ -310,7 +310,7 @@ export default function CustomerCartScreen() {
           {getItemSubtitle(item)}
         </Text>
         <View style={styles.menuFooter}>
-          <Text style={styles.menuPrice}>ƒ,ñ{item.price}</Text>
+          <Text style={styles.menuPrice}>{`\u20b1${item.price}`}</Text>
           <View style={styles.qtyControls}>
             <TouchableOpacity
               onPress={() => handleDecrease(item)}
@@ -361,37 +361,32 @@ export default function CustomerCartScreen() {
 
       <View style={styles.sectionHeader}>
         <View>
-          <Text style={styles.sectionTitle}>Cart Items</Text>
+          <Text style={styles.sectionTitle}>Order Summary</Text>
           <Text style={styles.sectionSubtitle}>Review your order</Text>
         </View>
         <View style={styles.sectionBadge}>
           <Text style={styles.sectionBadgeText}>{cartCount} items</Text>
         </View>
       </View>
+      {cart.length > 0 && (
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <View>
+              <Text style={styles.summaryLabel}>Final Total</Text>
+              <Text style={styles.summaryValue}>{`\u20b1${finalTotal}`}</Text>
+            </View>
+            <View style={styles.summaryBadge}>
+              <Ionicons name="time-outline" size={14} color="#F97316" />
+              <Text style={styles.summaryBadgeText}>Pickup</Text>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 
   const renderFooter = () => (
     <View>
-      <View style={styles.sectionHeader}>
-        <View>
-          <Text style={styles.sectionTitle}>Order Summary</Text>
-          <Text style={styles.sectionSubtitle}>{cartCount} items in cart</Text>
-        </View>
-      </View>
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <View>
-            <Text style={styles.summaryLabel}>Final Total</Text>
-            <Text style={styles.summaryValue}>ƒ,ñ{finalTotal}</Text>
-          </View>
-          <View style={styles.summaryBadge}>
-            <Ionicons name="time-outline" size={14} color="#F97316" />
-            <Text style={styles.summaryBadgeText}>Pickup</Text>
-          </View>
-        </View>
-      </View>
-
       <View style={styles.sectionHeader}>
         <View>
           <Text style={styles.sectionTitle}>Pickup Time</Text>
@@ -494,7 +489,7 @@ export default function CustomerCartScreen() {
                 <Ionicons name="wallet-outline" size={14} color="#F97316" />
                 <Text style={styles.checkoutLabel}>Total</Text>
               </View>
-              <Text style={styles.checkoutValue}>ƒ,ñ{finalTotal}</Text>
+              <Text style={styles.checkoutValue}>{`\u20b1${finalTotal}`}</Text>
             </View>
             <TouchableOpacity
               style={styles.checkoutButton}

@@ -48,7 +48,13 @@ const unwrapList = (payload) => {
 const normalizeMenuItems = (payload) =>
   unwrapList(payload).map((item) => {
     if (!item || typeof item !== 'object') return item;
-    const rawImage = item.image || item.imageUrl || item.thumbnail || null;
+    const rawImage =
+      item.image ||
+      item.imageUrl ||
+      item.image_url ||
+      item.thumbnail ||
+      item?.image?.url ||
+      null;
     const imageUrl = normalizeMediaUrl(rawImage);
     const isSvg =
       typeof imageUrl === 'string' && imageUrl.toLowerCase().includes('.svg');
@@ -349,7 +355,7 @@ export const fetchMenuItems = async (category = '') => {
 
     let response;
     try {
-      response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
+      response = await axios.get(`${BASE_URL}/menu/items`, {
         headers,
         params,
       });
@@ -357,8 +363,13 @@ export const fetchMenuItems = async (category = '') => {
       if (err.response?.data?.code === 'token_not_valid') {
         token = await refreshAccessToken();
         const newHeaders = token ? { Authorization: `Bearer ${token}` } : {};
-        response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
+        response = await axios.get(`${BASE_URL}/menu/items`, {
           headers: newHeaders,
+          params,
+        });
+      } else if (err.response?.status === 404) {
+        response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
+          headers,
           params,
         });
       } else {
@@ -379,16 +390,13 @@ export const fetchMenuItems = async (category = '') => {
 export const fetchMenuItemsByCategory = async (category) => {
   try {
     const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-    const res = await fetch(
-      `${BASE_URL_MENU}/menu-items/?category=${category}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      }
-    );
+    const res = await fetch(`${BASE_URL}/menu/items?category=${category}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
     return normalizeMenuItems(data);

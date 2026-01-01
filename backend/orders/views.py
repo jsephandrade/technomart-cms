@@ -20,6 +20,27 @@ from django.utils import timezone as dj_tz
 import uuid
 from menu.models import MenuItem  # adjust import to your menu app
 from django.views.decorators.http import require_POST
+from django.utils.crypto import get_random_string
+
+ORDER_NUMBER_RANDOM_CHARS = "0123456789"
+
+
+def generate_unique_order_number(prefix="O", order_model=None, max_attempts=64):
+    prefix_clean = (prefix or "O").strip()[:1].upper() or "O"
+    if order_model is None:
+        order_model = Order
+
+    attempt = 0
+    while attempt < max_attempts:
+        random_component = get_random_string(
+            length=6, allowed_chars=ORDER_NUMBER_RANDOM_CHARS
+        )
+        candidate = f"{prefix_clean}-{random_component}"
+        if not order_model.objects.filter(order_number__iexact=candidate).exists():
+            return candidate
+        attempt += 1
+
+    raise RuntimeError("Unable to generate unique order number")
 
 # ------------------------------
 # ✅ CREATE ORDER
@@ -137,7 +158,7 @@ def create_order(request):
 
         # 6️⃣ Generate unique order number
 
-        order_number = str(uuid.uuid4())[:32]  # unique, max 32 chars
+        order_number = generate_unique_order_number(prefix="O", order_model=Order)
 
         # 7️⃣ Create the order
         order = Order.objects.create(
@@ -296,7 +317,7 @@ def redeem_offer(request):
         return Response({"success": False, "message": "Not enough credit points"}, status=400)
 
     # Generate order
-    order_number = str(uuid.uuid4())[:32]
+    order_number = generate_unique_order_number(prefix="O", order_model=Order)
     order = Order.objects.create(
         order_number=order_number,
         placed_by=user,
@@ -367,8 +388,10 @@ def apply_voucher(request):
         user.save()
 
         # Create a “free order” with total_amount = 0
+        order_number = generate_unique_order_number(prefix="O", order_model=Order)
+
         order = Order.objects.create(
-            order_number=str(uuid.uuid4())[:12],
+            order_number=order_number,
             placed_by=user,
             total_amount=0,
             credit_points_used=voucher_points,
@@ -420,7 +443,7 @@ def redeem_offer(request):
         return Response({"success": False, "message": "Not enough credit points"}, status=400)
 
     # Create unique order number
-    order_number = str(uuid.uuid4())[:32]
+    order_number = generate_unique_order_number(prefix="O", order_model=Order)
 
     # Create the order
     order = Order.objects.create(

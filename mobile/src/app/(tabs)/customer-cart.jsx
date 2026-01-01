@@ -246,6 +246,7 @@ export default function CustomerCartScreen() {
           total: finalTotal.toFixed(2),
           selectedTime,
           orderId: res.order_number,
+          celebrate: '1',
         },
       });
     } catch (err) {

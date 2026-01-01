@@ -10,6 +10,8 @@ import {
   Modal,
   Animated,
   Alert,
+  Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -21,16 +23,57 @@ import {
 } from '@expo-google-fonts/roboto';
 import { getGcashLink, confirmPayment, getCreditPoints } from '../../api/api';
 
+const PARTY_DURATION_MS = 2600;
+const PARTY_PIECE_COUNT = 18;
+const PARTY_COLORS = [
+  '#F97316',
+  '#F59E0B',
+  '#FACC15',
+  '#22C55E',
+  '#38BDF8',
+  '#FB7185',
+];
+
+const createPartyPieces = () =>
+  Array.from({ length: PARTY_PIECE_COUNT }, (_, index) => {
+    const leftPct = ((index * 37) % 90) / 100 + 0.05;
+    const size = 6 + (index % 4) * 3;
+    const delay = (index % 6) * 90;
+    const duration = 1200 + (index % 5) * 160;
+    const drift = (index % 2 === 0 ? -1 : 1) * (10 + (index % 3) * 8);
+    const spin = (index % 2 === 0 ? 1 : -1) * (120 + (index % 4) * 60);
+    return {
+      id: index,
+      leftPct,
+      size,
+      color: PARTY_COLORS[index % PARTY_COLORS.length],
+      delay,
+      duration,
+      drift,
+      spin,
+      shape: index % 3 === 0 ? 'circle' : 'rect',
+      progress: new Animated.Value(0),
+    };
+  });
+
 export default function PaymentPage() {
   const router = useRouter();
-  const { orderType, total, selectedTime, orderId } = useLocalSearchParams();
+  const { orderType, total, selectedTime, orderId, celebrate } =
+    useLocalSearchParams();
+  const { width, height } = useWindowDimensions();
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showParty, setShowParty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [creditPoints, setCreditPoints] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const partyPieces = useRef(createPartyPieces()).current;
+  const partyTimerRef = useRef(null);
+  const hasCelebratedRef = useRef(false);
   const totalAmount = Number(total) || 0;
   const pointsEligible = creditPoints >= totalAmount && totalAmount > 0;
+  const shouldCelebrate = celebrate === '1' || celebrate === 'true';
+  const fallDistance = Math.max(240, height + 120);
 
   useEffect(() => {
     if (showSuccess) {
@@ -41,6 +84,38 @@ export default function PaymentPage() {
       }).start();
     } else fadeAnim.setValue(0);
   }, [showSuccess]);
+
+  useEffect(() => {
+    if (!shouldCelebrate || hasCelebratedRef.current) return;
+    hasCelebratedRef.current = true;
+    setShowParty(true);
+    partyPieces.forEach((piece) => {
+      piece.progress.stopAnimation();
+      piece.progress.setValue(0);
+      Animated.timing(piece.progress, {
+        toValue: 1,
+        duration: piece.duration,
+        delay: piece.delay,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start();
+    });
+    if (partyTimerRef.current) {
+      clearTimeout(partyTimerRef.current);
+    }
+    partyTimerRef.current = setTimeout(() => {
+      setShowParty(false);
+    }, PARTY_DURATION_MS);
+  }, [partyPieces, shouldCelebrate]);
+
+  useEffect(
+    () => () => {
+      if (partyTimerRef.current) {
+        clearTimeout(partyTimerRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -168,6 +243,45 @@ export default function PaymentPage() {
 
   return (
     <View style={styles.container}>
+      {showParty ? (
+        <View pointerEvents="none" style={styles.partyOverlay}>
+          {partyPieces.map((piece) => {
+            const translateY = piece.progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-40, fallDistance],
+            });
+            const translateX = piece.progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, piece.drift],
+            });
+            const rotate = piece.progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0deg', `${piece.spin}deg`],
+            });
+            const opacity = piece.progress.interpolate({
+              inputRange: [0, 0.9, 1],
+              outputRange: [1, 1, 0],
+            });
+            return (
+              <Animated.View
+                key={`party-${piece.id}`}
+                style={[
+                  styles.partyPiece,
+                  {
+                    left: width * piece.leftPct,
+                    width: piece.size,
+                    height: piece.size,
+                    backgroundColor: piece.color,
+                    borderRadius: piece.shape === 'circle' ? piece.size : 3,
+                    opacity,
+                    transform: [{ translateX }, { translateY }, { rotate }],
+                  },
+                ]}
+              />
+            );
+          })}
+        </View>
+      ) : null}
       <ImageBackground
         source={require('../../../assets/drop_1.png')}
         style={styles.headerBackground}
@@ -387,5 +501,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#16a34a',
+  },
+  partyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  partyPiece: {
+    position: 'absolute',
+    top: -20,
   },
 });

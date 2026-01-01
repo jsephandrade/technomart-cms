@@ -180,6 +180,8 @@ const resolvePaymentMethod = (order) => {
 
 const resolveItemName = (item) =>
   item?.name ||
+  item?.item_name ||
+  item?.itemName ||
   item?.menu_item_name ||
   item?.menuItemName ||
   item?.menu_item?.name ||
@@ -299,7 +301,23 @@ const resolveComboImages = (item, imageById) => {
   });
 };
 
-const resolveMenuItemMatch = (orderItem, menuById, menuByName) => {
+const buildNameKeys = (value) => {
+  if (!value) return [];
+  const raw = String(value);
+  const variants = [
+    raw,
+    raw.replace(/\([^)]*\)/g, ' '),
+    raw.replace(
+      /\b(small|medium|large|regular|solo|family|party|size)\b/gi,
+      ' '
+    ),
+    raw.replace(/[-/]/g, ' '),
+  ];
+  const keys = variants.map((entry) => normalizeItemKey(entry)).filter(Boolean);
+  return Array.from(new Set(keys));
+};
+
+const resolveMenuItemMatch = (orderItem, menuById, menuByName, menuItems) => {
   if (!orderItem) return null;
   const id =
     orderItem?.menu_item_id ??
@@ -311,9 +329,29 @@ const resolveMenuItemMatch = (orderItem, menuById, menuByName) => {
     const match = menuById.get(String(id));
     if (match) return match;
   }
-  const nameKey = normalizeItemKey(resolveItemName(orderItem));
-  if (nameKey && menuByName.has(nameKey)) {
-    return menuByName.get(nameKey);
+  const orderName = resolveItemName(orderItem);
+  const nameKeys = buildNameKeys(orderName);
+  for (const key of nameKeys) {
+    if (menuByName.has(key)) {
+      return menuByName.get(key);
+    }
+  }
+  for (const key of nameKeys) {
+    let bestMatch = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const entry of menuItems) {
+      if (!entry) continue;
+      const menuKey = normalizeItemKey(entry.name || entry.title || '');
+      if (!menuKey) continue;
+      if (menuKey.includes(key) || key.includes(menuKey)) {
+        const score = Math.abs(menuKey.length - key.length);
+        if (score < bestScore) {
+          bestScore = score;
+          bestMatch = entry;
+        }
+      }
+    }
+    if (bestMatch) return bestMatch;
   }
   return null;
 };
@@ -594,7 +632,12 @@ export default function OrderTrackingScreen() {
   };
 
   const getOrderItemVisual = (item) => {
-    const menuItem = resolveMenuItemMatch(item, menuItemsById, menuItemsByName);
+    const menuItem = resolveMenuItemMatch(
+      item,
+      menuItemsById,
+      menuItemsByName,
+      menuItems
+    );
     const collageSources = resolveOrderItemCollage(
       item,
       menuItem,

@@ -108,6 +108,7 @@ export default function CustomerCartScreen() {
 
   const finalTotal = total;
   const emptyMessage = 'Add items to start your order.';
+  const cartItemsData = cart.length ? [{ key: 'cart-items' }] : [];
 
   const handleDecrease = (item) => {
     if (Number(item.quantity || 0) <= 1) {
@@ -293,40 +294,55 @@ export default function CustomerCartScreen() {
     return combined || item.description || 'No description available.';
   };
 
-  const renderCartItem = ({ item }) => (
-    <View style={styles.menuCard}>
-      <Image
-        source={resolveImageSource(item.image)}
-        style={styles.menuImage}
-        resizeMode="cover"
-      />
-      <View style={styles.menuInfo}>
-        <View style={styles.menuTitleRow}>
-          <Text style={styles.menuName} numberOfLines={1}>
-            {item.name}
-          </Text>
-        </View>
-        <Text style={styles.menuDesc} numberOfLines={2}>
-          {getItemSubtitle(item)}
-        </Text>
-        <View style={styles.menuFooter}>
-          <Text style={styles.menuPrice}>{`\u20b1${item.price}`}</Text>
-          <View style={styles.qtyControls}>
-            <TouchableOpacity
-              onPress={() => handleDecrease(item)}
-              style={styles.qtyButton}
-            >
-              <Text style={styles.qtyButtonText}>-</Text>
-            </TouchableOpacity>
-            <Text style={styles.qtyText}>{item.quantity}</Text>
-            <TouchableOpacity
-              onPress={() => increaseQuantity(item.id)}
-              style={styles.qtyButton}
-            >
-              <Text style={styles.qtyButtonText}>+</Text>
-            </TouchableOpacity>
+  const renderCartItemsCard = () => (
+    <View style={styles.cartItemsCard}>
+      {cart.map((item, index) => (
+        <View
+          key={String(item.id ?? item.menu_item_id ?? `${item.name}-${index}`)}
+          style={[
+            styles.cartItemRow,
+            index < cart.length - 1 && styles.cartItemDivider,
+          ]}
+        >
+          <Image
+            source={resolveImageSource(item.image)}
+            style={styles.cartItemImage}
+            resizeMode="cover"
+          />
+          <View style={styles.cartItemInfo}>
+            <View style={styles.cartItemTitleRow}>
+              <Text style={styles.cartItemName} numberOfLines={1}>
+                {item.name}
+              </Text>
+            </View>
+            <Text style={styles.cartItemDesc} numberOfLines={2}>
+              {getItemSubtitle(item)}
+            </Text>
+            <View style={styles.cartItemFooter}>
+              <Text style={styles.cartItemPrice}>{`\u20b1${item.price}`}</Text>
+              <View style={styles.qtyControls}>
+                <TouchableOpacity
+                  onPress={() => handleDecrease(item)}
+                  style={styles.qtyButton}
+                >
+                  <Text style={styles.qtyButtonText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.qtyText}>{item.quantity}</Text>
+                <TouchableOpacity
+                  onPress={() => increaseQuantity(item.id)}
+                  style={styles.qtyButton}
+                >
+                  <Text style={styles.qtyButtonText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </View>
+      ))}
+      <View style={styles.cartTotalDivider} />
+      <View style={styles.cartTotalRow}>
+        <Text style={styles.cartTotalLabel}>Total</Text>
+        <Text style={styles.cartTotalValue}>{`\u20b1${finalTotal}`}</Text>
       </View>
     </View>
   );
@@ -368,20 +384,6 @@ export default function CustomerCartScreen() {
           <Text style={styles.sectionBadgeText}>{cartCount} items</Text>
         </View>
       </View>
-      {cart.length > 0 && (
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View>
-              <Text style={styles.summaryLabel}>Final Total</Text>
-              <Text style={styles.summaryValue}>{`\u20b1${finalTotal}`}</Text>
-            </View>
-            <View style={styles.summaryBadge}>
-              <Ionicons name="time-outline" size={14} color="#F97316" />
-              <Text style={styles.summaryBadgeText}>Pickup</Text>
-            </View>
-          </View>
-        </View>
-      )}
     </View>
   );
 
@@ -460,12 +462,10 @@ export default function CustomerCartScreen() {
       <View style={styles.backgroundGlowTop} />
       <View style={styles.backgroundGlowBottom} />
       <FlatList
-        data={cart}
+        data={cartItemsData}
         extraData={{ selectedTime, orderStatus, cartCount, total }}
-        keyExtractor={(item, index) =>
-          String(item.id ?? item.menu_item_id ?? `${item.name}-${index}`)
-        }
-        renderItem={renderCartItem}
+        keyExtractor={(item) => item.key}
+        renderItem={renderCartItemsCard}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={cart.length ? renderFooter : null}
@@ -613,9 +613,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#9A3412',
   },
-  menuCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  cartItemsCard: {
     backgroundColor: '#fff',
     borderRadius: 18,
     padding: 12,
@@ -627,43 +625,72 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  menuImage: {
+  cartItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  cartItemDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3D6B7',
+  },
+  cartItemImage: {
     width: 72,
     height: 72,
     borderRadius: 16,
     marginRight: 12,
     backgroundColor: '#F7EDE2',
   },
-  menuInfo: {
+  cartItemInfo: {
     flex: 1,
   },
-  menuTitleRow: {
+  cartItemTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  menuName: {
+  cartItemName: {
     fontSize: 16,
     fontWeight: '700',
     color: '#111827',
     flex: 1,
     paddingRight: 8,
   },
-  menuDesc: {
+  cartItemDesc: {
     fontSize: 12,
     color: '#6B7280',
     marginTop: 4,
   },
-  menuFooter: {
+  cartItemFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
   },
-  menuPrice: {
+  cartItemPrice: {
     fontSize: 30,
     fontWeight: '700',
     color: '#FF7A18',
+  },
+  cartTotalDivider: {
+    height: 1,
+    backgroundColor: '#F3D6B7',
+    marginVertical: 12,
+  },
+  cartTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cartTotalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  cartTotalValue: {
+    fontSize: 26,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
   },
   qtyControls: {
     flexDirection: 'row',
@@ -692,47 +719,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     marginHorizontal: 6,
-  },
-  summaryCard: {
-    marginHorizontal: 16,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  summaryValue: {
-    fontSize: 26,
-    fontFamily: 'Roboto_700Bold',
-    color: '#111827',
-    marginTop: 6,
-  },
-  summaryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFF0E0',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  summaryBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9A3412',
-    marginLeft: 6,
   },
   pickupCard: {
     marginHorizontal: 16,

@@ -31,6 +31,7 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const COLLAGE_GAP = 4;
 const CATEGORY_IMAGE_OVERRIDES = [
   { key: 'combo', image: require('../../../assets/choices/combo.png') },
   { key: 'meal', image: require('../../../assets/choices/meals.png') },
@@ -64,6 +65,95 @@ const normalizeCategoryKey = (value) =>
   String(value || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
+
+const resolveItemImage = (item) => {
+  if (!item) return '';
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.thumbnail,
+    item?.image?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return '';
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboItem = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients = resolveIngredientEntries(item);
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveItemImage(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  return sources.filter((src, index, arr) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return arr.indexOf(src) === index;
+  });
+};
 
 const resolveCategoryImage = (category, itemName) => {
   const normalizedKey = normalizeCategoryKey(category);
@@ -167,6 +257,16 @@ export default function HomeDashboardScreen() {
       categoryMap[cat].itemCount += 1;
     });
     return Object.values(categoryMap);
+  }, [menuItems]);
+
+  const imageById = useMemo(() => {
+    const map = new Map();
+    menuItems.forEach((entry) => {
+      if (!entry || entry.id === undefined || entry.id === null) return;
+      const src = resolveItemImage(entry);
+      if (src) map.set(String(entry.id), src);
+    });
+    return map;
   }, [menuItems]);
 
   const mainCategories = useMemo(
@@ -366,6 +466,11 @@ export default function HomeDashboardScreen() {
             allItemsFiltered.map((item) => {
               const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
               const isAvailable = item.available !== false;
+              const combo = isComboItem(item);
+              const collageImages = combo
+                ? resolveComboImages(item, imageById).slice(0, 3)
+                : [];
+              const showCollage = collageImages.length === 3;
               return (
                 <View
                   key={item.id}
@@ -374,10 +479,40 @@ export default function HomeDashboardScreen() {
                     !isAvailable && styles.menuCardDisabled,
                   ]}
                 >
-                  <Image
-                    source={resolveImageSource(item.image)}
-                    style={styles.menuImage}
-                  />
+                  {showCollage ? (
+                    <View style={styles.menuCollage}>
+                      <View style={styles.menuCollageMain}>
+                        <Image
+                          source={{ uri: collageImages[0] }}
+                          style={styles.menuCollageImage}
+                        />
+                      </View>
+                      <View style={styles.menuCollageSide}>
+                        <View
+                          style={[
+                            styles.menuCollageTile,
+                            styles.menuCollageTileTop,
+                          ]}
+                        >
+                          <Image
+                            source={{ uri: collageImages[1] }}
+                            style={styles.menuCollageImage}
+                          />
+                        </View>
+                        <View style={styles.menuCollageTile}>
+                          <Image
+                            source={{ uri: collageImages[2] }}
+                            style={styles.menuCollageImage}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <Image
+                      source={resolveImageSource(item.image)}
+                      style={styles.menuImage}
+                    />
+                  )}
                   <View style={styles.menuInfo}>
                     <View style={styles.menuTitleRow}>
                       <Text style={styles.menuName} numberOfLines={1}>
@@ -594,6 +729,39 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginRight: 12,
     backgroundColor: '#F7EDE2',
+  },
+  menuCollage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginRight: 12,
+    backgroundColor: '#F7EDE2',
+    overflow: 'hidden',
+    padding: COLLAGE_GAP,
+    flexDirection: 'row',
+  },
+  menuCollageMain: {
+    flex: 2,
+    marginRight: COLLAGE_GAP,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  menuCollageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  menuCollageTile: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  menuCollageTileTop: {
+    marginBottom: COLLAGE_GAP,
+  },
+  menuCollageImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   menuInfo: {
     flex: 1,

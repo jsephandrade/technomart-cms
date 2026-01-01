@@ -139,6 +139,10 @@ export default function AccountProfile() {
     setCreditModal(true);
   }, []);
 
+  const handleRewardsPress = useCallback(() => {
+    router.push('/customer-cart');
+  }, [router]);
+
   // --- Logout ---
   const handleLogout = () => {
     Alert.alert('Confirm Logout', 'Are you sure you want to log out?', [
@@ -199,32 +203,64 @@ export default function AccountProfile() {
   // --- Pick avatar ---
   const pickAvatar = async () => {
     try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission needed',
+          'Allow photo access so we can update your profile picture.'
+        );
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
-      if (!result.cancelled) {
-        const token = await getValidToken();
-        const formData = new FormData();
-        formData.append('image', {
-          uri: result.uri,
-          name: `avatar_${profile.id}.jpg`,
-          type: 'image/jpeg',
-        });
-
-        await api.patch('/accounts/update-avatar/', formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-
-        setProfile((prev) => ({ ...prev, image: result.uri }));
-        Alert.alert('Success', 'Avatar updated successfully!');
+      if (result.canceled || result.cancelled) {
+        return;
       }
+
+      const asset =
+        (Array.isArray(result.assets) && result.assets[0]) || result;
+      const base64 = asset?.base64;
+      if (!base64) {
+        Alert.alert('Upload failed', 'We could not read the selected image.');
+        return;
+      }
+
+      let mimeType = asset?.mimeType || asset?.type || 'image/jpeg';
+      if (typeof mimeType === 'string' && !mimeType.includes('/')) {
+        mimeType = 'image/jpeg';
+      }
+      const avatar = `data:${mimeType};base64,${base64}`;
+
+      const token = await getValidToken();
+      if (!token) throw new Error('No access token');
+
+      const res = await api.patch(
+        '/accounts/update-avatar/',
+        { avatar },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const avatarUrl =
+        res?.data?.avatar_url || res?.data?.avatar || res?.data?.url || avatar;
+
+      setProfile((prev) => {
+        const nextProfile = {
+          ...prev,
+          avatar: avatarUrl,
+          image: avatarUrl,
+        };
+        AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(nextProfile)).catch(
+          () => {}
+        );
+        return nextProfile;
+      });
+      Alert.alert('Success', 'Avatar updated successfully!');
     } catch (err) {
       console.log(err);
       Alert.alert('Error', 'Failed to update avatar.');
@@ -310,6 +346,7 @@ export default function AccountProfile() {
               <Image
                 source={{
                   uri:
+                    profile.avatar ||
                     profile.image ||
                     'https://cdn-icons-png.flaticon.com/512/847/847969.png',
                 }}
@@ -332,7 +369,7 @@ export default function AccountProfile() {
 
             <TouchableOpacity
               style={styles.heroBadge}
-              onPress={openCreditModal}
+              onPress={handleRewardsPress}
               activeOpacity={0.85}
             >
               <Text style={styles.heroBadgeLabel}>Points</Text>
@@ -375,13 +412,16 @@ export default function AccountProfile() {
             <Text style={styles.sectionTitle}>Rewards</Text>
             <Text style={styles.sectionSubtitle}>Redeem special offers</Text>
           </View>
-          <View style={styles.sectionBadge}>
+          <TouchableOpacity
+            style={styles.sectionBadge}
+            onPress={openCreditModal}
+          >
             <Text style={styles.sectionBadgeText}>{rewardCount}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          onPress={openCreditModal}
+          onPress={handleRewardsPress}
           activeOpacity={0.85}
           style={styles.infoCard}
         >

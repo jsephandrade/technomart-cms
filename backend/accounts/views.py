@@ -1,4 +1,5 @@
 import random,string
+import uuid
 import base64
 from django.contrib.auth import get_user_model
 
@@ -6,6 +7,7 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.contrib.auth.hashers import make_password
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -91,23 +93,39 @@ class ProfileView(APIView):
 @permission_classes([IsAuthenticated])
 def update_avatar(request):
     user = request.user
-    avatar_data = request.data.get('avatar')
-
-    if not avatar_data:
-        return Response({'error': 'Avatar image is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
     try:
-        # Handle base64 image
-        format, imgstr = avatar_data.split(';base64,')
-        ext = format.split('/')[-1]
-        filename = f"user_{user.id}_avatar.{ext}"
+        upload = request.FILES.get('avatar') or request.FILES.get('image')
+        if upload:
+            ext = (upload.name.rsplit('.', 1)[-1] or 'jpg').lower()
+            filename = f"avatars/{user.id}/{uuid.uuid4().hex}.{ext}"
+            path = default_storage.save(filename, upload)
+            avatar_url = default_storage.url(path)
+        else:
+            avatar_data = request.data.get('avatar')
+            if not avatar_data:
+                return Response({'error': 'Avatar image is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user.avatar.save(filename, ContentFile(base64.b64decode(imgstr)))
-        user.save()
+            if ';base64,' in avatar_data:
+                format, imgstr = avatar_data.split(';base64,')
+                ext = format.split('/')[-1] or 'jpg'
+            else:
+                imgstr = avatar_data
+                ext = 'jpg'
+
+            filename = f"avatars/{user.id}/{uuid.uuid4().hex}.{ext}"
+            decoded = base64.b64decode(imgstr)
+            path = default_storage.save(filename, ContentFile(decoded))
+            avatar_url = default_storage.url(path)
+
+        if avatar_url and not avatar_url.startswith('http'):
+            avatar_url = request.build_absolute_uri(avatar_url)
+
+        user.avatar = avatar_url
+        user.save(update_fields=['avatar'])
 
         return Response({
             "message": "Avatar updated successfully",
-            "avatar_url": request.build_absolute_uri(user.avatar.url)
+            "avatar_url": avatar_url
         }, status=status.HTTP_200_OK)
 
     except Exception as e:

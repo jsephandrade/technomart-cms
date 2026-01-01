@@ -21,39 +21,16 @@ import { useCart } from '../../context/CartContext';
 import { resolveImageSource } from '../../utils/image';
 
 const SIZE_OPTIONS = [
-  {
-    label: 'Regular',
-    value: 'Regular',
-    price: 0,
-    hint: 'Standard serving',
-    icon: 'restaurant-outline',
-  },
-  {
-    label: 'Large',
-    value: 'Large',
-    price: 15,
-    hint: 'More to enjoy',
-    icon: 'restaurant',
-  },
-  {
-    label: 'Family',
-    value: 'Family',
-    price: 30,
-    hint: 'Shareable size',
-    icon: 'people-outline',
-  },
+  { label: 'Regular', value: 'Regular', price: 0, hint: 'Standard serving' },
+  { label: 'Large', value: 'Large', price: 15, hint: 'More to enjoy' },
+  { label: 'Family', value: 'Family', price: 30, hint: 'Shareable size' },
 ];
 
 const ADD_ONS = [
-  { key: 'extra_rice', label: 'Extra Rice', price: 10, icon: 'nutrition' },
-  {
-    key: 'extra_sauce',
-    label: 'Extra Sauce',
-    price: 5,
-    icon: 'color-fill-outline',
-  },
-  { key: 'cheese', label: 'Cheese', price: 12, icon: 'pizza-outline' },
-  { key: 'bacon', label: 'Bacon', price: 20, icon: 'flame-outline' },
+  { key: 'extra_rice', label: 'Extra Rice', price: 10 },
+  { key: 'extra_sauce', label: 'Extra Sauce', price: 5 },
+  { key: 'cheese', label: 'Cheese', price: 12 },
+  { key: 'bacon', label: 'Bacon', price: 20 },
 ];
 
 const formatPeso = (value) => `\u20b1${Number(value || 0)}`;
@@ -217,18 +194,6 @@ export default function CustomizeOrderScreen() {
                 ]}
                 onPress={() => setSelectedSize(option)}
               >
-                <View
-                  style={[
-                    styles.optionIconWrap,
-                    selected && styles.optionIconWrapActive,
-                  ]}
-                >
-                  <Ionicons
-                    name={option.icon}
-                    size={18}
-                    color={selected ? '#fff' : '#F97316'}
-                  />
-                </View>
                 <View style={styles.optionBody}>
                   <Text
                     style={[
@@ -260,7 +225,6 @@ export default function CustomizeOrderScreen() {
                   </View>
                   {selected && (
                     <View style={styles.optionSelectedBadge}>
-                      <Ionicons name="checkmark" size={12} color="#9A3412" />
                       <Text style={styles.optionSelectedText}>Selected</Text>
                     </View>
                   )}
@@ -290,18 +254,6 @@ export default function CustomizeOrderScreen() {
                 ]}
                 onPress={() => toggleAddon(option.key)}
               >
-                <View
-                  style={[
-                    styles.optionIconWrap,
-                    selected && styles.optionIconWrapActive,
-                  ]}
-                >
-                  <Ionicons
-                    name={option.icon}
-                    size={18}
-                    color={selected ? '#fff' : '#F97316'}
-                  />
-                </View>
                 <View style={styles.optionBody}>
                   <Text
                     style={[
@@ -330,7 +282,6 @@ export default function CustomizeOrderScreen() {
                   </View>
                   {selected && (
                     <View style={styles.optionSelectedBadge}>
-                      <Ionicons name="checkmark" size={12} color="#9A3412" />
                       <Text style={styles.optionSelectedText}>Selected</Text>
                     </View>
                   )}
@@ -510,18 +461,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FDBA74',
   },
-  optionIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: '#FFF0E0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  optionIconWrapActive: {
-    backgroundColor: '#F97316',
-  },
   optionBody: {
     flex: 1,
   },
@@ -575,7 +514,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#9A3412',
-    marginLeft: 4,
   },
   summaryCard: {
     marginHorizontal: 16,

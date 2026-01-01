@@ -21,7 +21,7 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 export default function SearchScreen() {
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
+  const { cart, addToCart, decreaseQuantity, removeFromCart } = useCart();
 
   const [query, setQuery] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -114,6 +114,17 @@ export default function SearchScreen() {
     : 'Start typing to search the menu.';
   const listData = searchTerm ? filteredItems : [];
 
+  const handleDecrease = useCallback(
+    (itemId, qty) => {
+      if (qty <= 1) {
+        removeFromCart(itemId);
+        return;
+      }
+      decreaseQuantity(itemId);
+    },
+    [decreaseQuantity, removeFromCart]
+  );
+
   const renderItem = useCallback(
     ({ item }) => {
       const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
@@ -145,7 +156,7 @@ export default function SearchScreen() {
               {isAvailable ? (
                 <View style={styles.qtyControls}>
                   <Pressable
-                    onPress={() => decreaseQuantity(item.id)}
+                    onPress={() => handleDecrease(item.id, qty)}
                     style={styles.qtyButton}
                   >
                     <Text style={styles.qtyButtonText}>-</Text>
@@ -166,7 +177,7 @@ export default function SearchScreen() {
         </View>
       );
     },
-    [addToCart, cart, decreaseQuantity]
+    [addToCart, cart, handleDecrease]
   );
 
   return (

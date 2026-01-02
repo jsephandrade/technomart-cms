@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -47,7 +47,15 @@ export default function AccountLoginScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const [user, setUser] = useState(null);
+  const passwordInputRef = useRef(null);
+
+  const MAX_LOGIN_ATTEMPTS = 3;
+  const LOGIN_COOLDOWN_SECONDS = 20;
 
   const formatMessage = (msg) => {
     if (Array.isArray(msg)) return msg.join('\n');
@@ -71,6 +79,35 @@ export default function AccountLoginScreen() {
       console.warn('Biometric prompt failed:', error?.message || error);
     }
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const checkBiometrics = async () => {
+      try {
+        const compatible = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = compatible
+          ? await LocalAuthentication.isEnrolledAsync()
+          : false;
+        if (active) {
+          setBiometricReady(Boolean(enrolled));
+        }
+      } catch (error) {
+        console.warn('Biometric check failed:', error?.message || error);
+      }
+    };
+    checkBiometrics();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return undefined;
+    const timer = setInterval(() => {
+      setCooldownSeconds((value) => (value > 1 ? value - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   // ✅ Google Auth Config
   const googleConfig = {
@@ -143,6 +180,7 @@ export default function AccountLoginScreen() {
   // ✅ Email/password login handler
   const handleLogin = async () => {
     if (loading) return;
+    if (cooldownSeconds > 0) return;
 
     const errs = {};
     if (!validateEmail(email)) errs.email = 'Invalid email address';
@@ -157,6 +195,14 @@ export default function AccountLoginScreen() {
       const { success, data, message } = await login({ email, password });
 
       if (!success) {
+        setAttemptCount((prev) => {
+          const next = prev + 1;
+          if (next >= MAX_LOGIN_ATTEMPTS) {
+            setCooldownSeconds(LOGIN_COOLDOWN_SECONDS);
+            return 0;
+          }
+          return next;
+        });
         return Alert.alert('Login Failed', message || 'Incorrect credentials');
       }
 
@@ -181,6 +227,8 @@ export default function AccountLoginScreen() {
       // ✅ Save user profile
       await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
       setUser(profile);
+      setAttemptCount(0);
+      setCooldownSeconds(0);
 
       await runBiometricGate();
       router.replace('/home-dashboard');
@@ -286,6 +334,11 @@ export default function AccountLoginScreen() {
   });
   if (!fontsLoaded) return null;
 
+  const remainingAttempts = Math.max(0, MAX_LOGIN_ATTEMPTS - attemptCount);
+  const loginDisabled = loading || cooldownSeconds > 0;
+  const emailHasError = Boolean(errors.email);
+  const passwordHasError = Boolean(errors.password);
+
   return (
     <ImageBackground
       source={require('../../assets/drop_3.png')}
@@ -307,21 +360,72 @@ export default function AccountLoginScreen() {
             resizeMode="contain"
           />
           <View style={styles.card}>
-            <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.subtitle}>
-              Sign in to enjoy delicious canteen meals
-            </Text>
+            <View style={styles.cardHeader}>
+              <View>
+                <Text style={styles.title}>Welcome Back!</Text>
+                <Text style={styles.subtitle}>
+                  Sign in to enjoy delicious canteen meals
+                </Text>
+              </View>
+              <View style={styles.secureBadge}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={16}
+                  color="#9A3412"
+                />
+                <Text style={styles.secureBadgeText}>Secure sign-in</Text>
+              </View>
+            </View>
+
+            <View style={styles.securityRow}>
+              <View style={styles.securityPill}>
+                <Ionicons
+                  name={biometricReady ? 'finger-print' : 'lock-closed-outline'}
+                  size={14}
+                  color="#B45309"
+                />
+                <Text style={styles.securityPillText}>
+                  {biometricReady
+                    ? 'Biometrics ready on this device'
+                    : 'Enable device lock for extra safety'}
+                </Text>
+              </View>
+              <View style={styles.securityPill}>
+                <Ionicons name="key-outline" size={14} color="#B45309" />
+                <Text style={styles.securityPillText}>
+                  Password never stored on this device
+                </Text>
+              </View>
+            </View>
 
             {/* Email */}
-            <View style={styles.inputWrapper}>
+            <View
+              style={[
+                styles.inputWrapper,
+                focusedField === 'email' && styles.inputWrapperFocused,
+                emailHasError && styles.inputWrapperError,
+              ]}
+            >
               <Ionicons name="mail-outline" size={20} color="#888" />
               <TextInput
-                style={[styles.input, errors.email && styles.inputError]}
+                style={styles.input}
                 placeholder="Email Address"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="next"
                 value={email}
-                onChangeText={setEmail}
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (errors.email) {
+                    setErrors((prev) => ({ ...prev, email: null }));
+                  }
+                }}
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
               />
             </View>
             {errors.email && (
@@ -329,14 +433,34 @@ export default function AccountLoginScreen() {
             )}
 
             {/* Password */}
-            <View style={styles.inputWrapper}>
+            <View
+              style={[
+                styles.inputWrapper,
+                focusedField === 'password' && styles.inputWrapperFocused,
+                passwordHasError && styles.inputWrapperError,
+              ]}
+            >
               <Ionicons name="lock-closed-outline" size={20} color="#888" />
               <TextInput
-                style={[styles.input, errors.password && styles.inputError]}
+                ref={passwordInputRef}
+                style={styles.input}
                 placeholder="Password"
                 secureTextEntry={!passwordVisible}
+                autoCorrect={false}
+                autoCapitalize="none"
+                autoComplete="password"
+                textContentType="password"
+                returnKeyType="done"
                 value={password}
-                onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (errors.password) {
+                    setErrors((prev) => ({ ...prev, password: null }));
+                  }
+                }}
+                onSubmitEditing={handleLogin}
               />
               <TouchableOpacity
                 onPress={() => setPasswordVisible(!passwordVisible)}
@@ -352,18 +476,52 @@ export default function AccountLoginScreen() {
               <Text style={styles.errorText}>{errors.password}</Text>
             )}
 
+            {cooldownSeconds > 0 ? (
+              <View style={styles.securityAlert}>
+                <Ionicons name="warning-outline" size={16} color="#B91C1C" />
+                <Text style={styles.securityAlertText}>
+                  Too many attempts. Try again in {cooldownSeconds}s.
+                </Text>
+              </View>
+            ) : attemptCount > 0 ? (
+              <View style={styles.securityAlert}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={16}
+                  color="#B45309"
+                />
+                <Text style={styles.securityAlertText}>
+                  Attempts remaining: {remainingAttempts}
+                </Text>
+              </View>
+            ) : null}
+
             {/* Login Button */}
             <TouchableOpacity
-              style={styles.loginButton}
+              style={[
+                styles.loginButton,
+                loginDisabled && styles.loginButtonDisabled,
+              ]}
               onPress={handleLogin}
-              disabled={loading}
+              disabled={loginDisabled}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.loginText}>Login</Text>
+                <View style={styles.loginContent}>
+                  <Ionicons name="lock-closed-outline" size={18} color="#fff" />
+                  <Text style={styles.loginText}>Login</Text>
+                </View>
               )}
             </TouchableOpacity>
+
+            <View style={styles.securityNotes}>
+              <Text style={styles.securityNotesTitle}>Security tips</Text>
+              <Text style={styles.securityNotesText}>
+                Use a strong password and keep your device locked. If you are on
+                a shared phone, log out after ordering.
+              </Text>
+            </View>
 
             {/* Google Button */}
             <TouchableOpacity
@@ -410,7 +568,7 @@ export default function AccountLoginScreen() {
               onPress={() => router.push('/account-registration')}
             >
               <Text style={styles.linkText}>
-                Don’t have an account?{' '}
+                Don't have an account?{' '}
                 <Text style={{ fontFamily: 'Roboto_700Bold' }}>Sign Up</Text>
               </Text>
             </TouchableOpacity>
@@ -423,9 +581,9 @@ export default function AccountLoginScreen() {
 
 const styles = StyleSheet.create({
   background: { flex: 1 },
-  scrollContainer: { flexGrow: 1, paddingHorizontal: 25, paddingVertical: 40 },
+  scrollContainer: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32 },
   container: { alignItems: 'center', justifyContent: 'flex-start', flex: 1 },
-  logo: { width: 180, height: 180, marginTop: 35 },
+  logo: { width: 170, height: 170, marginTop: 24, marginBottom: 8 },
   title: {
     fontSize: 28,
     fontFamily: 'Roboto_900Black',
@@ -433,29 +591,85 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#666',
-    marginBottom: 30,
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
     textAlign: 'left',
     fontFamily: 'Roboto_400Regular',
   },
   card: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 20,
-    padding: 25,
-    elevation: 3,
-    marginTop: 25,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 24,
+    padding: 22,
+    elevation: 4,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,140,0,0.12)',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  secureBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFE7C7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginLeft: 10,
+  },
+  secureBadgeText: {
+    marginLeft: 6,
+    fontSize: 11,
+    fontFamily: 'Roboto_700Bold',
+    color: '#9A3412',
+  },
+  securityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  securityPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E4',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  securityPillText: {
+    marginLeft: 6,
+    fontSize: 11,
+    color: '#7C2D12',
+    fontFamily: 'Roboto_700Bold',
+    flexShrink: 1,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    paddingHorizontal: 15,
+    borderColor: '#F3D6B7',
+    borderRadius: 14,
+    paddingHorizontal: 14,
     marginBottom: 15,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFF7ED',
+  },
+  inputWrapperFocused: {
+    borderColor: '#F97316',
+    backgroundColor: '#FFF3E4',
+  },
+  inputWrapperError: {
+    borderColor: '#EF4444',
   },
   input: {
     flex: 1,
@@ -464,24 +678,73 @@ const styles = StyleSheet.create({
     color: '#333',
     fontFamily: 'Roboto_400Regular',
   },
-  inputError: { borderColor: 'red' },
   loginButton: {
     backgroundColor: '#FF8C00',
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     marginVertical: 10,
   },
-  loginText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  loginButtonDisabled: {
+    opacity: 0.6,
+  },
+  loginContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginText: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    marginLeft: 8,
+  },
+  securityAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  securityAlertText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#7C2D12',
+    fontFamily: 'Roboto_700Bold',
+  },
+  securityNotes: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  securityNotesTitle: {
+    fontSize: 12,
+    color: '#9A3412',
+    fontFamily: 'Roboto_700Bold',
+    marginBottom: 6,
+  },
+  securityNotesText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'Roboto_400Regular',
+    lineHeight: 18,
+  },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#E5E7EB',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 15,
   },
   googleIcon: { width: 22, height: 22, marginRight: 10 },
@@ -490,19 +753,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FF8C00',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     marginBottom: 15,
   },
   guestText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#FF8C00' },
   linkText: {
-    color: '#FF8C00',
-    marginTop: 5,
-    fontSize: 15,
+    color: '#EA580C',
+    marginTop: 6,
+    fontSize: 14,
     textAlign: 'center',
+    fontFamily: 'Roboto_400Regular',
   },
   errorText: {
-    color: 'red',
+    color: '#DC2626',
     alignSelf: 'flex-start',
     marginBottom: 10,
     marginLeft: 5,

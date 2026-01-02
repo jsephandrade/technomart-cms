@@ -1,4 +1,4 @@
-// ComboMeals.jsx
+// Meals.jsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -43,9 +43,16 @@ export default function ComboMeals() {
   const loadComboMeals = async () => {
     try {
       const items = await fetchMenuItems();
-      const filtered = items.filter(
-        (item) => item.category && item.category.toLowerCase().includes('meals')
-      );
+      const filtered = items.filter((item) => {
+        const category = String(
+          item.category || item.categoryName || item.category_label || ''
+        )
+          .trim()
+          .toLowerCase();
+        if (!category) return false;
+        if (category.includes('combo')) return false;
+        return category === 'meals' || category === 'meal';
+      });
       setMenuItems(filtered);
     } catch (error) {
       console.error('Error fetching meals:', error);
@@ -65,7 +72,7 @@ export default function ComboMeals() {
             fontFamily: 'Roboto_700Bold',
           }}
         >
-          Loading Combo Meals...
+          Loading Meals...
         </Text>
       </View>
     );
@@ -152,7 +159,7 @@ export default function ComboMeals() {
         </View>
       </ImageBackground>
 
-      {/* Combo Meals List */}
+      {/* Meals List */}
       {menuItems.length > 0 ? (
         <FlatList
           data={menuItems}
@@ -168,7 +175,7 @@ export default function ComboMeals() {
       ) : (
         <View style={styles.centered}>
           <Text style={{ fontFamily: 'Roboto_700Bold', color: '#555' }}>
-            No Combo Meals found.
+            No Meals found.
           </Text>
         </View>
       )}

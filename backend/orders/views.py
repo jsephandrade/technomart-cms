@@ -43,6 +43,16 @@ def _is_cash_method(value):
     return _normalize_payment_method(value) in PAYMENT_CASH_ALIASES
 
 
+def _is_guest_user(user):
+    if not user:
+        return False
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    if email.endswith("@guest.local"):
+        return True
+    username = str(getattr(user, "username", "") or "").strip().lower()
+    return username == "guest_user"
+
+
 def _get_display_name(user, order=None):
     if user:
         get_full_name = getattr(user, "get_full_name", None)
@@ -158,6 +168,8 @@ def _maybe_award_loyalty_points(order):
         return Decimal("0.00")
     user = getattr(order, "placed_by", None)
     if not user:
+        return Decimal("0.00")
+    if _is_guest_user(user):
         return Decimal("0.00")
     meta = order.meta or {}
     if meta.get(LOYALTY_META_KEY):
@@ -601,6 +613,11 @@ from api.models import Offer, AppUser
 @permission_classes([IsAuthenticated])
 def redeem_offer(request):
     user = request.user
+    if _is_guest_user(user):
+        return Response(
+            {"success": False, "message": "Guest users cannot use credit points."},
+            status=403,
+        )
     offer_id = request.data.get('offer_id')
     points_to_use = Decimal(request.data.get('points_used', 0)).quantize(Decimal('0.01'), ROUND_DOWN)
 
@@ -656,6 +673,8 @@ def redeem_offer(request):
         "remaining_points": available_points - points_to_use
     }, status=201)
 def get_available_points(user):
+    if _is_guest_user(user):
+        return Decimal("0.00")
     all_orders = Order.objects.filter(placed_by=user)
     earned_points = sum(
         (Decimal(order.total_amount or 0) * Decimal("0.01")).quantize(
@@ -681,6 +700,11 @@ def get_available_points(user):
 def apply_voucher(request):
     try:
         user = request.user
+        if _is_guest_user(user):
+            return Response(
+                {"success": False, "message": "Guest users cannot use credit points."},
+                status=403,
+            )
         voucher_points = int(request.data.get('points', 0))
 
         if voucher_points > user.credit_points:
@@ -734,6 +758,11 @@ from django.shortcuts import get_object_or_404
 @permission_classes([IsAuthenticated])
 def redeem_offer(request):
     user = request.user
+    if _is_guest_user(user):
+        return Response(
+            {"success": False, "message": "Guest users cannot use credit points."},
+            status=403,
+        )
     offer_id = request.data.get('offer_id')
     points_to_use = Decimal(request.data.get('points_used', 0)).quantize(Decimal('0.01'), ROUND_DOWN)
 

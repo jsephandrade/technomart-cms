@@ -23,7 +23,13 @@ import {
   Roboto_400Regular,
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
-import { getGcashLink, confirmPayment, getCreditPoints } from '../../api/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getGcashLink,
+  confirmPayment,
+  getCreditPoints,
+  USER_CACHE_KEY,
+} from '../../api/api';
 
 const PARTY_DURATION_MS = 2600;
 const PARTY_PIECE_COUNT = 18;
@@ -88,12 +94,14 @@ export default function PaymentPage() {
   const [showParty, setShowParty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [creditPoints, setCreditPoints] = useState(0);
+  const [isGuest, setIsGuest] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const partyPieces = useRef(createPartyPieces()).current;
   const partyTimerRef = useRef(null);
   const hasCelebratedRef = useRef(false);
   const totalAmount = Number(total) || 0;
-  const pointsEligible = creditPoints >= totalAmount && totalAmount > 0;
+  const pointsEligible =
+    !isGuest && creditPoints >= totalAmount && totalAmount > 0;
   const shouldCelebrate = celebrate === '1' || celebrate === 'true';
   const fallDistance = Math.max(240, height + 120);
   const orderTypeLabel = formatLabel(orderType) || 'Pickup';
@@ -145,7 +153,32 @@ export default function PaymentPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const loadPoints = async () => {
+    const loadSession = async () => {
+      let guest = false;
+      try {
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const storedUser = entries[0][1] || entries[1][1];
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            const email = String(parsed?.email || '').toLowerCase();
+            guest = email.endsWith('@guest.local');
+          } catch (err) {
+            console.warn('Failed to parse stored user in payment:', err);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to read stored user in payment:', err);
+      }
+      if (isMounted) {
+        setIsGuest(guest);
+      }
+      if (guest) {
+        if (isMounted) {
+          setCreditPoints(0);
+        }
+        return;
+      }
       try {
         const points = await getCreditPoints();
         if (isMounted) {
@@ -158,7 +191,7 @@ export default function PaymentPage() {
         }
       }
     };
-    loadPoints();
+    loadSession();
     return () => {
       isMounted = false;
     };
@@ -222,6 +255,14 @@ export default function PaymentPage() {
     }
 
     if (normalizedMethod === 'points') {
+      if (isGuest) {
+        setSelectedPayment(null);
+        Alert.alert(
+          'Sign in to use points',
+          'Create an account to earn and use credit points.'
+        );
+        return;
+      }
       if (!pointsEligible) {
         setSelectedPayment(null);
         Alert.alert(
@@ -423,11 +464,15 @@ export default function PaymentPage() {
             <Text style={styles.pointsSubtitle}>
               Available: {creditPoints.toFixed(2)} pts
             </Text>
-            {!pointsEligible && (
+            {isGuest ? (
+              <Text style={styles.pointsHint}>
+                Sign in to earn and use credit points.
+              </Text>
+            ) : !pointsEligible ? (
               <Text style={styles.pointsHint}>
                 Not enough points to cover this order.
               </Text>
-            )}
+            ) : null}
           </View>
           <Switch
             value={selectedPayment === 'points'}

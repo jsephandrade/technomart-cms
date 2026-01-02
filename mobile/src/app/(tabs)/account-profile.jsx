@@ -49,6 +49,7 @@ export default function AccountProfile() {
   const { clearCart } = useCart();
   const [profile, setProfile] = useState(null);
   const [creditPoints, setCreditPoints] = useState(0);
+  const [isGuest, setIsGuest] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creditModal, setCreditModal] = useState(false);
   const [specialOffers, setSpecialOffers] = useState([]);
@@ -69,11 +70,19 @@ export default function AccountProfile() {
       if (!userData) {
         setProfile(null);
         setCreditPoints(0);
+        setIsGuest(false);
         return;
       }
 
       const parsed = JSON.parse(userData);
       setProfile(parsed);
+      const email = String(parsed?.email || '').toLowerCase();
+      const guest = email.endsWith('@guest.local');
+      setIsGuest(guest);
+      if (guest) {
+        setCreditPoints(0);
+        return;
+      }
 
       const token = await getValidToken();
       if (!token) throw new Error('No access token');
@@ -104,6 +113,7 @@ export default function AccountProfile() {
       console.error('loadProfile outer error:', err);
       setProfile((prev) => prev ?? null);
       setCreditPoints(0);
+      setIsGuest(false);
     } finally {
       setLoading(false);
     }
@@ -111,6 +121,10 @@ export default function AccountProfile() {
 
   // --- Load special offers ---
   const loadSpecialOffers = useCallback(async () => {
+    if (isGuest) {
+      setSpecialOffers([]);
+      return;
+    }
     try {
       const token = await getValidToken();
       if (!token) throw new Error('No access token');
@@ -140,7 +154,7 @@ export default function AccountProfile() {
         Alert.alert('Error', 'Failed to load special offers.');
       }
     }
-  }, []);
+  }, [isGuest]);
 
   // --- Run on screen focus ---
   useFocusEffect(
@@ -176,6 +190,13 @@ export default function AccountProfile() {
 
   // --- Redeem offer ---
   const redeemOffer = async (offer) => {
+    if (isGuest) {
+      Alert.alert(
+        'Sign in to redeem',
+        'Create an account to earn and redeem points.'
+      );
+      return;
+    }
     const points = Number(creditPoints) || 0; // ensure it's a number
 
     if (points < offer.points) {
@@ -316,7 +337,11 @@ export default function AccountProfile() {
   }
 
   const creditValue = Number(creditPoints || 0).toFixed(2);
-  const rewardCount = Array.isArray(specialOffers) ? specialOffers.length : 0;
+  const rewardCount = isGuest
+    ? 0
+    : Array.isArray(specialOffers)
+      ? specialOffers.length
+      : 0;
   const avatarUrl = profile.avatar || profile.image || '';
   const initials = getInitials(profile.name || profile.email || '');
   const profileDetails = [
@@ -443,6 +468,15 @@ export default function AccountProfile() {
           </TouchableOpacity>
         </View>
 
+        {isGuest ? (
+          <View style={styles.guestNotice}>
+            <Ionicons name="sparkles-outline" size={18} color="#F97316" />
+            <Text style={styles.guestNoticeText}>
+              Sign in to earn points and unlock rewards.
+            </Text>
+          </View>
+        ) : null}
+
         <TouchableOpacity
           onPress={handleRewardsPress}
           activeOpacity={0.85}
@@ -480,52 +514,65 @@ export default function AccountProfile() {
                 Redeem your points for rewards.
               </Text>
             </View>
-            <Animated.FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={specialOffers}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={{
-                paddingHorizontal: (width - CARD_WIDTH) / 2,
-              }}
-              snapToInterval={CARD_WIDTH + SPACING}
-              decelerationRate="fast"
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: true }
-              )}
-              renderItem={({ item, index }) => {
-                const inputRange = [
-                  (index - 1) * (CARD_WIDTH + SPACING),
-                  index * (CARD_WIDTH + SPACING),
-                  (index + 1) * (CARD_WIDTH + SPACING),
-                ];
-                const scale = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [0.8, 1, 0.8],
-                  extrapolate: 'clamp',
-                });
+            {isGuest ? (
+              <View style={styles.guestModalNotice}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={24}
+                  color="#F97316"
+                />
+                <Text style={styles.guestModalText}>
+                  Sign in to unlock points and redeem rewards.
+                </Text>
+              </View>
+            ) : (
+              <Animated.FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={specialOffers}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={{
+                  paddingHorizontal: (width - CARD_WIDTH) / 2,
+                }}
+                snapToInterval={CARD_WIDTH + SPACING}
+                decelerationRate="fast"
+                onScroll={Animated.event(
+                  [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                  { useNativeDriver: true }
+                )}
+                renderItem={({ item, index }) => {
+                  const inputRange = [
+                    (index - 1) * (CARD_WIDTH + SPACING),
+                    index * (CARD_WIDTH + SPACING),
+                    (index + 1) * (CARD_WIDTH + SPACING),
+                  ];
+                  const scale = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [0.8, 1, 0.8],
+                    extrapolate: 'clamp',
+                  });
 
-                return (
-                  <Animated.View
-                    style={[styles.offerCard, { transform: [{ scale }] }]}
-                  >
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.offerImage}
-                    />
-                    <Text style={styles.offerName}>{item.name}</Text>
-                    <Text style={styles.offerPoints}>{item.points} pts</Text>
-                    <TouchableOpacity
-                      style={styles.redeemBtn}
-                      onPress={() => redeemOffer(item)}
+                  return (
+                    <Animated.View
+                      style={[styles.offerCard, { transform: [{ scale }] }]}
                     >
-                      <Text style={styles.redeemText}>Redeem</Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              }}
-            />
+                      <Image
+                        source={{ uri: item.image }}
+                        style={styles.offerImage}
+                      />
+                      <Text style={styles.offerName}>{item.name}</Text>
+                      <Text style={styles.offerPoints}>{item.points} pts</Text>
+                      <TouchableOpacity
+                        style={styles.redeemBtn}
+                        onPress={() => redeemOffer(item)}
+                      >
+                        <Text style={styles.redeemText}>Redeem</Text>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  );
+                }}
+              />
+            )}
             <TouchableOpacity
               style={[styles.modalBtn, styles.saveBtn]}
               onPress={() => setCreditModal(false)}
@@ -735,6 +782,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '700',
   },
+  guestNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E4',
+    borderRadius: 16,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  guestNoticeText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#9A3412',
+    fontWeight: '700',
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -822,6 +887,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  guestModalNotice: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  guestModalText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#9A3412',
+    textAlign: 'center',
+    fontWeight: '700',
   },
   modalBtn: {
     paddingVertical: 10,

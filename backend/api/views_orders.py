@@ -62,6 +62,16 @@ def _is_walk_in_channel(value: Optional[str]) -> bool:
     return str(value or "").strip().lower() in WALK_IN_CHANNEL_ALIASES
 
 
+def _is_guest_user(user) -> bool:
+    if not user:
+        return False
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    if email.endswith("@guest.local"):
+        return True
+    username = str(getattr(user, "username", "") or "").strip().lower()
+    return username == "guest_user"
+
+
 def _should_create_pending_cash_payment(payment_method: Optional[str], channel: Optional[str]) -> bool:
     if not _is_cash_method(payment_method):
         return False
@@ -143,6 +153,8 @@ def _maybe_award_loyalty_points(order) -> Decimal:
             if not _is_order_fully_paid(locked):
                 return Decimal("0.00")
             if not locked.placed_by_id:
+                return Decimal("0.00")
+            if _is_guest_user(locked.placed_by):
                 return Decimal("0.00")
             meta = locked.meta or {}
             if meta.get(LOYALTY_META_KEY):

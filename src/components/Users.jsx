@@ -95,6 +95,10 @@ const Users = () => {
         return 'default';
       case 'staff':
         return 'secondary';
+      case 'faculty':
+        return 'outline';
+      case 'customer':
+        return 'outline';
       default:
         return 'secondary';
     }
@@ -194,6 +198,8 @@ const Users = () => {
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
+                  <SelectItem value="faculty">Faculty</SelectItem>
+                  <SelectItem value="customer">Customer</SelectItem>
                 </SelectContent>
               </Select>
             </div>

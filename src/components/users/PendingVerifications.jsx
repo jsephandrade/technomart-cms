@@ -220,6 +220,12 @@ export const PendingVerifications = () => {
                               <DropdownMenuRadioItem value="staff">
                                 Staff
                               </DropdownMenuRadioItem>
+                              <DropdownMenuRadioItem value="faculty">
+                                Faculty
+                              </DropdownMenuRadioItem>
+                              <DropdownMenuRadioItem value="customer">
+                                Customer
+                              </DropdownMenuRadioItem>
                               <DropdownMenuRadioItem value="manager">
                                 Manager
                               </DropdownMenuRadioItem>

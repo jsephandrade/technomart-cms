@@ -109,8 +109,17 @@ def _extract_face_and_embedding(
         if not faces or len(faces) == 0:
             return None, {"error": "no_face_detected", "message": "No face detected in image"}
 
-        if len(faces) > 1:
-            return None, {"error": "multiple_faces", "message": "Multiple faces detected - ensure only one person is visible"}
+        multiple_faces = len(faces) > 1
+        if multiple_faces:
+            # Choose the most prominent face to avoid hard-failing on background faces.
+            def _face_score(item):
+                area = item.get("facial_area") or {}
+                w = area.get("w") or area.get("width") or 0
+                h = area.get("h") or area.get("height") or 0
+                conf = item.get("confidence") or 0
+                return (conf, w * h)
+
+            faces = sorted(faces, key=_face_score, reverse=True)
 
         face = faces[0]
         confidence = face.get('confidence', 0)
@@ -120,11 +129,12 @@ def _extract_face_and_embedding(
             return None, {"error": "low_confidence", "message": "Face detection confidence too low - improve lighting or angle"}
 
         # Generate embedding using the specified model
+        face_img = face.get("face") if isinstance(face, dict) else None
         embeddings = DeepFace.represent(
-            img_path=img_array,
+            img_path=face_img if face_img is not None else img_array,
             model_name=model_name,
             detector_backend='opencv',
-            enforce_detection=enforce_detection,
+            enforce_detection=False if face_img is not None else enforce_detection,
             align=True
         )
 
@@ -138,7 +148,9 @@ def _extract_face_and_embedding(
             "confidence": confidence,
             "face_area": face.get('facial_area', {}),
             "model": model_name,
-            "embedding_dim": len(embedding_vec)
+            "embedding_dim": len(embedding_vec),
+            "multiple_faces": multiple_faces,
+            "faces_detected": len(faces),
         }
 
         return embedding_vec, metadata

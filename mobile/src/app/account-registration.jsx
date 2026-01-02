@@ -196,6 +196,11 @@ export default function AccountRegistrationScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <View style={styles.card}>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Fill in the details to register</Text>
@@ -551,6 +556,7 @@ const styles = StyleSheet.create({
   background: { flex: 1 },
   scrollContainer: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32 },
   container: { alignItems: 'center', justifyContent: 'flex-start', flex: 1 },
+  logo: { width: 85, height: 85, marginTop: 12, marginBottom: 8 },
   title: {
     fontSize: 28,
     fontFamily: 'Roboto_900Black',

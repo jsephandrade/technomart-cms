@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,16 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
+  RefreshControl,
   StyleSheet,
-  ImageBackground,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import {
   USER_CACHE_KEY,
   fetchMenuItems,
@@ -38,11 +41,36 @@ const to24Hour = (timeString) => {
   return `${hours.toString().padStart(2, '0')}:${minutes}`;
 };
 
+const STATUS_STYLES = {
+  pending: { label: 'Pending', color: '#FACC15', bg: '#FEF3C7' },
+  pending_payment: {
+    label: 'Pending Payment',
+    color: '#F97316',
+    bg: '#FFEDD5',
+  },
+  confirmed: { label: 'Confirmed', color: '#22C55E', bg: '#DCFCE7' },
+  cancelled: { label: 'Cancelled', color: '#EF4444', bg: '#FEE2E2' },
+  canceled: { label: 'Cancelled', color: '#EF4444', bg: '#FEE2E2' },
+};
+
+const normalizeStatus = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const resolveStatusStyle = (value) => {
+  const key = normalizeStatus(value);
+  return STATUS_STYLES[key] || STATUS_STYLES.pending;
+};
+
 export default function CateringTab() {
   const router = useRouter();
   const [cateringEvents, setCateringEvents] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [allowed, setAllowed] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -51,6 +79,7 @@ export default function CateringTab() {
     visible: false,
   });
   const [eventTab, setEventTab] = useState('upcoming');
+  const [fontsLoaded] = useFonts({ Roboto_700Bold });
 
   const [scheduleForm, setScheduleForm] = useState({
     eventName: '',
@@ -67,64 +96,70 @@ export default function CateringTab() {
   });
 
   /* ------------------ Load Data ------------------ */
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
-        const userData = entries[0][1] || entries[1][1];
-        const parsed = userData ? JSON.parse(userData) : null;
+      const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+      const userData = entries[0][1] || entries[1][1];
+      const parsed = userData ? JSON.parse(userData) : null;
 
-        if (!parsed || parsed.role !== 'faculty') {
-          setAllowed(false);
-          return;
-        }
-        setAllowed(true);
-
-        const clientName = parsed.name?.trim() || '';
-        setScheduleForm((prev) => ({ ...prev, client: clientName }));
-
-        const items = await fetchMenuItems();
-        setMenuItems(
-          (items && Array.isArray(items) ? items : []).map((i) => ({
-            ...i,
-            selectedQuantity: 1,
-          }))
-        );
-
-        const events = await fetchCateringEvents(clientName);
-
-        const normalizedEvents = (
-          events && Array.isArray(events) ? events : []
-        ).map((ev) => ({
-          ...ev,
-          client_name: ev.client_name?.trim() || '',
-          items: Array.isArray(ev.items) ? ev.items : [],
-          total_price:
-            ev.total_price ??
-            (Array.isArray(ev.items)
-              ? ev.items.reduce(
-                  (sum, item) =>
-                    sum +
-                    (item.unit_price || item.price || 0) * (item.quantity || 0),
-                  0
-                )
-              : 0),
-          status: ev.status ?? 'Pending',
-          paid_amount: ev.paid_amount ?? 0,
-        }));
-
-        setCateringEvents(normalizedEvents);
-      } catch (err) {
-        console.error('Error loading catering data:', err);
-      } finally {
-        setLoading(false);
+      if (!parsed || parsed.role !== 'faculty') {
+        setAllowed(false);
+        return;
       }
-    };
+      setAllowed(true);
 
-    loadData();
+      const clientName = parsed.name?.trim() || '';
+      setScheduleForm((prev) => ({ ...prev, client: clientName }));
+
+      const items = await fetchMenuItems();
+      setMenuItems(
+        (items && Array.isArray(items) ? items : []).map((i) => ({
+          ...i,
+          selectedQuantity: 1,
+        }))
+      );
+
+      const events = await fetchCateringEvents(clientName);
+
+      const normalizedEvents = (
+        events && Array.isArray(events) ? events : []
+      ).map((ev) => ({
+        ...ev,
+        client_name: ev.client_name?.trim() || '',
+        items: Array.isArray(ev.items) ? ev.items : [],
+        total_price:
+          ev.total_price ??
+          (Array.isArray(ev.items)
+            ? ev.items.reduce(
+                (sum, item) =>
+                  sum +
+                  (item.unit_price || item.price || 0) * (item.quantity || 0),
+                0
+              )
+            : 0),
+        status: ev.status ?? 'Pending',
+        paid_amount: ev.paid_amount ?? 0,
+      }));
+
+      setCateringEvents(normalizedEvents);
+    } catch (err) {
+      console.error('Error loading catering data:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
 
   /* ------------------ Handlers ------------------ */
   const handleInputChange = (field, value) => {
@@ -295,20 +330,26 @@ export default function CateringTab() {
   };
 
   /* ------------------ Loading / Access ------------------ */
-  if (loading || allowed === null) {
+  if (!fontsLoaded || loading || allowed === null) {
     return (
-      <View style={styles.loaderContainer}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#f97316" />
+        <Text style={styles.loadingText}>Loading catering...</Text>
       </View>
     );
   }
 
   if (!allowed) {
     return (
-      <View style={styles.loaderContainer}>
-        <Text style={{ color: 'red', fontSize: 16 }}>
-          You are not allowed to access Catering.
-        </Text>
+      <View style={styles.container}>
+        <View style={styles.backgroundGlowTop} />
+        <View style={styles.backgroundGlowBottom} />
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Access restricted</Text>
+          <Text style={styles.emptySubtitle}>
+            You are not allowed to access Catering.
+          </Text>
+        </View>
       </View>
     );
   }
@@ -328,371 +369,435 @@ export default function CateringTab() {
     (event) => new Date(event.event_date) < today
   );
   const displayedEvents = eventTab === 'upcoming' ? upcomingEvents : pastEvents;
+  const totalEvents = userEvents.length;
+  const upcomingCount = upcomingEvents.length;
+  const pastCount = pastEvents.length;
+  const emptyTitle =
+    eventTab === 'upcoming' ? 'No upcoming events' : 'No past events';
+  const emptySubtitle =
+    eventTab === 'upcoming'
+      ? 'Schedule a new catering event to get started.'
+      : 'Your completed events will appear here.';
 
   /* ------------------ Render ------------------ */
   return (
-    <View style={{ flex: 1, backgroundColor: '#fdfdfd' }}>
-      <ImageBackground
-        source={require('../../../assets/drop_1.png')}
-        resizeMode="cover"
-        style={styles.headerBackground}
+    <View style={styles.container}>
+      <View style={styles.backgroundGlowTop} />
+      <View style={styles.backgroundGlowBottom} />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#f97316']}
+          />
+        }
       >
-        <View style={styles.overlay} />
-        <View style={styles.headerContainer}>
-          <View style={styles.headerTopRow}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={{ fontSize: 24, fontWeight: '700' }}>←</Text>
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Catering Events</Text>
-            <View style={{ width: 24 }} />
+        <LinearGradient
+          colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
+          start={[0, 0]}
+          end={[1, 1]}
+          style={styles.heroCard}
+        >
+          <View style={styles.heroRow}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="calendar-outline" size={22} color="#1F2937" />
+            </View>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroTitle}>Catering</Text>
+              <Text style={styles.heroSubtitle}>
+                Plan and track catering events
+              </Text>
+            </View>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{totalEvents} total</Text>
+            </View>
           </View>
-        </View>
-      </ImageBackground>
+        </LinearGradient>
 
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
         <TouchableOpacity
-          style={styles.scheduleBtn}
+          style={styles.primaryAction}
           onPress={() => setModalVisible(true)}
         >
-          <Text style={styles.scheduleBtnText}>
-            Schedule New Catering Event
-          </Text>
+          <View style={styles.primaryActionIcon}>
+            <Ionicons name="add-circle-outline" size={20} color="#9A3412" />
+          </View>
+          <View style={styles.primaryActionText}>
+            <Text style={styles.primaryActionTitle}>
+              Schedule New Catering Event
+            </Text>
+            <Text style={styles.primaryActionSubtitle}>
+              Reserve a date, menu, and guest count.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
 
-        {/* Tabs */}
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-around',
-            marginBottom: 12,
-          }}
-        >
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Events</Text>
+            <Text style={styles.sectionSubtitle}>
+              Upcoming and past bookings
+            </Text>
+          </View>
+          <View style={styles.sectionBadge}>
+            <Text style={styles.sectionBadgeText}>
+              {displayedEvents.length} showing
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.tabRow}>
           <TouchableOpacity
             onPress={() => setEventTab('upcoming')}
             style={[
-              { padding: 8, borderRadius: 8 },
-              eventTab === 'upcoming' && { backgroundColor: '#f97316' },
+              styles.tabPill,
+              eventTab === 'upcoming' && styles.tabPillActive,
             ]}
           >
             <Text
-              style={{
-                color: eventTab === 'upcoming' ? '#fff' : '#333',
-                fontWeight: '600',
-              }}
+              style={[
+                styles.tabText,
+                eventTab === 'upcoming' && styles.tabTextActive,
+              ]}
             >
-              Upcoming
+              Upcoming ({upcomingCount})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setEventTab('past')}
             style={[
-              { padding: 8, borderRadius: 8 },
-              eventTab === 'past' && { backgroundColor: '#f97316' },
+              styles.tabPill,
+              eventTab === 'past' && styles.tabPillActive,
             ]}
           >
             <Text
-              style={{
-                color: eventTab === 'past' ? '#fff' : '#333',
-                fontWeight: '600',
-              }}
+              style={[
+                styles.tabText,
+                eventTab === 'past' && styles.tabTextActive,
+              ]}
             >
-              Past
+              Past ({pastCount})
             </Text>
           </TouchableOpacity>
         </View>
 
-        {displayedEvents.length === 0 && (
-          <Text style={{ padding: 16, color: '#555', textAlign: 'center' }}>
-            No {eventTab === 'upcoming' ? 'upcoming' : 'past'} events.
-          </Text>
-        )}
+        {displayedEvents.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+            <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
+          </View>
+        ) : (
+          displayedEvents.map((event) => {
+            const statusStyle = resolveStatusStyle(event.status);
+            return (
+              <View key={event.id} style={styles.eventCard}>
+                <View style={styles.orderHeader}>
+                  <View style={styles.orderHeaderInfo}>
+                    <Text style={styles.eventTitle}>{event.name}</Text>
+                    <Text style={styles.eventDate}>{event.event_date}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: statusStyle.bg },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusBadgeText,
+                        { color: statusStyle.color },
+                      ]}
+                    >
+                      {statusStyle.label}
+                    </Text>
+                  </View>
+                </View>
 
-        {displayedEvents.map((event) => (
-          <View key={event.id} style={styles.eventCard}>
-            <Text style={styles.eventTitle}>{event.name}</Text>
-
-            {/* STATUS */}
-            <Text
-              style={[
-                styles.statusText,
-                event.status === 'Confirmed'
-                  ? styles.statusConfirmed
-                  : event.status === 'Pending Payment'
-                    ? styles.statusPending
-                    : styles.statusAccepted,
-              ]}
-            >
-              📌 Status: {event.status}
-            </Text>
-
-            <Text style={styles.highlightedText}>
-              📅 Date: {event.event_date}
-            </Text>
-            <Text style={styles.highlightedText}>
-              ⏰ Time: {event.start_time} - {event.end_time}
-            </Text>
-            <Text style={styles.highlightedText}>
-              📍 Location: {event.location}
-            </Text>
-            <Text style={styles.highlightedText}>
-              👥 Attendees: {event.guest_count}
-            </Text>
-
-            {/* TOTAL PRICE */}
-            <Text
-              style={[styles.highlightedText, { marginTop: 4, fontSize: 16 }]}
-            >
-              💰 Total Price: ₱ {event.total_price?.toLocaleString() || 0}
-              {event.status === 'Pending Payment' &&
-                ` (Paid: ₱${event.paid_amount?.toLocaleString() || 0})`}
-            </Text>
-
-            {event.notes && (
-              <Text style={styles.highlightedText}>
-                📝 Notes: {event.notes}
-              </Text>
-            )}
-
-            <Text style={{ marginTop: 6, fontWeight: '700' }}>
-              🍽 Menu Items:
-            </Text>
-            <View style={styles.menuGrid}>
-              {event.items?.map((item, idx) => (
-                <View key={idx} style={styles.menuCard}>
-                  {item.image ? (
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.menuImage}
-                    />
-                  ) : (
-                    <View style={styles.menuImagePlaceholder} />
-                  )}
-                  <Text style={styles.menuCardText}>
-                    {item.name} x {item.quantity} — ₱
-                    {(item.unit_price * item.quantity).toLocaleString()}
+                <View style={styles.eventMetaRow}>
+                  <Ionicons name="time-outline" size={16} color="#9A3412" />
+                  <Text style={styles.eventMetaText}>
+                    {event.start_time} - {event.end_time}
                   </Text>
                 </View>
-              ))}
-            </View>
+                <View style={styles.eventMetaRow}>
+                  <Ionicons name="location-outline" size={16} color="#9A3412" />
+                  <Text style={styles.eventMetaText}>{event.location}</Text>
+                </View>
+                <View style={styles.eventMetaRow}>
+                  <Ionicons name="people-outline" size={16} color="#9A3412" />
+                  <Text style={styles.eventMetaText}>
+                    {event.guest_count} attendees
+                  </Text>
+                </View>
 
-            {/* Pay Remaining Button */}
-            {event.status === 'Pending Payment' && (
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#f97316',
-                  padding: 8,
-                  borderRadius: 8,
-                  marginTop: 8,
-                  alignItems: 'center',
-                }}
-                onPress={() => handlePayRemaining(event)}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>
-                  Pay Remaining 50%
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ))}
+                {event.notes ? (
+                  <Text style={styles.eventNotes}>{event.notes}</Text>
+                ) : null}
+
+                <View style={styles.eventTotalRow}>
+                  <View>
+                    <Text style={styles.eventTotalLabel}>Total</Text>
+                    {event.status === 'Pending Payment' ? (
+                      <Text style={styles.eventTotalNote}>
+                        Paid: ₱{(event.paid_amount || 0).toLocaleString()}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.eventTotalValue}>
+                    ₱{event.total_price?.toLocaleString() || 0}
+                  </Text>
+                </View>
+
+                <Text style={styles.menuTitle}>Menu Items</Text>
+                <View style={styles.menuGrid}>
+                  {event.items?.map((item, idx) => (
+                    <View key={idx} style={styles.menuCard}>
+                      {item.image ? (
+                        <Image
+                          source={{ uri: item.image }}
+                          style={styles.menuImage}
+                        />
+                      ) : (
+                        <View style={styles.menuImagePlaceholder} />
+                      )}
+                      <Text style={styles.menuCardText}>
+                        {item.name} x {item.quantity}
+                      </Text>
+                      <Text style={styles.menuCardPrice}>
+                        ₱{(item.unit_price * item.quantity).toLocaleString()}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {event.status === 'Pending Payment' && (
+                  <TouchableOpacity
+                    style={styles.payButton}
+                    onPress={() => handlePayRemaining(event)}
+                  >
+                    <Text style={styles.payButtonText}>Pay Remaining 50%</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })
+        )}
 
         {/* MODAL: Schedule Event */}
         <Modal
           visible={modalVisible}
           animationType="slide"
-          transparent={true}
+          transparent
           onRequestClose={() => setModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
-            <ScrollView style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Schedule Catering Event</Text>
+            <TouchableOpacity
+              style={styles.modalBackdrop}
+              activeOpacity={1}
+              onPress={() => setModalVisible(false)}
+            />
+            <View style={styles.modalCard}>
+              <View style={styles.modalHandle} />
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.modalTitle}>Schedule Catering Event</Text>
 
-              <Field
-                label="Event Name"
-                value={scheduleForm.eventName}
-                onChange={(v) => handleInputChange('eventName', v)}
-              />
-              <Field
-                label="Client"
-                value={scheduleForm.client}
-                editable={false}
-              />
+                <Field
+                  label="Event Name"
+                  value={scheduleForm.eventName}
+                  onChange={(v) => handleInputChange('eventName', v)}
+                />
+                <Field
+                  label="Client"
+                  value={scheduleForm.client}
+                  editable={false}
+                />
 
-              {/* Date */}
-              <View style={{ marginBottom: 14 }}>
-                <Text style={styles.inputLabel}>Event Date</Text>
-                <TouchableOpacity
-                  onPress={() => setShowDatePicker(true)}
-                  style={styles.inputField}
-                >
-                  <Text>{scheduleForm.date || 'Select date'}</Text>
-                </TouchableOpacity>
-                {showDatePicker && (
+                {/* Date */}
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={styles.inputLabel}>Event Date</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowDatePicker(true)}
+                    style={styles.inputField}
+                  >
+                    <Text style={styles.inputText}>
+                      {scheduleForm.date || 'Select date'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={
+                        scheduleForm.date
+                          ? new Date(scheduleForm.date)
+                          : new Date()
+                      }
+                      mode="date"
+                      display="default"
+                      onChange={(e, selectedDate) => {
+                        setShowDatePicker(false);
+                        if (selectedDate)
+                          handleInputChange(
+                            'date',
+                            selectedDate.toISOString().split('T')[0]
+                          );
+                      }}
+                    />
+                  )}
+                </View>
+
+                {/* Time */}
+                <TimeField
+                  label="Start Time"
+                  value={scheduleForm.startTime}
+                  onPress={() =>
+                    setShowTimePicker({ field: 'startTime', visible: true })
+                  }
+                />
+                <TimeField
+                  label="End Time"
+                  value={scheduleForm.endTime}
+                  onPress={() =>
+                    setShowTimePicker({ field: 'endTime', visible: true })
+                  }
+                />
+
+                {showTimePicker.visible && (
                   <DateTimePicker
-                    value={
-                      scheduleForm.date
-                        ? new Date(scheduleForm.date)
-                        : new Date()
-                    }
-                    mode="date"
+                    value={new Date()}
+                    mode="time"
                     display="default"
-                    onChange={(e, selectedDate) => {
-                      setShowDatePicker(false);
-                      if (selectedDate)
-                        handleInputChange(
-                          'date',
-                          selectedDate.toISOString().split('T')[0]
-                        );
+                    onChange={(e, selected) => {
+                      setShowTimePicker({ field: '', visible: false });
+                      if (selected) {
+                        const formatted = selected.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+                        handleInputChange(showTimePicker.field, formatted);
+                      }
                     }}
                   />
                 )}
-              </View>
 
-              {/* Time */}
-              <TimeField
-                label="Start Time"
-                value={scheduleForm.startTime}
-                onPress={() =>
-                  setShowTimePicker({ field: 'startTime', visible: true })
-                }
-              />
-              <TimeField
-                label="End Time"
-                value={scheduleForm.endTime}
-                onPress={() =>
-                  setShowTimePicker({ field: 'endTime', visible: true })
-                }
-              />
-
-              {showTimePicker.visible && (
-                <DateTimePicker
-                  value={new Date()}
-                  mode="time"
-                  display="default"
-                  onChange={(e, selected) => {
-                    setShowTimePicker({ field: '', visible: false });
-                    if (selected) {
-                      const formatted = selected.toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      });
-                      handleInputChange(showTimePicker.field, formatted);
-                    }
-                  }}
-                />
-              )}
-
-              {/* Location */}
-              <View style={{ marginBottom: 14 }}>
-                <Text style={styles.inputLabel}>Location</Text>
-                <View style={styles.inputField}>
-                  <Picker
-                    selectedValue={scheduleForm.location}
-                    onValueChange={(v) => handleInputChange('location', v)}
-                  >
-                    <Picker.Item label="Select location" value="" />
-                    <Picker.Item
-                      label="Conference Room A"
-                      value="Conference Room A"
-                    />
-                    <Picker.Item
-                      label="Conference Room B"
-                      value="Conference Room B"
-                    />
-                    <Picker.Item label="Main Hall" value="Main Hall" />
-                  </Picker>
-                </View>
-              </View>
-
-              <Field
-                label="Number of Attendees"
-                value={scheduleForm.attendees}
-                onChange={(v) => handleInputChange('attendees', v)}
-                keyboardType="numeric"
-              />
-              <Field
-                label="Contact Name"
-                value={scheduleForm.contactName}
-                onChange={(v) => handleInputChange('contactName', v)}
-              />
-              <Field
-                label="Contact Phone"
-                value={scheduleForm.contactPhone}
-                onChange={(v) => handleInputChange('contactPhone', v)}
-                keyboardType="phone-pad"
-              />
-              <Field
-                label="Additional Notes"
-                value={scheduleForm.notes}
-                onChange={(v) => handleInputChange('notes', v)}
-              />
-
-              <Text style={styles.menuTitle}>Select Menu Items</Text>
-              <View style={styles.menuGrid}>
-                {menuItems?.map((item) => {
-                  const selected = scheduleForm.selectedItems.includes(item.id);
-                  return (
-                    <View
-                      key={item.id}
-                      style={[
-                        styles.menuCard,
-                        selected && styles.menuCardSelected,
-                      ]}
+                {/* Location */}
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={styles.inputLabel}>Location</Text>
+                  <View style={styles.inputField}>
+                    <Picker
+                      selectedValue={scheduleForm.location}
+                      onValueChange={(v) => handleInputChange('location', v)}
                     >
-                      <TouchableOpacity onPress={() => toggleMenuItem(item.id)}>
-                        {item.image ? (
-                          <Image
-                            source={{ uri: item.image }}
-                            style={styles.menuImage}
-                          />
-                        ) : (
-                          <View style={styles.menuImagePlaceholder} />
-                        )}
-                        <Text
-                          style={[
-                            styles.menuCardText,
-                            selected && styles.menuCardTextSelected,
-                          ]}
-                        >
-                          {item.name}
-                        </Text>
-                      </TouchableOpacity>
-                      {selected && (
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            marginTop: 6,
-                          }}
-                        >
-                          <Text style={{ marginRight: 8 }}>Qty:</Text>
-                          <TextInput
-                            keyboardType="numeric"
-                            style={styles.qtyInput}
-                            value={item.selectedQuantity.toString()}
-                            onChangeText={(val) =>
-                              handleQuantityChange(item.id, parseInt(val) || 1)
-                            }
-                          />
-                        </View>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
+                      <Picker.Item label="Select location" value="" />
+                      <Picker.Item
+                        label="Conference Room A"
+                        value="Conference Room A"
+                      />
+                      <Picker.Item
+                        label="Conference Room B"
+                        value="Conference Room B"
+                      />
+                      <Picker.Item label="Main Hall" value="Main Hall" />
+                    </Picker>
+                  </View>
+                </View>
 
-              <Pressable
-                onPress={handleScheduleSubmit}
-                style={styles.submitBtn}
-              >
-                <Text style={styles.submitBtnText}>Submit</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setModalVisible(false)}
-                style={styles.cancelBtn}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </Pressable>
-            </ScrollView>
+                <Field
+                  label="Number of Attendees"
+                  value={scheduleForm.attendees}
+                  onChange={(v) => handleInputChange('attendees', v)}
+                  keyboardType="numeric"
+                />
+                <Field
+                  label="Contact Name"
+                  value={scheduleForm.contactName}
+                  onChange={(v) => handleInputChange('contactName', v)}
+                />
+                <Field
+                  label="Contact Phone"
+                  value={scheduleForm.contactPhone}
+                  onChange={(v) => handleInputChange('contactPhone', v)}
+                  keyboardType="phone-pad"
+                />
+                <Field
+                  label="Additional Notes"
+                  value={scheduleForm.notes}
+                  onChange={(v) => handleInputChange('notes', v)}
+                />
+
+                <Text style={styles.menuTitle}>Select Menu Items</Text>
+                <View style={styles.menuGrid}>
+                  {menuItems?.map((item) => {
+                    const selected = scheduleForm.selectedItems.includes(
+                      item.id
+                    );
+                    return (
+                      <View
+                        key={item.id}
+                        style={[
+                          styles.menuCard,
+                          selected && styles.menuCardSelected,
+                        ]}
+                      >
+                        <TouchableOpacity
+                          onPress={() => toggleMenuItem(item.id)}
+                        >
+                          {item.image ? (
+                            <Image
+                              source={{ uri: item.image }}
+                              style={styles.menuImage}
+                            />
+                          ) : (
+                            <View style={styles.menuImagePlaceholder} />
+                          )}
+                          <Text
+                            style={[
+                              styles.menuCardText,
+                              selected && styles.menuCardTextSelected,
+                            ]}
+                          >
+                            {item.name}
+                          </Text>
+                        </TouchableOpacity>
+                        {selected && (
+                          <View style={styles.qtyRow}>
+                            <Text style={styles.qtyLabel}>Qty</Text>
+                            <TextInput
+                              keyboardType="numeric"
+                              style={styles.qtyInput}
+                              value={item.selectedQuantity.toString()}
+                              onChangeText={(val) =>
+                                handleQuantityChange(
+                                  item.id,
+                                  parseInt(val) || 1
+                                )
+                              }
+                            />
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <Pressable
+                  onPress={handleScheduleSubmit}
+                  style={styles.submitBtn}
+                >
+                  <Text style={styles.submitBtnText}>Submit</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setModalVisible(false)}
+                  style={styles.cancelBtn}
+                >
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </Pressable>
+              </ScrollView>
+            </View>
           </View>
         </Modal>
       </ScrollView>
@@ -708,7 +813,8 @@ const Field = ({ label, value, onChange, editable = true, ...props }) => (
       value={value}
       onChangeText={onChange}
       placeholder={`Enter ${label.toLowerCase()}`}
-      style={styles.inputField}
+      placeholderTextColor="#9CA3AF"
+      style={[styles.inputField, styles.inputText]}
       editable={editable}
       {...props}
     />
@@ -719,130 +825,449 @@ const TimeField = ({ label, value, onPress }) => (
   <View style={{ marginBottom: 14 }}>
     <Text style={styles.inputLabel}>{label}</Text>
     <TouchableOpacity onPress={onPress} style={styles.inputField}>
-      <Text>{value || `Select ${label.toLowerCase()}`}</Text>
+      <Text style={styles.inputText}>
+        {value || `Select ${label.toLowerCase()}`}
+      </Text>
     </TouchableOpacity>
   </View>
 );
 
 /* ---------------------- Styles ---------------------- */
 const styles = StyleSheet.create({
-  loaderContainer: {
+  container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#FFF7EE',
   },
-  headerBackground: {
-    width: '100%',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+  backgroundGlowTop: {
+    position: 'absolute',
+    top: -120,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: '#FFE5C8',
+    opacity: 0.7,
+  },
+  backgroundGlowBottom: {
+    position: 'absolute',
+    bottom: -140,
+    left: -100,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: '#FFD6AE',
+    opacity: 0.6,
+  },
+  scrollContent: {
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+  heroCard: {
+    margin: 16,
+    borderRadius: 24,
+    padding: 16,
     overflow: 'hidden',
-    paddingBottom: 8,
   },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(254,192,117,0.5)',
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  headerContainer: { paddingTop: 50, paddingBottom: 14, paddingHorizontal: 14 },
-  headerTopRow: {
+  heroIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FFE7C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroContent: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  heroSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  heroBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  heroBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  primaryAction: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  primaryActionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: '#FFE7C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  primaryActionText: {
+    flex: 1,
+  },
+  primaryActionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  primaryActionSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  sectionBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  sectionBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  tabPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#FFE7C7',
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  tabPillActive: {
+    backgroundColor: '#F97316',
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  tabTextActive: {
+    color: '#fff',
+  },
+  eventCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  orderHeaderInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  eventTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  eventDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  statusBadge: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  eventMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  eventMetaText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  eventNotes: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#111827',
+    lineHeight: 18,
+  },
+  eventTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFF0E0',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
+  },
+  eventTotalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  eventTotalNote: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  eventTotalValue: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  menuTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  menuGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  menuCard: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    marginBottom: 12,
+  },
+  menuCardSelected: {
+    borderColor: '#F97316',
+    backgroundColor: '#FFFCF7',
+  },
+  menuCardText: {
+    marginTop: 6,
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#111827',
+  },
+  menuCardTextSelected: {
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  menuCardPrice: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  menuImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#F7EDE2',
+  },
+  menuImagePlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#F7EDE2',
+  },
+  qtyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 8,
+    width: '100%',
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: '#333' },
-  scheduleBtn: {
-    backgroundColor: '#f97316',
-    paddingVertical: 14,
+  qtyLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  qtyInput: {
+    width: 50,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    textAlign: 'center',
+    color: '#111827',
+    backgroundColor: '#fff',
+  },
+  payButton: {
+    marginTop: 12,
+    backgroundColor: '#F97316',
     borderRadius: 12,
-    marginBottom: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
   },
-  scheduleBtnText: {
+  payButtonText: {
     color: '#fff',
     fontWeight: '700',
-    textAlign: 'center',
-    fontSize: 16,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    justifyContent: 'flex-end',
   },
-  modalContent: {
-    backgroundColor: '#fff',
-    margin: 16,
-    borderRadius: 12,
-    padding: 16,
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalCard: {
+    backgroundColor: '#FFF7EE',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 12,
     maxHeight: '90%',
   },
+  modalHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#F3D6B7',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  modalContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
+    color: '#6B7280',
+    marginBottom: 6,
   },
-  inputLabel: { fontWeight: '600', marginBottom: 4 },
   inputField: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 10,
     backgroundColor: '#fff',
-  },
-  menuTitle: { fontWeight: '700', fontSize: 16, marginBottom: 8 },
-  menuGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  menuCard: {
-    width: '48%',
-    margin: '1%',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 8,
-    alignItems: 'center',
+    borderColor: '#F3D6B7',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  menuCardSelected: { borderColor: '#f97316', backgroundColor: '#fff7f0' },
-  menuCardText: { marginTop: 4, textAlign: 'center' },
-  menuCardTextSelected: { fontWeight: '700', color: '#f97316' },
-  menuImage: { width: 80, height: 80, borderRadius: 8 },
-  menuImagePlaceholder: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#eee',
-    borderRadius: 8,
-  },
-  qtyInput: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    width: 50,
-    borderRadius: 4,
-    padding: 4,
-    textAlign: 'center',
+  inputText: {
+    fontSize: 14,
+    color: '#111827',
   },
   submitBtn: {
-    backgroundColor: '#f97316',
-    padding: 12,
-    borderRadius: 12,
-    marginVertical: 12,
+    backgroundColor: '#F97316',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
   },
-  submitBtnText: { color: '#fff', textAlign: 'center', fontWeight: '700' },
+  submitBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
   cancelBtn: {
-    backgroundColor: '#ccc',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: '#FFE7C7',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
   },
-  cancelBtnText: { textAlign: 'center', fontWeight: '700' },
-  eventCard: {
+  cancelBtnText: {
+    color: '#9A3412',
+    fontWeight: '700',
+  },
+  emptyCard: {
     backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  eventTitle: { fontSize: 18, fontWeight: '700', marginBottom: 6 },
-  highlightedText: { fontWeight: '600', marginBottom: 2 },
-  statusText: { fontWeight: '700', fontSize: 15, marginBottom: 6 },
-  statusPending: { color: '#f39c12' },
-  statusAccepted: { color: '#3498db' },
-  statusConfirmed: { color: '#27ae60' },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF7EE',
+  },
+  loadingText: {
+    marginTop: 8,
+    color: '#F97316',
+    fontFamily: 'Roboto_700Bold',
+  },
 });

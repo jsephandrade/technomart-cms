@@ -39,6 +39,25 @@ def _is_cash_method(value):
     return _normalize_payment_method(value) in PAYMENT_CASH_ALIASES
 
 
+def _get_display_name(user, order=None):
+    if user:
+        get_full_name = getattr(user, "get_full_name", None)
+        if callable(get_full_name):
+            try:
+                full_name = get_full_name()
+                if full_name:
+                    return full_name
+            except Exception:
+                pass
+        for attr in ("name", "username", "email"):
+            value = getattr(user, attr, "")
+            if value:
+                return str(value)
+    if order and getattr(order, "customer_name", ""):
+        return str(order.customer_name)
+    return ""
+
+
 def _ensure_pending_cash_payment(order, *, customer_name=""):
     order_ids = [str(order.id)]
     if order.order_number:
@@ -233,7 +252,7 @@ def create_order(request):
 @permission_classes([IsAuthenticated])
 def get_user_orders(request):
     user = request.user
-    customer_name = user.get_full_name() or user.username  # fallback
+    customer_name = _get_display_name(user)  # fallback
 
     orders = Order.objects.filter(customer_name=customer_name)
 
@@ -281,7 +300,7 @@ def confirm_payment(request, order_number):
         if _is_cash_method(method):
             _ensure_pending_cash_payment(
                 order,
-                customer_name=request.user.get_full_name() or request.user.username,
+                customer_name=_get_display_name(request.user, order),
             )
 
         # Optionally, add credit points if needed
@@ -369,7 +388,7 @@ def redeem_offer(request):
     order = Order.objects.create(
         order_number=order_number,
         placed_by=user,
-        customer_name=user.get_full_name() or user.username,
+        customer_name=_get_display_name(user),
         order_type=request.data.get('order_type', 'pickup'),
         promised_time=request.data.get('promised_time'),
         subtotal=Decimal('0.00'),
@@ -439,15 +458,15 @@ def apply_voucher(request):
         order_number = generate_unique_order_number(prefix="O", order_model=Order)
 
         order = Order.objects.create(
-            order_number=order_number,
-            placed_by=user,
-            total_amount=0,
-            credit_points_used=voucher_points,
-            status='Pending',
-            customer_name=user.get_full_name() or user.username,
-            promised_time=request.data.get('promised_time', None),
-            order_type=request.data.get('order_type', 'pickup')
-        )
+        order_number=order_number,
+        placed_by=user,
+        total_amount=0,
+        credit_points_used=voucher_points,
+        status='Pending',
+        customer_name=_get_display_name(user),
+        promised_time=request.data.get('promised_time', None),
+        order_type=request.data.get('order_type', 'pickup')
+    )
 
         # Optionally add order items
         for item in request.data.get('items', []):

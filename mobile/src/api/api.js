@@ -92,46 +92,6 @@ export async function refreshAccessToken() {
     throw err;
   }
 }
-export const getGuestToken = async () => {
-  try {
-    // Clear old tokens
-    await AsyncStorage.multiRemove([
-      ACCESS_TOKEN_KEY,
-      REFRESH_TOKEN_KEY,
-      'accessToken',
-      'refreshToken',
-    ]);
-
-    const res = await fetch(`${API_BASE}/guest-login/`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    // Parse response
-    const data = await res.json();
-
-    console.log('Guest login response:', data, 'status:', res.status); // 🔍 Debug
-
-    if (!res.ok) {
-      throw new Error(data.detail || 'Guest login failed');
-    }
-
-    // Save tokens if they exist
-    if (data.access || data.refresh) {
-      await storeTokens({
-        accessToken: data.access,
-        refreshToken: data.refresh,
-      });
-    }
-    if (data.user)
-      await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
-
-    return data; // always return full object for safety
-  } catch (err) {
-    console.error('Guest login error:', err.message);
-    throw err;
-  }
-};
 
 // --------------------
 // Axios instances

@@ -63,6 +63,7 @@ export default function AppLaunchScreen() {
             const parsed = JSON.parse(storedUser);
             const email = String(parsed?.email || '').toLowerCase();
             if (email.endsWith('@guest.local')) {
+              await clearStoredTokens();
               if (active) {
                 setIsAuthenticated(false);
               }

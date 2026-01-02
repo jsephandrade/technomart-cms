@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
+  clearStoredTokens,
   getValidToken,
-  getGuestToken,
   storeTokens,
   USER_CACHE_KEY,
 } from '../api/api';
@@ -46,7 +46,6 @@ export default function AccountLoginScreen() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [guestLoading, setGuestLoading] = useState(false);
   const [attemptCount, setAttemptCount] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [focusedField, setFocusedField] = useState(null);
@@ -118,6 +117,7 @@ export default function AccountLoginScreen() {
         const parsed = JSON.parse(storedUser);
         const email = String(parsed?.email || '').toLowerCase();
         if (email.endsWith('@guest.local')) {
+          await clearStoredTokens();
           return;
         }
         setUser(parsed);
@@ -275,35 +275,6 @@ export default function AccountLoginScreen() {
       setGoogleLoading(false);
     }
   }, [promptAsync, request, router, runBiometricGate]);
-
-  const handleGuestEntry = useCallback(async () => {
-    if (guestLoading) return;
-    setGuestLoading(true);
-
-    try {
-      const data = await getGuestToken();
-      console.log('Guest data received:', data);
-
-      if (!data.access) throw new Error('No access token returned by backend');
-
-      await storeTokens({
-        accessToken: data.access,
-        refreshToken: data.refresh,
-      });
-
-      Alert.alert('Guest Access', 'You are browsing as a guest user.', [
-        { text: 'Continue', onPress: () => router.replace('/home-dashboard') },
-      ]);
-    } catch (error) {
-      console.error('Guest login frontend error:', error);
-      Alert.alert(
-        'Guest Login Failed',
-        error.message || 'Cannot login as guest.'
-      );
-    } finally {
-      setGuestLoading(false);
-    }
-  }, [guestLoading, router]);
 
   const [fontsLoaded] = useFonts({
     Roboto_400Regular,
@@ -471,21 +442,6 @@ export default function AccountLoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* Guest Button */}
-            <TouchableOpacity
-              style={styles.guestButton}
-              onPress={handleGuestEntry}
-              disabled={guestLoading}
-            >
-              {guestLoading ? (
-                <ActivityIndicator size="small" color="#FF8C00" />
-              ) : (
-                <Text style={styles.guestText}>
-                  Continue without an account
-                </Text>
-              )}
-            </TouchableOpacity>
-
             {/* Links */}
             <TouchableOpacity
               onPress={() => router.push('/account-password-reset')}
@@ -621,15 +577,6 @@ const styles = StyleSheet.create({
   },
   googleIcon: { width: 22, height: 22, marginRight: 10 },
   googleText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333' },
-  guestButton: {
-    borderWidth: 1,
-    borderColor: '#FF8C00',
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  guestText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#FF8C00' },
   linkText: {
     color: '#EA580C',
     marginTop: 6,

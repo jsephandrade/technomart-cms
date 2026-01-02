@@ -20,7 +20,7 @@ import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { fetchMenuItems, fetchUserOrders } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
-const SUPPORT_EMAIL = 'support@example.com';
+const SUPPORT_EMAIL = 'josephformentera2@gmail.com';
 const COLLAGE_GAP = 3;
 const STATUS_STEPS = ['pending', 'in_prep', 'ready'];
 const STATUS_LABELS = {
@@ -811,6 +811,10 @@ export default function OrderTrackingScreen() {
   const selectedTotal = resolveOrderTotal(selectedOrder, selectedItems);
   const selectedOrderNumber = resolveOrderNumber(selectedOrder);
   const selectedOrderDate = resolveOrderDate(selectedOrder);
+  const recentPreviousOrders = useMemo(
+    () => previousOrders.slice(0, 2),
+    [previousOrders]
+  );
 
   if (!fontsLoaded || loading) {
     return (
@@ -873,8 +877,8 @@ export default function OrderTrackingScreen() {
         {renderSection({
           title: 'Previous Orders',
           subtitle: 'Completed or cancelled',
-          count: `${previousOrders.length} total`,
-          items: previousOrders,
+          count: `${recentPreviousOrders.length} total`,
+          items: recentPreviousOrders,
           variant: 'previous',
           emptyTitle: 'No previous orders',
           emptySubtitle: 'Past orders will appear here.',

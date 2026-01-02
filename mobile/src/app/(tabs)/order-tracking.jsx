@@ -19,7 +19,6 @@ import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { fetchMenuItems, fetchUserOrders } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
-const BACKEND = 'http://192.168.166.179:8000';
 const COLLAGE_GAP = 3;
 const STATUS_STEPS = ['pending', 'in_prep', 'ready'];
 const STATUS_LABELS = {
@@ -387,9 +386,6 @@ const isPreviousStatus = (status) => {
   return ['completed', 'cancelled', 'refunded', 'voided'].includes(key);
 };
 
-const isCancelableStatus = (status) =>
-  ['pending', 'in_queue', 'in_prep'].includes(normalizeStatusKey(status));
-
 export default function OrderTrackingScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const [currentOrders, setCurrentOrders] = useState([]);
@@ -552,39 +548,6 @@ export default function OrderTrackingScreen() {
       setSelectedOrder(null);
       translateY.setValue(0);
     });
-  };
-
-  const handleCancelOrder = (order) => {
-    const orderNumber = resolveOrderNumber(order);
-    if (!orderNumber) {
-      Alert.alert('Unable to cancel', 'Order number is missing.');
-      return;
-    }
-    Alert.alert('Cancel order', 'Are you sure you want to cancel?', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Yes',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const res = await fetch(
-              `${BACKEND}/orders/orders/${orderNumber}/cancel/`,
-              { method: 'POST' }
-            );
-            if (!res.ok) {
-              const body = await res.text();
-              throw new Error(body || 'Cancel request failed.');
-            }
-            Alert.alert('Order cancelled', 'Your order has been cancelled.');
-            handleCloseModal();
-            await loadData({ silent: true });
-          } catch (err) {
-            console.error('Cancel order failed:', err);
-            Alert.alert('Cancel failed', err.message || 'Try again.');
-          }
-        },
-      },
-    ]);
   };
 
   const renderStatusBar = (statusKey) => {
@@ -957,17 +920,6 @@ export default function OrderTrackingScreen() {
                   {formatPeso(selectedTotal)}
                 </Text>
               </View>
-
-              {selectedOrder &&
-                !isPreviousStatus(selectedOrder?.status) &&
-                isCancelableStatus(selectedOrder?.status) && (
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => handleCancelOrder(selectedOrder)}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel Order</Text>
-                  </TouchableOpacity>
-                )}
             </ScrollView>
           </Animated.View>
         </View>
@@ -1411,18 +1363,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Roboto_700Bold',
     color: '#111827',
-  },
-  cancelButton: {
-    marginTop: 12,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#B91C1C',
   },
   loadingContainer: {
     flex: 1,

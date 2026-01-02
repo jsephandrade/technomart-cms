@@ -16,6 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import { useRouter } from 'expo-router';
 import {
   USER_CACHE_KEY,
   fetchMenuItems,
@@ -37,7 +38,8 @@ const to24Hour = (timeString) => {
   return `${hours.toString().padStart(2, '0')}:${minutes}`;
 };
 
-export default function CateringTab({ navigation }) {
+export default function CateringTab() {
+  const router = useRouter();
   const [cateringEvents, setCateringEvents] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -338,7 +340,7 @@ export default function CateringTab({ navigation }) {
         <View style={styles.overlay} />
         <View style={styles.headerContainer}>
           <View style={styles.headerTopRow}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
+            <TouchableOpacity onPress={() => router.back()}>
               <Text style={{ fontSize: 24, fontWeight: '700' }}>←</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Catering Events</Text>

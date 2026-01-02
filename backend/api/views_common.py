@@ -816,9 +816,23 @@ def _extract_dataurl_image(data_url: str):
         return None, None
     m = re.match(r"^data:([^;]+);base64,(.*)$", data_url, re.DOTALL)
     if not m:
-        return None, None
+        # Fallback: accept raw base64 without data URL prefix
+        cleaned = re.sub(r"\s+", "", str(data_url))
+        if not cleaned:
+            return None, None
+        padding = len(cleaned) % 4
+        if padding:
+            cleaned += "=" * (4 - padding)
+        try:
+            binary = base64.b64decode(cleaned)
+            return None, binary
+        except Exception:
+            return None, None
     mime = m.group(1)
     b64 = re.sub(r"\s+", "", m.group(2))
+    padding = len(b64) % 4
+    if padding:
+        b64 += "=" * (4 - padding)
     try:
         binary = base64.b64decode(b64)
         return mime, binary

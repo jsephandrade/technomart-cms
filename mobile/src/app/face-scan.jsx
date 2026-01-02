@@ -95,7 +95,7 @@ export default function FaceScanScreen() {
 
     for (let i = 0; i < CAPTURE_FRAMES; i += 1) {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.65,
+        quality: 0.5,
         base64: true,
         skipProcessing: true,
       });

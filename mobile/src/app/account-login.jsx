@@ -49,7 +49,6 @@ export default function AccountLoginScreen() {
   const [guestLoading, setGuestLoading] = useState(false);
   const [attemptCount, setAttemptCount] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
-  const [biometricReady, setBiometricReady] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [user, setUser] = useState(null);
   const passwordInputRef = useRef(null);
@@ -78,27 +77,6 @@ export default function AccountLoginScreen() {
     } catch (error) {
       console.warn('Biometric prompt failed:', error?.message || error);
     }
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    const checkBiometrics = async () => {
-      try {
-        const compatible = await LocalAuthentication.hasHardwareAsync();
-        const enrolled = compatible
-          ? await LocalAuthentication.isEnrolledAsync()
-          : false;
-        if (active) {
-          setBiometricReady(Boolean(enrolled));
-        }
-      } catch (error) {
-        console.warn('Biometric check failed:', error?.message || error);
-      }
-    };
-    checkBiometrics();
-    return () => {
-      active = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -334,7 +312,6 @@ export default function AccountLoginScreen() {
   });
   if (!fontsLoaded) return null;
 
-  const remainingAttempts = Math.max(0, MAX_LOGIN_ATTEMPTS - attemptCount);
   const loginDisabled = loading || cooldownSeconds > 0;
   const emailHasError = Boolean(errors.email);
   const passwordHasError = Boolean(errors.password);
@@ -365,35 +342,6 @@ export default function AccountLoginScreen() {
                 <Text style={styles.title}>Welcome Back!</Text>
                 <Text style={styles.subtitle}>
                   Sign in to enjoy delicious canteen meals
-                </Text>
-              </View>
-              <View style={styles.secureBadge}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={16}
-                  color="#9A3412"
-                />
-                <Text style={styles.secureBadgeText}>Secure sign-in</Text>
-              </View>
-            </View>
-
-            <View style={styles.securityRow}>
-              <View style={styles.securityPill}>
-                <Ionicons
-                  name={biometricReady ? 'finger-print' : 'lock-closed-outline'}
-                  size={14}
-                  color="#B45309"
-                />
-                <Text style={styles.securityPillText}>
-                  {biometricReady
-                    ? 'Biometrics ready on this device'
-                    : 'Enable device lock for extra safety'}
-                </Text>
-              </View>
-              <View style={styles.securityPill}>
-                <Ionicons name="key-outline" size={14} color="#B45309" />
-                <Text style={styles.securityPillText}>
-                  Password never stored on this device
                 </Text>
               </View>
             </View>
@@ -483,17 +431,6 @@ export default function AccountLoginScreen() {
                   Too many attempts. Try again in {cooldownSeconds}s.
                 </Text>
               </View>
-            ) : attemptCount > 0 ? (
-              <View style={styles.securityAlert}>
-                <Ionicons
-                  name="alert-circle-outline"
-                  size={16}
-                  color="#B45309"
-                />
-                <Text style={styles.securityAlertText}>
-                  Attempts remaining: {remainingAttempts}
-                </Text>
-              </View>
             ) : null}
 
             {/* Login Button */}
@@ -514,14 +451,6 @@ export default function AccountLoginScreen() {
                 </View>
               )}
             </TouchableOpacity>
-
-            <View style={styles.securityNotes}>
-              <Text style={styles.securityNotesTitle}>Security tips</Text>
-              <Text style={styles.securityNotesText}>
-                Use a strong password and keep your device locked. If you are on
-                a shared phone, log out after ordering.
-              </Text>
-            </View>
 
             {/* Google Button */}
             <TouchableOpacity
@@ -617,43 +546,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
-  secureBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFE7C7',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginLeft: 10,
-  },
-  secureBadgeText: {
-    marginLeft: 6,
-    fontSize: 11,
-    fontFamily: 'Roboto_700Bold',
-    color: '#9A3412',
-  },
-  securityRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  securityPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E4',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  securityPillText: {
-    marginLeft: 6,
-    fontSize: 11,
-    color: '#7C2D12',
-    fontFamily: 'Roboto_700Bold',
-    flexShrink: 1,
-  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -715,26 +607,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7C2D12',
     fontFamily: 'Roboto_700Bold',
-  },
-  securityNotes: {
-    backgroundColor: '#FFF7ED',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-  },
-  securityNotesTitle: {
-    fontSize: 12,
-    color: '#9A3412',
-    fontFamily: 'Roboto_700Bold',
-    marginBottom: 6,
-  },
-  securityNotesText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontFamily: 'Roboto_400Regular',
-    lineHeight: 18,
   },
   googleButton: {
     flexDirection: 'row',

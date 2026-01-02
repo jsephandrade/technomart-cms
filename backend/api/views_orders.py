@@ -12,7 +12,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from uuid import UUID
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Iterable, Optional
 
 from django.conf import settings
@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 ORDER_NUMBER_RANDOM_CHARS = "0123456789"
+LOYALTY_EARN_RATE = Decimal("0.01")
+LOYALTY_META_KEY = "loyaltyAwarded"
 PAYMENT_CASH_ALIASES = {
     "cash",
     "counter",
@@ -96,6 +98,73 @@ def _ensure_pending_cash_payment(order, *, amount: Decimal, customer_name: str, 
         customer=customer_name or "",
         meta=meta,
     )
+
+
+def _is_order_fully_paid(order) -> bool:
+    if not order:
+        return False
+    method = _normalize_payment_method(getattr(order, "payment_method", ""))
+    if not method:
+        return False
+    if _is_cash_method(method):
+        try:
+            from .models import PaymentTransaction
+        except Exception:
+            return False
+        order_ids = [str(order.id)]
+        if getattr(order, "order_number", ""):
+            order_ids.append(str(order.order_number))
+        return PaymentTransaction.objects.filter(
+            order_id__in=order_ids,
+            status=PaymentTransaction.STATUS_COMPLETED,
+        ).exists()
+    return True
+
+
+def _maybe_award_loyalty_points(order) -> Decimal:
+    if not order:
+        return Decimal("0.00")
+    try:
+        from .models import Order as OrderModel, AppUser
+    except Exception:
+        return Decimal("0.00")
+    try:
+        with transaction.atomic():
+            locked = (
+                OrderModel.objects.select_for_update()
+                .select_related("placed_by")
+                .filter(id=order.id)
+                .first()
+            )
+            if not locked:
+                return Decimal("0.00")
+            if canonical_status(locked.status) != "completed":
+                return Decimal("0.00")
+            if not _is_order_fully_paid(locked):
+                return Decimal("0.00")
+            if not locked.placed_by_id:
+                return Decimal("0.00")
+            meta = locked.meta or {}
+            if meta.get(LOYALTY_META_KEY):
+                return Decimal("0.00")
+            points = (Decimal(locked.total_amount or 0) * LOYALTY_EARN_RATE).quantize(
+                Decimal("0.01"), rounding=ROUND_DOWN
+            )
+            if points <= 0:
+                meta[LOYALTY_META_KEY] = True
+                locked.meta = meta
+                locked.save(update_fields=["meta", "updated_at"])
+                return Decimal("0.00")
+            AppUser.objects.filter(id=locked.placed_by_id).update(
+                credit_points=F("credit_points") + points
+            )
+            meta[LOYALTY_META_KEY] = True
+            locked.meta = meta
+            locked.save(update_fields=["meta", "updated_at"])
+            return points
+    except Exception:
+        logger.exception("Failed to award credit points for purchase")
+        return Decimal("0.00")
 
 
 def _normalize_order_number_candidate(value: Optional[str]) -> str:
@@ -2039,6 +2108,8 @@ def order_status(request, oid):
                     trigger_order_ready_for_pickup(o)
                 except Exception:
                     pass
+
+        _maybe_award_loyalty_points(o)
 
         # Optional: decrement inventory on completion using simple recipe from MenuItem.ingredients
         if canonical_status(o.status) == "completed":

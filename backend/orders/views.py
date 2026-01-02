@@ -31,6 +31,8 @@ PAYMENT_CASH_ALIASES = {
     "pay at counter",
     "cod",
 }
+LOYALTY_EARN_RATE = Decimal("0.01")
+LOYALTY_META_KEY = "loyaltyAwarded"
 
 
 def _normalize_payment_method(value):
@@ -106,6 +108,22 @@ def _resolve_order_or_checkout(identifier):
     return None, _get_checkout_session(identifier)
 
 
+def _is_order_fully_paid(order):
+    if not order:
+        return False
+    method = _normalize_payment_method(getattr(order, "payment_method", ""))
+    if not method:
+        return False
+    if _is_cash_method(method):
+        order_ids = [str(order.id)]
+        if getattr(order, "order_number", ""):
+            order_ids.append(str(order.order_number))
+        return PaymentTransaction.objects.filter(
+            order_id__in=order_ids, status=PaymentTransaction.STATUS_COMPLETED
+        ).exists()
+    return True
+
+
 def _ensure_pending_cash_payment(order, *, customer_name=""):
     order_ids = [str(order.id)]
     if order.order_number:
@@ -128,6 +146,38 @@ def _ensure_pending_cash_payment(order, *, customer_name=""):
         customer=customer_name or order.customer_name or "",
         meta=meta,
     )
+
+
+def _maybe_award_loyalty_points(order):
+    if not order:
+        return Decimal("0.00")
+    status_value = str(getattr(order, "status", "")).strip().lower()
+    if status_value != "completed":
+        return Decimal("0.00")
+    if not _is_order_fully_paid(order):
+        return Decimal("0.00")
+    user = getattr(order, "placed_by", None)
+    if not user:
+        return Decimal("0.00")
+    meta = order.meta or {}
+    if meta.get(LOYALTY_META_KEY):
+        return Decimal("0.00")
+    earned_points = (Decimal(order.total_amount or 0) * LOYALTY_EARN_RATE).quantize(
+        Decimal("0.01"), rounding=ROUND_DOWN
+    )
+    if earned_points <= 0:
+        meta[LOYALTY_META_KEY] = True
+        order.meta = meta
+        order.save(update_fields=["meta", "updated_at"])
+        return Decimal("0.00")
+    if not hasattr(user, "credit_points"):
+        user.credit_points = Decimal("0.0")
+    user.credit_points += earned_points
+    user.save()
+    meta[LOYALTY_META_KEY] = True
+    order.meta = meta
+    order.save(update_fields=["meta", "updated_at"])
+    return earned_points
 from django.utils.crypto import get_random_string
 
 ORDER_NUMBER_RANDOM_CHARS = "0123456789"
@@ -269,21 +319,8 @@ def create_order(request):
         # 1?,???? Parse credit points requested
         requested_points = _coerce_decimal(data.get("credit_points_used", 0))
 
-        # 2?,???? Fetch Paid orders to calculate earned points
-        paid_orders = Order.objects.filter(placed_by=user, status='Paid')
-
-        total_earned_points = sum(
-            (order.total_amount * Decimal('0.01')).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-            for order in paid_orders
-        )
-
-        total_used_points = sum(
-            (order.credit_points_used or Decimal('0.0')).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-            for order in paid_orders
-        )
-
-        # 3?,???? Compute available points
-        available_points = max(total_earned_points - total_used_points, Decimal('0.0'))
+        # 2?,???? Compute available points
+        available_points = get_available_points(user)
 
         # 4?,???? Clamp requested points to available points and order total
         order_total = _coerce_decimal(data.get("total_amount", 0))
@@ -390,13 +427,7 @@ def confirm_payment(request, order_number):
                 customer_name=_get_display_name(request.user, order),
             )
 
-        user = order.placed_by
-        earned_points = order.total_amount * Decimal("0.01")
-        if user:
-            if not hasattr(user, "credit_points"):
-                user.credit_points = Decimal("0.0")
-            user.credit_points += earned_points
-            user.save()
+        earned_points = _maybe_award_loyalty_points(order)
 
         return Response(
             {
@@ -500,13 +531,7 @@ def confirm_payment(request, order_number):
         )
         session.save(update_fields=["order_id", "order_number", "status", "updated_at"])
 
-    earned_points = order.total_amount * Decimal("0.01")
-    user = order.placed_by
-    if user:
-        if not hasattr(user, "credit_points"):
-            user.credit_points = Decimal("0.0")
-        user.credit_points += earned_points
-        user.save()
+    earned_points = _maybe_award_loyalty_points(order)
 
     return Response(
         {
@@ -633,14 +658,22 @@ def redeem_offer(request):
 def get_available_points(user):
     all_orders = Order.objects.filter(placed_by=user)
     earned_points = sum(
-        Decimal(order.total_amount) * Decimal('0.01')
+        (Decimal(order.total_amount or 0) * Decimal("0.01")).quantize(
+            Decimal("0.01"), rounding=ROUND_DOWN
+        )
         for order in all_orders
+        if str(getattr(order, "status", "")).strip().lower() == "completed"
+        and _is_order_fully_paid(order)
     )
     used_points = sum(
-        Decimal(order.credit_points_used or 0)
+        Decimal(order.credit_points_used or 0).quantize(
+            Decimal("0.01"), rounding=ROUND_DOWN
+        )
         for order in all_orders
     )
-    return max(earned_points - used_points, Decimal('0.00')).quantize(Decimal('0.01'), ROUND_DOWN)
+    return max(earned_points - used_points, Decimal("0.00")).quantize(
+        Decimal("0.01"), ROUND_DOWN
+    )
 
 
 @api_view(['POST'])

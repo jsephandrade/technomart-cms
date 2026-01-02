@@ -24,14 +24,14 @@ from .views_orders import (
     _create_order_from_payload,
     _safe_order,
     _start_auto_flow,
+    _maybe_award_loyalty_points,
     canonical_status,
 )
-from .models import PaymentTransaction, PaymentMethodConfig, Order, AppUser
+from .models import PaymentTransaction, PaymentMethodConfig, Order
 
 
 logger = logging.getLogger(__name__)
 
-LOYALTY_EARN_PER_PURCHASE = Decimal("0.01")
 MONEY_PLACES = Decimal("0.01")
 
 
@@ -228,15 +228,14 @@ def _update_order_after_payment(order, method: str):
         order.save()
 
 
-def _reward_loyalty_points(user_id):
-    if not user_id:
-        return
+def _reward_loyalty_points(order):
+    if not order:
+        return Decimal("0.00")
     try:
-        AppUser.objects.filter(id=user_id).update(
-            credit_points=F("credit_points") + LOYALTY_EARN_PER_PURCHASE
-        )
+        return _maybe_award_loyalty_points(order)
     except Exception:
         logger.exception("Failed to award credit points for purchase")
+        return Decimal("0.00")
 
 
 def _audit_payment(request, actor, payment):
@@ -379,7 +378,7 @@ def order_checkout(request):
     )
 
     _update_order_after_payment(order, payment_payload["method"])
-    _reward_loyalty_points(order.placed_by_id or getattr(actor, "id", None))
+    _reward_loyalty_points(order)
     _audit_payment(request, actor, payment)
 
     order_payload = _safe_order(order, with_items=False)
@@ -454,7 +453,7 @@ def order_payment(request, order_id: str):
         )
 
         _update_order_after_payment(order, payload["method"])
-        _reward_loyalty_points(order.placed_by_id or getattr(actor, "id", None))
+        _reward_loyalty_points(order)
         _audit_payment(request, actor, pending_payment)
 
         return JsonResponse(
@@ -473,7 +472,7 @@ def order_payment(request, order_id: str):
     )
 
     _update_order_after_payment(order, payload["method"])
-    _reward_loyalty_points(order.placed_by_id or getattr(actor, "id", None))
+    _reward_loyalty_points(order)
     _audit_payment(request, actor, payment)
 
     return JsonResponse({"success": True, "data": _serialize_payment(payment, order)})

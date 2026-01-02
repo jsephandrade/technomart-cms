@@ -59,5 +59,26 @@ class OrderFlowTests(TestCase):
         self.assertEqual(p2.status_code, 200)
         self.assertEqual(p1.json()['data']['id'], p2.json()['data']['id'])
         self.user.refresh_from_db()
-        self.assertEqual(self.user.credit_points, Decimal('0.01'))
+        self.assertEqual(self.user.credit_points, Decimal('0.00'))
+        self.client.patch(
+            f'/api/orders/{oid}/status',
+            data=json.dumps({'status': 'in_prep'}),
+            content_type='application/json',
+            **auth_headers(self.user),
+        )
+        self.client.patch(
+            f'/api/orders/{oid}/status',
+            data=json.dumps({'status': 'staged'}),
+            content_type='application/json',
+            **auth_headers(self.user),
+        )
+        resp = self.client.patch(
+            f'/api/orders/{oid}/status',
+            data=json.dumps({'status': 'completed'}),
+            content_type='application/json',
+            **auth_headers(self.user),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.credit_points, Decimal('0.10'))
 

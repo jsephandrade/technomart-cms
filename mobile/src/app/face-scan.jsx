@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -25,7 +27,10 @@ const RING_SIZE = 230;
 const RING_STROKE = 10;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-const RING_ARC = RING_CIRCUMFERENCE * 0.16;
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const CAPTURE_FRAMES = 2;
+const CAPTURE_DELAY_MS = 80;
+const RING_ANIMATION_MS = 900;
 
 export default function FaceScanScreen() {
   const router = useRouter();
@@ -38,6 +43,15 @@ export default function FaceScanScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [scanning, setScanning] = useState(false);
   const cameraRef = useRef(null);
+  const ringProgress = useRef(new Animated.Value(0)).current;
+  const ringOffset = useMemo(
+    () =>
+      ringProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [RING_CIRCUMFERENCE, 0],
+      }),
+    [ringProgress]
+  );
 
   const title = isRegister ? 'Register Face' : 'Face Scan';
   const subtitle = isRegister
@@ -45,6 +59,22 @@ export default function FaceScanScreen() {
     : 'Align your face inside the circle.';
 
   const captureLabel = isRegister ? 'Register face' : 'Scan face';
+
+  const startRing = useCallback(() => {
+    ringProgress.stopAnimation();
+    ringProgress.setValue(0);
+    Animated.timing(ringProgress, {
+      toValue: 1,
+      duration: RING_ANIMATION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [ringProgress]);
+
+  const completeRing = useCallback(() => {
+    ringProgress.stopAnimation();
+    ringProgress.setValue(1);
+  }, [ringProgress]);
 
   const parseResponse = useCallback(async (res) => {
     const text = await res.text();
@@ -59,15 +89,38 @@ export default function FaceScanScreen() {
     }
   }, []);
 
-  const handleScan = useCallback(async () => {
-    if (scanning || !cameraReady) return;
-    setScanning(true);
-    try {
+  const captureBurst = useCallback(async () => {
+    let bestPhoto = null;
+    let bestScore = 0;
+
+    for (let i = 0; i < CAPTURE_FRAMES; i += 1) {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.75,
+        quality: 0.65,
         base64: true,
         skipProcessing: true,
       });
+
+      const score = photo?.base64 ? photo.base64.length : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestPhoto = photo;
+      }
+
+      if (i < CAPTURE_FRAMES - 1) {
+        await new Promise((resolve) => setTimeout(resolve, CAPTURE_DELAY_MS));
+      }
+    }
+
+    return bestPhoto;
+  }, []);
+
+  const handleScan = useCallback(async () => {
+    if (scanning || !cameraReady) return;
+    setScanning(true);
+    startRing();
+    try {
+      const photo = await captureBurst();
+      completeRing();
 
       if (!photo?.base64) {
         throw new Error('Unable to capture the image. Please try again.');
@@ -158,7 +211,16 @@ export default function FaceScanScreen() {
     } finally {
       setScanning(false);
     }
-  }, [cameraReady, isRegister, parseResponse, router, scanning]);
+  }, [
+    cameraReady,
+    captureBurst,
+    completeRing,
+    isRegister,
+    parseResponse,
+    router,
+    scanning,
+    startRing,
+  ]);
 
   const permissionReady = useMemo(() => Boolean(permission), [permission]);
 
@@ -215,15 +277,16 @@ export default function FaceScanScreen() {
               strokeWidth={RING_STROKE}
               fill="none"
             />
-            <Circle
+            <AnimatedCircle
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
               stroke="#22C55E"
               strokeWidth={RING_STROKE}
               fill="none"
+              strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+              strokeDashoffset={ringOffset}
               strokeLinecap="round"
-              strokeDasharray={`${RING_ARC} ${RING_CIRCUMFERENCE}`}
               rotation="-90"
               origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
             />

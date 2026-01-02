@@ -318,9 +318,6 @@ export default function PaymentPage() {
             <Text style={styles.headerTitle}>Payment</Text>
             <Ionicons name="card-outline" size={26} color="black" />
           </View>
-          <Text style={styles.headerSubtitle}>
-            Choose a fast, secure payment option.
-          </Text>
         </View>
       </ImageBackground>
 
@@ -478,13 +475,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flex: 1,
     marginHorizontal: 10,
-  },
-  headerSubtitle: {
-    marginTop: 6,
-    fontSize: 13,
-    color: '#6b7280',
-    fontFamily: 'Roboto_400Regular',
-    textAlign: 'center',
   },
   content: {
     paddingHorizontal: 16,

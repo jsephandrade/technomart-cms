@@ -1130,6 +1130,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexWrap: 'nowrap',
     marginTop: 16,
+    alignSelf: 'center',
+    justifyContent: 'center',
   },
   statusStep: {
     flexDirection: 'row',

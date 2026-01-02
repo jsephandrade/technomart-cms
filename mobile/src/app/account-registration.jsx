@@ -520,14 +520,6 @@ export default function AccountRegistrationScreen() {
               )}
             </TouchableOpacity>
 
-            <View style={styles.securityNotes}>
-              <Text style={styles.securityNotesTitle}>Before you sign up</Text>
-              <Text style={styles.securityNotesText}>
-                Choose a strong password and keep your account details private.
-                You can update your profile anytime after registration.
-              </Text>
-            </View>
-
             {/* Google Sign-Up */}
             <TouchableOpacity
               style={styles.googleButton}
@@ -606,6 +598,7 @@ const styles = StyleSheet.create({
   roleInputWrapper: {
     borderColor: '#FDBA74',
     backgroundColor: '#FFF1E6',
+    paddingVertical: 12,
   },
   roleSelectText: {
     flex: 1,
@@ -647,26 +640,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Roboto_700Bold',
     marginLeft: 8,
-  },
-  securityNotes: {
-    backgroundColor: '#FFF7ED',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-  },
-  securityNotesTitle: {
-    fontSize: 12,
-    color: '#9A3412',
-    fontFamily: 'Roboto_700Bold',
-    marginBottom: 6,
-  },
-  securityNotesText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontFamily: 'Roboto_400Regular',
-    lineHeight: 18,
   },
   googleButton: {
     flexDirection: 'row',

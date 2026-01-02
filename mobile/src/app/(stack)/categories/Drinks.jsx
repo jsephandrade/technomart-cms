@@ -82,9 +82,15 @@ export default function ComboMeals() {
 
   const renderItem = ({ item }) => {
     const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
+    const isAvailable =
+      item?.available !== false &&
+      item?.is_available !== false &&
+      item?.isAvailable !== false &&
+      item?.sold_out !== true &&
+      item?.soldOut !== true;
 
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, !isAvailable && styles.cardDisabled]}>
         <Image source={resolveImageSource(item.image)} style={styles.image} />
         <Text style={styles.name}>{item.name}</Text>
         <Text style={styles.price}>₱{item.price}</Text>
@@ -100,12 +106,19 @@ export default function ComboMeals() {
           <Text style={styles.qty}>{qty}</Text>
 
           <TouchableOpacity
-            style={styles.controlBtn}
+            style={[
+              styles.controlBtn,
+              !isAvailable && styles.controlBtnDisabled,
+            ]}
             onPress={() => addToCart(item)}
+            disabled={!isAvailable}
           >
             <Ionicons name="add" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
+        {!isAvailable && (
+          <Text style={styles.unavailableText}>Unavailable</Text>
+        )}
       </View>
     );
   };
@@ -225,6 +238,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#f97316',
   },
+  cardDisabled: {
+    opacity: 0.55,
+    borderColor: '#E5E7EB',
+  },
   image: { width: '100%', height: 100, borderRadius: 8, marginBottom: 8 },
   name: {
     fontSize: 16,
@@ -251,12 +268,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 6,
   },
+  controlBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
   qty: {
     fontSize: 16,
     fontFamily: 'Roboto_700Bold',
     color: '#333',
     minWidth: 20,
     textAlign: 'center',
+  },
+  unavailableText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: 'Roboto_700Bold',
+    color: '#B91C1C',
   },
   floatingContainer: {
     position: 'absolute',

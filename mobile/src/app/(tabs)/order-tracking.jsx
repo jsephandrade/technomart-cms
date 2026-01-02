@@ -21,13 +21,13 @@ import { resolveImageSource } from '../../utils/image';
 
 const BACKEND = 'http://192.168.166.179:8000';
 const COLLAGE_GAP = 3;
-const STATUS_STEPS = ['pending', 'in_prep', 'ready', 'completed'];
+const STATUS_STEPS = ['pending', 'in_prep', 'ready'];
 const STATUS_LABELS = {
   pending: 'Pending',
   in_queue: 'Pending',
   in_prep: 'Preparing',
   in_progress: 'Preparing',
-  ready: 'Ready',
+  ready: 'Ready for Pickup',
   completed: 'Completed',
   cancelled: 'Cancelled',
   canceled: 'Cancelled',
@@ -35,11 +35,11 @@ const STATUS_LABELS = {
   voided: 'Voided',
 };
 const STATUS_COLORS = {
-  pending: '#F97316',
-  in_queue: '#F97316',
-  in_prep: '#FB923C',
-  in_progress: '#FB923C',
-  ready: '#10B981',
+  pending: '#FACC15',
+  in_queue: '#FACC15',
+  in_prep: '#F97316',
+  in_progress: '#F97316',
+  ready: '#22C55E',
   completed: '#10B981',
   cancelled: '#EF4444',
   canceled: '#EF4444',
@@ -47,10 +47,10 @@ const STATUS_COLORS = {
   voided: '#EF4444',
 };
 const STATUS_BG = {
-  pending: '#FFE7C7',
-  in_queue: '#FFE7C7',
-  in_prep: '#FFE7C7',
-  in_progress: '#FFE7C7',
+  pending: '#FEF3C7',
+  in_queue: '#FEF3C7',
+  in_prep: '#FFEDD5',
+  in_progress: '#FFEDD5',
   ready: '#DCFCE7',
   completed: '#DCFCE7',
   cancelled: '#FEE2E2',
@@ -599,22 +599,25 @@ export default function OrderTrackingScreen() {
         {STATUS_STEPS.map((step, index) => {
           const isActive = activeIndex >= index;
           const isLineActive = activeIndex > index;
+          const stepColor = STATUS_COLORS[step] || activeColor;
           return (
             <View key={step} style={styles.statusStep}>
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: isActive ? activeColor : inactiveColor },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusLabel,
-                  { color: isActive ? activeColor : inactiveText },
-                ]}
-              >
-                {STATUS_LABELS[step]}
-              </Text>
+              <View style={styles.statusNode}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: isActive ? stepColor : inactiveColor },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.statusLabel,
+                    { color: isActive ? stepColor : inactiveText },
+                  ]}
+                >
+                  {STATUS_LABELS[step]}
+                </Text>
+              </View>
               {index < STATUS_STEPS.length - 1 && (
                 <View style={styles.statusLineTrack}>
                   {isLineActive && (
@@ -622,7 +625,7 @@ export default function OrderTrackingScreen() {
                       style={[
                         styles.statusLineFill,
                         {
-                          backgroundColor: activeColor,
+                          backgroundColor: stepColor,
                           width: '100%',
                         },
                       ]}
@@ -1124,36 +1127,41 @@ const styles = StyleSheet.create({
   },
   statusRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexWrap: 'wrap',
     marginTop: 16,
   },
   statusStep: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  statusNode: {
     alignItems: 'center',
-    marginBottom: 8,
   },
   statusDot: {
-    width: 25,
-    height: 25,
-    borderRadius: 12.5,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
   },
   statusLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    marginLeft: 8,
-    marginRight: 10,
+    marginTop: 6,
+    textAlign: 'center',
+    width: 90,
   },
   statusLineTrack: {
-    width: 40,
-    height: 4,
+    width: 32,
+    height: 3,
     backgroundColor: '#F3D6B7',
     borderRadius: 999,
     overflow: 'hidden',
-    marginRight: 10,
+    marginTop: 6,
+    marginHorizontal: 8,
   },
   statusLineFill: {
-    height: 4,
+    height: 3,
   },
   itemsPreview: {
     marginTop: 12,

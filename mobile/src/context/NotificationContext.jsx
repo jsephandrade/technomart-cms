@@ -12,7 +12,7 @@ import { fetchNotifications, getValidToken } from '../api/api';
 
 const TOAST_DURATION_MS = 2500;
 const TOAST_FADE_MS = 200;
-const NOTIFICATION_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const NOTIFICATION_REFRESH_INTERVAL_MS = 60 * 1000;
 
 const NotificationContext = createContext();
 

@@ -259,7 +259,7 @@ def trigger_order_ready_for_pickup(order):
             pickup_instructions=pickup_instructions,
         )
 
-        _create_notification(
+        create_notification_sync(
             user_id=user_id,
             title=notification_data['title'],
             message=notification_data['message'],

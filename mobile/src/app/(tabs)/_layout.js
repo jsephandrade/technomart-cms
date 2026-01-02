@@ -77,6 +77,14 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+          tabBarButton: () => null,
+        }}
+      />
+
+      <Tabs.Screen
         name="account-profile"
         options={{
           title: 'Profile',

@@ -541,6 +541,11 @@ export default function AccountProfile() {
             <Text style={styles.infoLabel}>Face Scan</Text>
             <Text style={styles.infoValue}>{faceActionLabel}</Text>
           </View>
+          {faceRegistered && !isGuest ? (
+            <View style={styles.faceCheck}>
+              <Ionicons name="checkmark" size={14} color="#fff" />
+            </View>
+          ) : null}
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
 
@@ -818,6 +823,15 @@ const styles = StyleSheet.create({
   },
   infoBody: {
     flex: 1,
+  },
+  faceCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   infoLabel: {
     fontSize: 12,

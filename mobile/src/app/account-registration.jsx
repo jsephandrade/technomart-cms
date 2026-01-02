@@ -9,6 +9,9 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Modal,
+  Pressable,
+  Platform,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -44,6 +47,7 @@ export default function AccountRegistrationScreen() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
+  const [roleModalVisible, setRoleModalVisible] = useState(false);
 
   // Google Auth setup
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -158,6 +162,23 @@ export default function AccountRegistrationScreen() {
   const passwordHasError = Boolean(errors.password);
   const confirmHasError = Boolean(errors.confirm);
   const registerDisabled = loading;
+  const roleOptions = [
+    {
+      label: 'Customer',
+      value: 'customer',
+      description: 'Regular orders and menu browsing.',
+      icon: 'person-outline',
+    },
+    {
+      label: 'Faculty',
+      value: 'faculty',
+      description: 'Includes catering access.',
+      icon: 'school-outline',
+    },
+  ];
+  const selectedRole = roleOptions.find((option) => option.value === form.role);
+  const roleLabel = selectedRole?.label || 'Select Role';
+  const roleDescription = selectedRole?.description || '';
 
   return (
     <ImageBackground
@@ -175,42 +196,9 @@ export default function AccountRegistrationScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          <Image
-            source={require('../../assets/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View>
-                <Text style={styles.title}>Create Account</Text>
-                <Text style={styles.subtitle}>
-                  Fill in the details to register
-                </Text>
-              </View>
-              <View style={styles.secureBadge}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={16}
-                  color="#9A3412"
-                />
-                <Text style={styles.secureBadgeText}>Secure sign-up</Text>
-              </View>
-            </View>
-
-            <View style={styles.securityRow}>
-              <View style={styles.securityPill}>
-                <Ionicons name="person-add-outline" size={14} color="#B45309" />
-                <Text style={styles.securityPillText}>Quick profile setup</Text>
-              </View>
-              <View style={styles.securityPill}>
-                <Ionicons name="key-outline" size={14} color="#B45309" />
-                <Text style={styles.securityPillText}>
-                  Passwords are encrypted
-                </Text>
-              </View>
-            </View>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Fill in the details to register</Text>
 
             {/* First Name */}
             <View
@@ -263,38 +251,142 @@ export default function AccountRegistrationScreen() {
             )}
 
             {/* Role */}
-            <View
-              style={[
-                styles.inputWrapper,
-                styles.roleInputWrapper,
-                roleHasError && styles.inputWrapperError,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="account-badge-outline"
-                size={20}
-                color="#888"
-              />
-              <Picker
-                selectedValue={form.role}
-                onValueChange={(value) => handleChange('role', value)}
+            {Platform.OS === 'android' ? (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.inputWrapper,
+                    styles.roleInputWrapper,
+                    roleHasError && styles.inputWrapperError,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() => setRoleModalVisible(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="account-badge-outline"
+                    size={20}
+                    color="#888"
+                  />
+                  <View style={styles.roleSelectText}>
+                    <Text
+                      style={[
+                        styles.roleSelectLabel,
+                        !form.role && styles.roleSelectPlaceholder,
+                      ]}
+                    >
+                      {roleLabel}
+                    </Text>
+                    {form.role ? (
+                      <Text style={styles.roleSelectSub}>
+                        {roleDescription}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+                <Modal
+                  transparent
+                  animationType="fade"
+                  visible={roleModalVisible}
+                  onRequestClose={() => setRoleModalVisible(false)}
+                >
+                  <View style={styles.modalBackdrop}>
+                    <Pressable
+                      style={StyleSheet.absoluteFillObject}
+                      onPress={() => setRoleModalVisible(false)}
+                    />
+                    <View style={styles.modalCard}>
+                      <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Select Role</Text>
+                        <TouchableOpacity
+                          onPress={() => setRoleModalVisible(false)}
+                        >
+                          <Ionicons name="close" size={20} color="#6B7280" />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.modalSubtitle}>
+                        Choose how you plan to use the app.
+                      </Text>
+                      {roleOptions.map((option) => {
+                        const isSelected = option.value === form.role;
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[
+                              styles.roleOption,
+                              isSelected && styles.roleOptionSelected,
+                            ]}
+                            onPress={() => {
+                              handleChange('role', option.value);
+                              setRoleModalVisible(false);
+                            }}
+                          >
+                            <View style={styles.roleOptionIcon}>
+                              <Ionicons
+                                name={option.icon}
+                                size={18}
+                                color="#F97316"
+                              />
+                            </View>
+                            <View style={styles.roleOptionText}>
+                              <Text style={styles.roleOptionTitle}>
+                                {option.label}
+                              </Text>
+                              <Text style={styles.roleOptionDesc}>
+                                {option.description}
+                              </Text>
+                            </View>
+                            {isSelected ? (
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={20}
+                                color="#F97316"
+                              />
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                      <TouchableOpacity
+                        style={styles.modalPrimaryButton}
+                        onPress={() => setRoleModalVisible(false)}
+                      >
+                        <Text style={styles.modalPrimaryText}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </Modal>
+              </>
+            ) : (
+              <View
                 style={[
-                  styles.input,
-                  { color: form.role ? '#333' : '#9CA3AF' },
+                  styles.inputWrapper,
+                  styles.roleInputWrapper,
+                  roleHasError && styles.inputWrapperError,
                 ]}
-                dropdownIconColor="#9CA3AF"
               >
-                <Picker.Item label="Select Role" value="" />
-                <Picker.Item label="Customer" value="customer" />
-                <Picker.Item label="Faculty" value="faculty" />
-              </Picker>
-            </View>
+                <MaterialCommunityIcons
+                  name="account-badge-outline"
+                  size={20}
+                  color="#888"
+                />
+                <Picker
+                  selectedValue={form.role}
+                  onValueChange={(value) => handleChange('role', value)}
+                  style={[
+                    styles.input,
+                    { color: form.role ? '#333' : '#9CA3AF' },
+                  ]}
+                  dropdownIconColor="#9CA3AF"
+                >
+                  <Picker.Item label="Select Role" value="" />
+                  <Picker.Item label="Customer" value="customer" />
+                  <Picker.Item label="Faculty" value="faculty" />
+                </Picker>
+              </View>
+            )}
             {errors.role && (
               <Text style={styles.errorText}>{formatError(errors.role)}</Text>
             )}
-            <Text style={styles.roleHint}>
-              Customer is for regular orders; Faculty unlocks catering access.
-            </Text>
 
             {/* Email */}
             <View
@@ -472,7 +564,6 @@ const styles = StyleSheet.create({
   background: { flex: 1 },
   scrollContainer: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32 },
   container: { alignItems: 'center', justifyContent: 'flex-start', flex: 1 },
-  logo: { width: 170, height: 170, marginTop: 24, marginBottom: 8 },
   title: {
     fontSize: 28,
     fontFamily: 'Roboto_900Black',
@@ -500,49 +591,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  secureBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFE7C7',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginLeft: 10,
-  },
-  secureBadgeText: {
-    marginLeft: 6,
-    fontSize: 11,
-    fontFamily: 'Roboto_700Bold',
-    color: '#9A3412',
-  },
-  securityRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
-  },
-  securityPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E4',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  securityPillText: {
-    marginLeft: 6,
-    fontSize: 11,
-    color: '#7C2D12',
-    fontFamily: 'Roboto_700Bold',
-    flexShrink: 1,
-  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -563,7 +611,25 @@ const styles = StyleSheet.create({
   roleInputWrapper: {
     borderColor: '#FDBA74',
     backgroundColor: '#FFF1E6',
-    marginBottom: 8,
+  },
+  roleSelectText: {
+    flex: 1,
+    marginHorizontal: 10,
+  },
+  roleSelectLabel: {
+    fontSize: 16,
+    color: '#111827',
+    fontFamily: 'Roboto_700Bold',
+  },
+  roleSelectPlaceholder: {
+    color: '#9CA3AF',
+    fontFamily: 'Roboto_400Regular',
+  },
+  roleSelectSub: {
+    fontSize: 12,
+    color: '#9A3412',
+    marginTop: 2,
+    fontFamily: 'Roboto_400Regular',
   },
   input: {
     flex: 1,
@@ -626,11 +692,89 @@ const styles = StyleSheet.create({
   },
   googleIcon: { width: 22, height: 22, marginRight: 10 },
   googleText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333' },
-  roleHint: {
-    color: '#9A3412',
-    fontSize: 12,
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#FDE2C7',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 16,
     fontFamily: 'Roboto_400Regular',
+  },
+  roleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FCE1C6',
     marginBottom: 12,
+  },
+  roleOptionSelected: {
+    borderColor: '#F97316',
+    backgroundColor: '#FFEFE1',
+  },
+  roleOptionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF1E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  roleOptionText: {
+    flex: 1,
+  },
+  roleOptionTitle: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  roleOptionDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+    fontFamily: 'Roboto_400Regular',
+  },
+  modalPrimaryButton: {
+    marginTop: 4,
+    backgroundColor: '#F97316',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalPrimaryText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
   },
   linkText: {
     color: '#EA580C',

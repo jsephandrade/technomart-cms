@@ -17,7 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   BASE_URL,
-  FACE_REGISTERED_KEY,
+  getFaceRegisteredKey,
   getValidToken,
   storeTokens,
   USER_CACHE_KEY,
@@ -160,7 +160,23 @@ export default function FaceScanScreen() {
           throw new Error(message);
         }
 
-        await AsyncStorage.setItem(FACE_REGISTERED_KEY, 'true');
+        const storedUser = await AsyncStorage.multiGet([
+          USER_CACHE_KEY,
+          'user',
+        ]);
+        const rawUser = storedUser[0][1] || storedUser[1][1];
+        let faceKey = null;
+        if (rawUser) {
+          try {
+            const parsedUser = JSON.parse(rawUser);
+            faceKey = getFaceRegisteredKey(parsedUser);
+          } catch (err) {
+            console.warn('Failed to parse stored user for face key:', err);
+          }
+        }
+        if (faceKey) {
+          await AsyncStorage.setItem(faceKey, 'true');
+        }
         Alert.alert('Face registered', 'You can now sign in with Face scan.', [
           { text: 'Done', onPress: () => router.back() },
         ]);

@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import api, {
   clearStoredTokens,
-  FACE_REGISTERED_KEY,
+  getFaceRegisteredKey,
   getValidToken,
   USER_CACHE_KEY,
 } from '../../api/api';
@@ -73,6 +73,7 @@ export default function AccountProfile() {
         setProfile(null);
         setCreditPoints(0);
         setIsGuest(false);
+        setFaceRegistered(false);
         return;
       }
 
@@ -81,6 +82,13 @@ export default function AccountProfile() {
       const email = String(parsed?.email || '').toLowerCase();
       const guest = email.endsWith('@guest.local');
       setIsGuest(guest);
+      const faceKey = getFaceRegisteredKey(parsed);
+      if (faceKey) {
+        const stored = await AsyncStorage.getItem(faceKey);
+        setFaceRegistered(stored === 'true');
+      } else {
+        setFaceRegistered(false);
+      }
       if (guest) {
         setCreditPoints(0);
         return;
@@ -116,6 +124,7 @@ export default function AccountProfile() {
       setProfile((prev) => prev ?? null);
       setCreditPoints(0);
       setIsGuest(false);
+      setFaceRegistered(false);
     } finally {
       setLoading(false);
     }
@@ -158,23 +167,12 @@ export default function AccountProfile() {
     }
   }, [isGuest]);
 
-  const loadFaceStatus = useCallback(async () => {
-    try {
-      const stored = await AsyncStorage.getItem(FACE_REGISTERED_KEY);
-      setFaceRegistered(stored === 'true');
-    } catch (err) {
-      console.warn('Failed to load face status:', err);
-      setFaceRegistered(false);
-    }
-  }, []);
-
   // --- Run on screen focus ---
   useFocusEffect(
     useCallback(() => {
       loadProfile();
       loadSpecialOffers();
-      loadFaceStatus();
-    }, [loadProfile, loadSpecialOffers, loadFaceStatus])
+    }, [loadProfile, loadSpecialOffers])
   );
 
   const openCreditModal = useCallback(() => {

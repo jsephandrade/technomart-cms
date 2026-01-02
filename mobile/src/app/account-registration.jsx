@@ -276,11 +276,6 @@ export default function AccountRegistrationScreen() {
                     >
                       {roleLabel}
                     </Text>
-                    {form.role ? (
-                      <Text style={styles.roleSelectSub}>
-                        {roleDescription}
-                      </Text>
-                    ) : null}
                   </View>
                   <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -623,12 +618,6 @@ const styles = StyleSheet.create({
   },
   roleSelectPlaceholder: {
     color: '#9CA3AF',
-    fontFamily: 'Roboto_400Regular',
-  },
-  roleSelectSub: {
-    fontSize: 12,
-    color: '#9A3412',
-    marginTop: 2,
     fontFamily: 'Roboto_400Regular',
   },
   input: {

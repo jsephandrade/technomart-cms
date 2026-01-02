@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ImageBackground,
@@ -10,6 +11,7 @@ import {
   Modal,
   Animated,
   Alert,
+  ActivityIndicator,
   Easing,
   useWindowDimensions,
 } from 'react-native';
@@ -56,6 +58,19 @@ const createPartyPieces = () =>
     };
   });
 
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  if (Number.isNaN(amount)) return '\u20b10.00';
+  return `\u20b1${amount.toFixed(2)}`;
+};
+
+const formatLabel = (value) => {
+  if (!value) return '';
+  return String(value)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
 export default function PaymentPage() {
   const router = useRouter();
   const { orderType, total, selectedTime, orderId, celebrate } =
@@ -74,6 +89,8 @@ export default function PaymentPage() {
   const pointsEligible = creditPoints >= totalAmount && totalAmount > 0;
   const shouldCelebrate = celebrate === '1' || celebrate === 'true';
   const fallDistance = Math.max(240, height + 120);
+  const orderTypeLabel = formatLabel(orderType) || 'Pickup';
+  const timeLabel = selectedTime || 'Not set';
 
   useEffect(() => {
     if (showSuccess) {
@@ -141,10 +158,22 @@ export default function PaymentPage() {
   let [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
   if (!fontsLoaded) return null;
 
-  const handlePaymentSelect = async (method) => {
-    setSelectedPayment(method);
+  const handlePaymentSuccess = () => {
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      router.push({
+        pathname: '/order-tracking',
+        params: { orderId },
+      });
+    }, 4000);
+  };
 
-    if (method === 'gcash') {
+  const handlePaymentSelect = async (method) => {
+    const normalizedMethod = method === 'counter' ? 'cash' : method;
+    setSelectedPayment(normalizedMethod);
+
+    if (normalizedMethod === 'gcash') {
       try {
         const { gcash_url } = await getGcashLink(orderId, total);
         const supported = await Linking.canOpenURL(gcash_url);
@@ -160,19 +189,10 @@ export default function PaymentPage() {
 
         // Polling after GCash payment
         setTimeout(async () => {
-          const res = await confirmPayment(orderId, method);
+          const res = await confirmPayment(orderId, normalizedMethod);
           setLoading(false);
           if (res.success) {
-            setShowSuccess(true);
-
-            // Navigate to Order Tracking after 4 seconds
-            setTimeout(() => {
-              setShowSuccess(false);
-              router.push({
-                pathname: '/order-tracking',
-                params: { orderId: orderId }, // pass orderId if needed
-              });
-            }, 4000);
+            handlePaymentSuccess();
           } else {
             Alert.alert('Payment Failed', res.message);
           }
@@ -182,49 +202,37 @@ export default function PaymentPage() {
         setLoading(false);
         Alert.alert('Error', 'Something went wrong with GCash payment.');
       }
-    } else if (method === 'counter') {
-      try {
-        const res = await confirmPayment(orderId, method);
-        if (res.success) {
-          setShowSuccess(true);
-          setTimeout(() => {
-            setShowSuccess(false);
-            router.push({
-              pathname: '/order-tracking',
-              params: { orderId: orderId },
-            });
-          }, 4000);
-        } else {
-          Alert.alert('Payment Failed', res.message);
-        }
-      } catch {
-        Alert.alert('Error', 'Could not confirm counter payment.');
-      }
-    } else if (method === 'points') {
+      return;
+    }
+
+    if (normalizedMethod === 'points') {
       if (!pointsEligible) {
+        setSelectedPayment(null);
         Alert.alert(
           'Not enough points',
           'Your credit points are not enough to cover this order.'
         );
         return;
       }
-      try {
-        const res = await confirmPayment(orderId, method);
-        if (res.success) {
-          setShowSuccess(true);
-          setTimeout(() => {
-            setShowSuccess(false);
-            router.push({
-              pathname: '/order-tracking',
-              params: { orderId: orderId },
-            });
-          }, 4000);
-        } else {
-          Alert.alert('Payment Failed', res.message);
-        }
-      } catch {
-        Alert.alert('Error', 'Could not confirm points payment.');
+    }
+
+    try {
+      setLoading(true);
+      const res = await confirmPayment(orderId, normalizedMethod);
+      setLoading(false);
+      if (res.success) {
+        handlePaymentSuccess();
+      } else {
+        Alert.alert('Payment Failed', res.message);
       }
+    } catch {
+      setLoading(false);
+      Alert.alert(
+        'Error',
+        normalizedMethod === 'cash'
+          ? 'Could not confirm cash payment.'
+          : 'Could not confirm points payment.'
+      );
     }
   };
 
@@ -240,6 +248,21 @@ export default function PaymentPage() {
       </View>
     );
   }
+
+  const paymentOptions = [
+    {
+      key: 'gcash',
+      title: 'Pay with GCash',
+      subtitle: 'Instant confirmation via the GCash app.',
+      icon: require('../../../assets/gcash.png'),
+    },
+    {
+      key: 'cash',
+      title: 'Pay at the Counter',
+      subtitle: 'Cash payment confirmed by the cashier.',
+      icon: require('../../../assets/cash.png'),
+    },
+  ];
 
   return (
     <View style={styles.container}>
@@ -292,97 +315,129 @@ export default function PaymentPage() {
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={26} color="black" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Payment Page</Text>
+            <Text style={styles.headerTitle}>Payment</Text>
             <Ionicons name="card-outline" size={26} color="black" />
           </View>
+          <Text style={styles.headerSubtitle}>
+            Choose a fast, secure payment option.
+          </Text>
         </View>
       </ImageBackground>
 
-      <View style={styles.receiptCard}>
-        <Text style={styles.receiptHeader}>Order Receipt</Text>
-        <View style={styles.line} />
-        <View style={styles.receiptRow}>
-          <Text style={styles.label}>Order Type</Text>
-          <Text style={styles.value}>{orderType}</Text>
-        </View>
-        <View style={styles.receiptRow}>
-          <Text style={styles.label}>Pickup Time</Text>
-          <Text style={styles.value}>{selectedTime}</Text>
-        </View>
-        <View style={styles.line} />
-        <View style={styles.receiptRow}>
-          <Text style={[styles.label, { fontWeight: 'bold' }]}>Total</Text>
-          <Text style={[styles.value, { fontWeight: 'bold' }]}>
-            ₱{totalAmount.toFixed(2)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Payment Buttons */}
-      <TouchableOpacity
-        style={[
-          styles.paymentBtn,
-          selectedPayment === 'gcash' && styles.selectedBtn,
-          selectedPayment === 'points' && styles.disabledBtn,
-        ]}
-        disabled={selectedPayment === 'points'}
-        onPress={() => handlePaymentSelect('gcash')}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        <Image
-          source={require('../../../assets/gcash.png')}
-          style={styles.icon}
-        />
-        <Text style={styles.paymentText}>Pay with GCash</Text>
-      </TouchableOpacity>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Order Summary</Text>
+            <View style={styles.sectionBadge}>
+              <Ionicons name="receipt-outline" size={14} color="#b45309" />
+              <Text style={styles.sectionBadgeText}>Order #{orderId}</Text>
+            </View>
+          </View>
+        </View>
 
-      <TouchableOpacity
-        style={[
-          styles.paymentBtn,
-          selectedPayment === 'counter' && styles.selectedBtn,
-          selectedPayment === 'points' && styles.disabledBtn,
-        ]}
-        disabled={selectedPayment === 'points'}
-        onPress={() => handlePaymentSelect('counter')}
-      >
-        <Image
-          source={require('../../../assets/cash.png')}
-          style={styles.icon}
-        />
-        <Text style={styles.paymentText}>Pay at Counter</Text>
-      </TouchableOpacity>
-
-      <View style={styles.pointsCard}>
-        <View style={styles.pointsInfo}>
-          <Text style={styles.pointsTitle}>Use Points</Text>
-          <Text style={styles.pointsSubtitle}>
-            Available: {creditPoints.toFixed(2)} pts
-          </Text>
-          {!pointsEligible && (
-            <Text style={styles.pointsHint}>
-              Not enough points to cover this order.
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Order Type</Text>
+            <Text style={styles.summaryValue}>{orderTypeLabel}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Pickup Time</Text>
+            <Text style={styles.summaryValue}>{timeLabel}</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryTotalLabel}>Total</Text>
+            <Text style={styles.summaryTotalValue}>
+              {formatCurrency(totalAmount)}
             </Text>
-          )}
+          </View>
         </View>
-        <Switch
-          value={selectedPayment === 'points'}
-          onValueChange={(value) => {
-            if (value) {
-              handlePaymentSelect('points');
-            } else {
-              setSelectedPayment(null);
-            }
-          }}
-          disabled={!pointsEligible}
-          thumbColor={selectedPayment === 'points' ? '#f97316' : '#f3f4f6'}
-          trackColor={{ false: '#e5e7eb', true: '#fed7aa' }}
-        />
-      </View>
 
-      {loading && (
-        <Text style={{ textAlign: 'center', marginTop: 10 }}>
-          Waiting for confirmation...
-        </Text>
-      )}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Payment Options</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            Select one method to continue.
+          </Text>
+        </View>
+
+        {paymentOptions.map((option) => {
+          const isSelected = selectedPayment === option.key;
+          const isDisabled =
+            loading ||
+            (selectedPayment === 'points' && option.key !== 'points');
+          return (
+            <TouchableOpacity
+              key={option.key}
+              style={[
+                styles.paymentOption,
+                isSelected && styles.paymentOptionSelected,
+                isDisabled && styles.paymentOptionDisabled,
+              ]}
+              onPress={() => handlePaymentSelect(option.key)}
+              disabled={isDisabled}
+              activeOpacity={0.85}
+            >
+              <View style={styles.paymentIconWrap}>
+                <Image source={option.icon} style={styles.paymentIcon} />
+              </View>
+              <View style={styles.paymentBody}>
+                <Text style={styles.paymentTitle}>{option.title}</Text>
+                <Text style={styles.paymentSubtitle}>{option.subtitle}</Text>
+              </View>
+              {loading && isSelected ? (
+                <ActivityIndicator size="small" color="#f97316" />
+              ) : (
+                <Ionicons
+                  name={isSelected ? 'checkmark-circle' : 'chevron-forward'}
+                  size={22}
+                  color={isSelected ? '#f97316' : '#9ca3af'}
+                />
+              )}
+            </TouchableOpacity>
+          );
+        })}
+
+        <View style={styles.pointsCard}>
+          <View style={styles.pointsInfo}>
+            <Text style={styles.pointsTitle}>Use Points</Text>
+            <Text style={styles.pointsSubtitle}>
+              Available: {creditPoints.toFixed(2)} pts
+            </Text>
+            {!pointsEligible && (
+              <Text style={styles.pointsHint}>
+                Not enough points to cover this order.
+              </Text>
+            )}
+          </View>
+          <Switch
+            value={selectedPayment === 'points'}
+            onValueChange={(value) => {
+              if (value) {
+                handlePaymentSelect('points');
+              } else {
+                setSelectedPayment(null);
+              }
+            }}
+            disabled={!pointsEligible || loading}
+            thumbColor={selectedPayment === 'points' ? '#f97316' : '#f3f4f6'}
+            trackColor={{ false: '#e5e7eb', true: '#fed7aa' }}
+          />
+        </View>
+
+        {loading && (
+          <View style={styles.processingRow}>
+            <ActivityIndicator size="small" color="#f97316" />
+            <Text style={styles.processingText}>
+              Processing your payment...
+            </Text>
+          </View>
+        )}
+      </ScrollView>
 
       {/* Success Modal */}
       <Modal transparent visible={showSuccess}>
@@ -398,72 +453,179 @@ export default function PaymentPage() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  headerBackground: { paddingBottom: 8 },
+  container: { flex: 1, backgroundColor: '#fdfdfd' },
+  headerBackground: {
+    width: '100%',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+    paddingBottom: 8,
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,200,150,0.4)',
+    backgroundColor: 'rgba(254,192,117,0.5)',
   },
-  headerContainer: { paddingTop: 50, paddingHorizontal: 12 },
+  headerContainer: { paddingTop: 50, paddingBottom: 12, paddingHorizontal: 12 },
   headerTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 26, fontFamily: 'Roboto_700Bold' },
-  receiptCard: {
-    width: '90%',
+  headerTitle: {
+    fontSize: 30,
+    fontFamily: 'Roboto_700Bold',
+    color: '#1F2937',
+    textAlign: 'center',
+    flex: 1,
+    marginHorizontal: 10,
+  },
+  headerSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+    textAlign: 'center',
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    paddingBottom: 36,
+  },
+  sectionHeader: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#1F2937',
+  },
+  sectionSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  sectionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffedd5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  sectionBadgeText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontFamily: 'Roboto_700Bold',
+    color: '#b45309',
+  },
+  summaryCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
-    alignSelf: 'center',
-    borderColor: '#ccc',
-    borderWidth: 1,
-    marginVertical: 20,
+    borderWidth: 2,
+    borderColor: '#f97316',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  line: { borderBottomColor: '#ccc', borderBottomWidth: 1, marginVertical: 8 },
-  receiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  label: { fontSize: 16 },
-  value: { fontSize: 16, fontWeight: '600' },
-  paymentBtn: {
+  summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 8,
-    padding: 14,
-    borderRadius: 12,
-    width: '85%',
-    alignSelf: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontFamily: 'Roboto_400Regular',
+    color: '#6b7280',
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontFamily: 'Roboto_700Bold',
+    color: '#1F2937',
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: '#fde7d2',
+    marginVertical: 6,
+  },
+  summaryTotalLabel: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#1F2937',
+  },
+  summaryTotalValue: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#f97316',
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    elevation: 3,
-  },
-  selectedBtn: {
-    backgroundColor: '#f0fdf4',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 2,
-    borderColor: '#22c55e',
+    borderColor: '#fde7d2',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  disabledBtn: {
+  paymentOptionSelected: {
+    borderColor: '#f97316',
+    backgroundColor: '#fff7ed',
+  },
+  paymentOptionDisabled: {
     opacity: 0.6,
   },
-  icon: { width: 50, height: 40 },
-  paymentText: { fontSize: 16, fontWeight: '600', marginLeft: 10 },
+  paymentIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#fff7ed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  paymentIcon: {
+    width: 28,
+    height: 28,
+    resizeMode: 'contain',
+  },
+  paymentBody: {
+    flex: 1,
+  },
+  paymentTitle: {
+    fontSize: 16,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  paymentSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
   pointsCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '85%',
-    alignSelf: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
-    marginTop: 6,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#f3d6b7',
+    borderWidth: 2,
+    borderColor: '#f97316',
+    marginTop: 4,
   },
   pointsInfo: {
     flex: 1,
@@ -471,18 +633,53 @@ const styles = StyleSheet.create({
   },
   pointsTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: 'Roboto_700Bold',
     color: '#111827',
   },
   pointsSubtitle: {
     fontSize: 12,
     color: '#6b7280',
     marginTop: 4,
+    fontFamily: 'Roboto_400Regular',
   },
   pointsHint: {
     fontSize: 11,
     color: '#b45309',
     marginTop: 6,
+    fontFamily: 'Roboto_400Regular',
+  },
+  processingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  processingText: {
+    marginLeft: 8,
+    fontSize: 13,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  errorText: {
+    marginTop: 24,
+    textAlign: 'center',
+    fontFamily: 'Roboto_700Bold',
+    color: '#b91c1c',
+    fontSize: 16,
+    marginHorizontal: 24,
+  },
+  backBtn: {
+    marginTop: 16,
+    alignSelf: 'center',
+    backgroundColor: '#f97316',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 24,
+  },
+  backBtnText: {
+    color: '#fff',
+    fontFamily: 'Roboto_700Bold',
+    fontSize: 16,
   },
   modalOverlay: {
     flex: 1,
@@ -499,7 +696,7 @@ const styles = StyleSheet.create({
   successTitle: {
     marginTop: 10,
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: 'Roboto_700Bold',
     color: '#16a34a',
   },
   partyOverlay: {

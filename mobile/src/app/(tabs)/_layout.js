@@ -46,17 +46,6 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="catering"
-        options={{
-          title: 'Catering',
-          href: role === 'faculty' ? undefined : null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="restaurant-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
         name="customer-cart"
         options={{
           title: 'Cart',
@@ -72,6 +61,17 @@ export default function TabsLayout() {
           title: 'Orders',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="catering"
+        options={{
+          title: 'Catering',
+          href: role === 'faculty' ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="restaurant-outline" size={size} color={color} />
           ),
         }}
       />

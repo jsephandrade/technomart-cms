@@ -814,11 +814,11 @@ def _decode_verify_token_ignore_exp(token: str):
 def _extract_dataurl_image(data_url: str):
     if not data_url:
         return None, None
-    m = re.match(r"^data:([^;]+);base64,(.*)$", data_url)
+    m = re.match(r"^data:([^;]+);base64,(.*)$", data_url, re.DOTALL)
     if not m:
         return None, None
     mime = m.group(1)
-    b64 = m.group(2)
+    b64 = re.sub(r"\s+", "", m.group(2))
     try:
         binary = base64.b64decode(b64)
         return mime, binary

@@ -122,11 +122,15 @@ export default function FaceScanScreen() {
       const photo = await captureBurst();
       completeRing();
 
-      if (!photo?.base64) {
+      const rawBase64 = typeof photo?.base64 === 'string' ? photo.base64 : '';
+      const cleanBase64 = rawBase64.replace(/\s/g, '');
+
+      if (!cleanBase64) {
         throw new Error('Unable to capture the image. Please try again.');
       }
 
-      const imageData = `data:image/jpeg;base64,${photo.base64}`;
+      const imageData = `data:image/jpeg;base64,${cleanBase64}`;
+      const payload = { image: imageData, imageData, images: [imageData] };
 
       if (isRegister) {
         const token = await getValidToken();
@@ -145,7 +149,7 @@ export default function FaceScanScreen() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ image: imageData, model: 'Facenet512' }),
+          body: JSON.stringify({ ...payload, model: 'Facenet512' }),
         });
 
         const { ok, status, data } = await parseResponse(res);
@@ -166,7 +170,7 @@ export default function FaceScanScreen() {
       const res = await fetch(`${BASE_URL}/auth/face-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData, tokenType: 'simplejwt' }),
+        body: JSON.stringify({ ...payload, tokenType: 'simplejwt' }),
       });
 
       const { ok, status, data } = await parseResponse(res);

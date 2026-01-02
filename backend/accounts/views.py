@@ -74,6 +74,9 @@ class ProfileView(APIView):
 
     def get(self, request):
         user = request.user
+        avatar_value = user.avatar or None
+        if avatar_value and not str(avatar_value).startswith("http"):
+            avatar_value = request.build_absolute_uri(avatar_value)
         return Response({
             "id": user.id,
             "email": user.email,
@@ -81,7 +84,7 @@ class ProfileView(APIView):
             "role": user.role,
             "status": user.status,
             "credit_points": user.credit_points,
-            "avatar": request.build_absolute_uri(user.avatar.url) if user.avatar else None,
+            "avatar": avatar_value,
             "phone": user.phone,
         })
 

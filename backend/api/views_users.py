@@ -21,11 +21,12 @@ from .views_common import (
     normalize_role_permissions,
     _set_role_config_override,
     _invalidate_role_config_cache,
+    ROLE_VALUES,
 )
 from .utils_audit import record_audit
 
 
-ALLOWED_ROLES = {"admin", "manager", "staff"}
+ALLOWED_ROLES = ROLE_VALUES
 
 
 def _log_user_action(request, actor, target_user, action: str, *, details: str = "", meta=None):

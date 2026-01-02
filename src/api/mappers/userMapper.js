@@ -1,9 +1,28 @@
 import { validate } from '../schemas/utils';
 import { UserSchema, UserCreateSchema, UserUpdateSchema } from '../schemas';
 
-// Normalize strings like role/status to lowercase
+const resolveDisplayName = (user) => {
+  if (!user) return 'Unknown User';
+  const candidates = [
+    user.name,
+    user.fullName,
+    user.full_name,
+    user.displayName,
+    user.username,
+  ];
+  const named = candidates.find(
+    (value) => typeof value === 'string' && value.trim()
+  );
+  if (named) return named.trim();
+  const email = typeof user.email === 'string' ? user.email.trim() : '';
+  if (email) return email.split('@')[0] || email;
+  return 'Unknown User';
+};
+
+// Normalize strings like role/status to lowercase and fill display-safe fields
 const normalizeUser = (u) => ({
   ...u,
+  name: resolveDisplayName(u),
   role: (u.role || '').toLowerCase(),
   status: (u.status || '').toLowerCase(),
 });

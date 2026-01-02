@@ -19,6 +19,7 @@ from .views_common import (
     _require_admin_or_manager,
     _actor_from_request,
     _has_permission,
+    ROLE_VALUES,
 )
 from .emails import (
     notify_admins_verification_submitted,
@@ -273,7 +274,7 @@ def verify_approve(request):
     request_id = (data.get("requestId") or "").strip()
     role = (data.get("role") or "staff").lower()
     note = (data.get("note") or "").strip()
-    if role not in {"admin", "manager", "staff"}:
+    if role not in ROLE_VALUES:
         return JsonResponse({"success": False, "message": "Invalid role"}, status=400)
     if not request_id:
         return JsonResponse({"success": False, "message": "Missing requestId"}, status=400)

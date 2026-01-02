@@ -119,6 +119,7 @@ def _now_iso():
 
 MENU_ITEMS = []
 USERS = []
+ROLE_VALUES = {"admin", "manager", "staff", "faculty", "customer"}
 
 
 def _paginate(list_data, page, limit):
@@ -167,7 +168,7 @@ def _identifier_variants(value):
 def _safe_user_from_db(db_user):
     # Normalize role to the supported set; map legacy/unknown roles to 'staff'
     role = (getattr(db_user, "role", "") or "").lower()
-    if role not in {"admin", "manager", "staff"}:
+    if role not in ROLE_VALUES:
         role = "staff"
 
     # Look up linked Employee record to include employeeId

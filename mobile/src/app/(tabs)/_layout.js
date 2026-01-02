@@ -80,7 +80,6 @@ export default function TabsLayout() {
         name="notifications"
         options={{
           href: null,
-          tabBarButton: () => null,
         }}
       />
 

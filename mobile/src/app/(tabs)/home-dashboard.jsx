@@ -15,7 +15,6 @@ import {
   RefreshControl,
   Image,
   Pressable,
-  Alert,
   StyleSheet,
 } from 'react-native';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
@@ -323,8 +322,9 @@ export default function HomeDashboardScreen() {
   const handleOpenSearch = useCallback(() => {
     router.push('/search');
   }, [router]);
-  const handleFilterPress = () =>
-    Alert.alert('Filters', 'Filters are coming soon.');
+  const handleAlertsPress = useCallback(() => {
+    router.push('/notifications');
+  }, [router]);
 
   const searchPlaceholder =
     userRole === 'faculty' ? 'Search menu & catering...' : 'Search menu...';
@@ -379,12 +379,18 @@ export default function HomeDashboardScreen() {
                   {searchPlaceholder}
                 </Text>
               </Pressable>
-              <TouchableOpacity
-                style={styles.filterButton}
-                onPress={handleFilterPress}
-              >
-                <Ionicons name="options-outline" size={18} color="#1F2937" />
-              </TouchableOpacity>
+              {userRole === 'faculty' ? (
+                <TouchableOpacity
+                  style={styles.alertButton}
+                  onPress={handleAlertsPress}
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={18}
+                    color="#1F2937"
+                  />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         </LinearGradient>
@@ -654,7 +660,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
   },
-  filterButton: {
+  alertButton: {
     width: 34,
     height: 34,
     borderRadius: 12,

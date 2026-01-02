@@ -83,6 +83,10 @@ class PendingUserGateMiddleware:
     }
 
     APPROVED_ROLES = {"admin", "manager", "staff"}
+    FACE_BYPASS_PREFIXES = (
+        "/api/auth/face-register",
+        "/api/auth/face-unregister",
+    )
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -105,6 +109,9 @@ class PendingUserGateMiddleware:
             status = (user.status or "").lower()
             role = (user.role or "").lower()
             if status != "active" or role not in self.APPROVED_ROLES:
+                if path.startswith(self.FACE_BYPASS_PREFIXES):
+                    if status == "active":
+                        return self.get_response(request)
                 # Provide clearer messaging for deactivated accounts
                 if status == "deactivated":
                     return JsonResponse(
@@ -139,12 +146,19 @@ class PendingUserGateMiddleware:
         token = auth.split(" ", 1)[1].strip()
         if not token:
             return None
+        payload = None
         try:
             payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         except Exception:
-            return None
+            payload = None
+        if payload is None:
+            try:
+                from rest_framework_simplejwt.tokens import AccessToken
+                payload = AccessToken(token).payload
+            except Exception:
+                return None
 
-        user_id = str(payload.get("sub") or "")
+        user_id = str(payload.get("sub") or payload.get("user_id") or payload.get("id") or "")
         email = (payload.get("email") or "").lower().strip()
         try:
             from .models import AppUser

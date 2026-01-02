@@ -9,10 +9,12 @@ Note: First run will download ~100MB of model weights automatically.
 
 import io
 import json
+import jwt
 import numpy as np
 from typing import Optional, Tuple, List
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone as dj_timezone
 
@@ -30,6 +32,42 @@ from .utils_audit import record_audit
 # ------------------
 # DeepFace Utilities
 # ------------------
+
+def _user_from_auth_header(request):
+    auth = request.META.get("HTTP_AUTHORIZATION", "") or ""
+    if not auth.startswith("Bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip()
+    if not token:
+        return None
+
+    payload = None
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except Exception:
+        payload = None
+
+    if payload is None:
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            payload = AccessToken(token).payload
+        except Exception:
+            return None
+
+    user_id = str(payload.get("sub") or payload.get("user_id") or payload.get("id") or "")
+    email = (payload.get("email") or "").lower().strip()
+
+    try:
+        from .models import AppUser
+        if user_id:
+            user = AppUser.objects.filter(id=user_id).first()
+            if user:
+                return user
+        if email:
+            return AppUser.objects.filter(email=email).first()
+    except Exception:
+        return None
+    return None
 
 def _extract_face_and_embedding(
     image_bytes: bytes,
@@ -184,6 +222,7 @@ def _find_best_match(
 # API Endpoints
 # ------------------
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def face_register(request):
     """Register or update the calling user's face template using DeepFace.
@@ -194,15 +233,8 @@ def face_register(request):
 
     Stores DeepFace embedding and optional reference image.
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
-        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
-
-    import jwt
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-    except Exception:
+    user = _user_from_auth_header(request)
+    if not user:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
 
     try:
@@ -236,10 +268,7 @@ def face_register(request):
         return JsonResponse({"success": False, "message": error_msg}, status=400)
 
     try:
-        from .models import AppUser, FaceTemplate
-        user = AppUser.objects.filter(id=payload.get("sub")).first()
-        if not user:
-            return JsonResponse({"success": False, "message": "User not found"}, status=404)
+        from .models import FaceTemplate
 
         # Convert embedding to JSON string
         embedding_json = json.dumps(embedding_vec.tolist())
@@ -295,6 +324,7 @@ def face_register(request):
         return JsonResponse({"success": False, "message": f"Registration failed: {str(e)}"}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def face_login(request):
     """Attempt login by matching submitted face image to stored DeepFace templates.
@@ -315,6 +345,8 @@ def face_login(request):
         or ""
     )
     return_tokens = not (header_mode == "cookie" or str(auth_mode).lower() == "cookie")
+    token_type = (data.get("tokenType") or data.get("token_type") or "").lower()
+    use_simplejwt = token_type in {"simplejwt", "simple", "jwt"}
 
     image = data.get("image") or data.get("imageData") or ""
     remember_raw = data.get("remember")
@@ -453,14 +485,6 @@ def face_login(request):
         user.last_login = dj_timezone.now()
         user.save(update_fields=["last_login"])
 
-        exp_seconds = (
-            getattr(settings, "JWT_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
-            if remember
-            else getattr(settings, "JWT_EXP_SECONDS", 3600)
-        )
-        token = _issue_jwt(user, exp_seconds=exp_seconds)
-        refresh_token = _issue_refresh_token_db(user, remember=remember, request=request)
-
         try:
             record_audit(
                 request,
@@ -483,9 +507,31 @@ def face_login(request):
             },
         }
         if return_tokens:
-            payload.update({"token": token, "refreshToken": refresh_token})
+            if use_simplejwt:
+                try:
+                    from rest_framework_simplejwt.tokens import RefreshToken
+                    refresh = RefreshToken.for_user(user)
+                    payload.update(
+                        {
+                            "access": str(refresh.access_token),
+                            "refresh": str(refresh),
+                            "tokenType": "simplejwt",
+                        }
+                    )
+                except Exception:
+                    return JsonResponse({"success": False, "message": "Login failed"}, status=500)
+            else:
+                exp_seconds = (
+                    getattr(settings, "JWT_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
+                    if remember
+                    else getattr(settings, "JWT_EXP_SECONDS", 3600)
+                )
+                token = _issue_jwt(user, exp_seconds=exp_seconds)
+                refresh_token = _issue_refresh_token_db(user, remember=remember, request=request)
+                payload.update({"token": token, "refreshToken": refresh_token})
         resp = JsonResponse(payload)
-        _set_auth_cookies(resp, token, refresh_token, remember=remember, access_max_age=exp_seconds)
+        if return_tokens and not use_simplejwt:
+            _set_auth_cookies(resp, token, refresh_token, remember=remember, access_max_age=exp_seconds)
         return resp
 
     except Exception as e:
@@ -502,6 +548,7 @@ def face_login(request):
         return JsonResponse({"success": False, "message": "Login failed"}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST", "DELETE"])
 def face_unregister(request):
     """Remove the calling user's face template.
@@ -509,22 +556,12 @@ def face_unregister(request):
     Requires Authorization: Bearer <jwt>.
     Accepts POST or DELETE for convenience.
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
-        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
-
-    import jwt
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-    except Exception:
+    user = _user_from_auth_header(request)
+    if not user:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
 
     try:
-        from .models import AppUser, FaceTemplate
-        user = AppUser.objects.filter(id=payload.get("sub")).first()
-        if not user:
-            return JsonResponse({"success": False, "message": "User not found"}, status=404)
+        from .models import FaceTemplate
 
         tpl = FaceTemplate.objects.filter(user=user).first()
         if not tpl:

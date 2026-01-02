@@ -46,6 +46,19 @@ export default function FaceScanScreen() {
 
   const captureLabel = isRegister ? 'Register face' : 'Scan face';
 
+  const parseResponse = useCallback(async (res) => {
+    const text = await res.text();
+    if (!text) {
+      return { ok: res.ok, status: res.status, data: null };
+    }
+    try {
+      return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+    } catch (error) {
+      console.warn('Face scan response parse failed:', error);
+      return { ok: res.ok, status: res.status, data: null };
+    }
+  }, []);
+
   const handleScan = useCallback(async () => {
     if (scanning || !cameraReady) return;
     setScanning(true);
@@ -82,9 +95,12 @@ export default function FaceScanScreen() {
           body: JSON.stringify({ image: imageData, model: 'Facenet512' }),
         });
 
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.message || 'Face registration failed.');
+        const { ok, status, data } = await parseResponse(res);
+        if (!ok || !data?.success) {
+          const message =
+            data?.message ||
+            (status === 401 ? 'Unauthorized' : 'Face registration failed.');
+          throw new Error(message);
         }
 
         await AsyncStorage.setItem(FACE_REGISTERED_KEY, 'true');
@@ -97,15 +113,18 @@ export default function FaceScanScreen() {
       const res = await fetch(`${BASE_URL}/auth/face-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData }),
+        body: JSON.stringify({ image: imageData, tokenType: 'simplejwt' }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Face not recognized.');
+      const { ok, status, data } = await parseResponse(res);
+      if (!ok || !data?.success) {
+        const message =
+          data?.message ||
+          (status === 401 ? 'Unauthorized' : 'Face not recognized.');
+        throw new Error(message);
       }
 
-      if (data.pending) {
+      if (data?.pending) {
         Alert.alert(
           'Account pending',
           'Your account is still pending verification. Please contact admin.'
@@ -114,12 +133,21 @@ export default function FaceScanScreen() {
         return;
       }
 
-      const accessToken = data.token || data.access;
-      const refreshToken = data.refreshToken || data.refresh;
+      const tokenType = (
+        data?.tokenType ||
+        data?.token_type ||
+        ''
+      ).toLowerCase();
+      const accessToken =
+        tokenType === 'simplejwt' ? data.access : data.token || data.access;
+      const refreshToken =
+        tokenType === 'simplejwt'
+          ? data.refresh
+          : data.refreshToken || data.refresh;
       if (accessToken || refreshToken) {
         await storeTokens({ accessToken, refreshToken });
       }
-      if (data.user) {
+      if (data?.user) {
         await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
       }
 
@@ -130,7 +158,7 @@ export default function FaceScanScreen() {
     } finally {
       setScanning(false);
     }
-  }, [cameraReady, isRegister, router, scanning]);
+  }, [cameraReady, isRegister, parseResponse, router, scanning]);
 
   const permissionReady = useMemo(() => Boolean(permission), [permission]);
 

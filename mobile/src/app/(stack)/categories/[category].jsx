@@ -30,7 +30,7 @@ export default function CategoryScreen() {
         const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
         const userData = entries[0][1] || entries[1][1];
         const parsed = userData ? JSON.parse(userData) : null;
-        setRole(parsed?.role || 'student');
+        setRole(parsed?.role || 'customer');
 
         const menu = await fetchMenuItems();
         const filtered = (menu || []).filter(

@@ -192,11 +192,11 @@ export default function HomeDashboardScreen() {
           const parsed = JSON.parse(userData);
           setUserRole(parsed.role);
         } else {
-          setUserRole('student');
+          setUserRole('customer');
         }
       } catch (err) {
         console.error('Failed to get user role', err);
-        setUserRole('student');
+        setUserRole('customer');
       }
     };
     getUserRole();

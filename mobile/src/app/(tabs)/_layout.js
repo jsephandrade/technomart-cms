@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_CACHE_KEY } from '../../api/api';
 
 export default function TabsLayout() {
-  const [role, setRole] = useState('student');
+  const [role, setRole] = useState('customer');
 
   useEffect(() => {
     const loadUser = async () => {
@@ -16,12 +16,12 @@ export default function TabsLayout() {
         const json = entries[0][1] || entries[1][1];
         if (json) {
           const user = JSON.parse(json);
-          setRole(user.role);
+          setRole(user.role || 'customer');
         } else {
-          setRole('student');
+          setRole('customer');
         }
       } catch {
-        setRole('student');
+        setRole('customer');
       }
     };
     loadUser();

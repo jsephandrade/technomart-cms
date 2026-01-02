@@ -27,7 +27,7 @@ export default function SearchScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState('student');
+  const [userRole, setUserRole] = useState('customer');
 
   useEffect(() => {
     const getUserRole = async () => {
@@ -36,13 +36,13 @@ export default function SearchScreen() {
         const userData = entries[0][1] || entries[1][1];
         if (userData) {
           const parsed = JSON.parse(userData);
-          setUserRole(parsed.role || 'student');
+          setUserRole(parsed.role || 'customer');
         } else {
-          setUserRole('student');
+          setUserRole('customer');
         }
       } catch (err) {
         console.error('Failed to get user role', err);
-        setUserRole('student');
+        setUserRole('customer');
       }
     };
     getUserRole();

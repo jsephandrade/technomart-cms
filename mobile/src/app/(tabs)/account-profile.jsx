@@ -305,6 +305,12 @@ export default function AccountProfile() {
             Sign in to view your account details.
           </Text>
         </View>
+        <View style={styles.emptyActions}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={18} color="#fff" />
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -774,6 +780,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  emptyActions: {
+    marginTop: 16,
   },
   loadingContainer: {
     flex: 1,

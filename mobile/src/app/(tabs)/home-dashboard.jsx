@@ -27,6 +27,7 @@ import CategoryItem from '../../components/CategoryItem';
 import Recommended from '../../components/Recommended';
 import { fetchMenuItems, USER_CACHE_KEY } from '../../api/api';
 import { useCart } from '../../context/CartContext';
+import { useNotifications } from '../../context/NotificationContext';
 import { resolveImageSource } from '../../utils/image';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
@@ -174,6 +175,7 @@ export default function HomeDashboardScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const router = useRouter();
   const { cart, addToCart } = useCart();
+  const { notifications } = useNotifications();
 
   const [menuItems, setMenuItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -317,6 +319,10 @@ export default function HomeDashboardScreen() {
   }, [menuItems, userRole]);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const notificationCount = Array.isArray(notifications)
+    ? notifications.length
+    : 0;
+  const badgeValue = notificationCount > 99 ? '99+' : `${notificationCount}`;
 
   const handleCheckout = () => router.push('/customer-cart');
   const handleOpenSearch = useCallback(() => {
@@ -389,6 +395,11 @@ export default function HomeDashboardScreen() {
                     size={18}
                     color="#1F2937"
                   />
+                  {notificationCount > 0 ? (
+                    <View style={styles.alertBadge}>
+                      <Text style={styles.alertBadgeText}>{badgeValue}</Text>
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -667,6 +678,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE7C7',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  alertBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alertBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   recommendedWrap: {
     marginTop: 6,

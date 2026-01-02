@@ -1,19 +1,13 @@
 // app/(tabs)/_layout.js
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_CACHE_KEY } from '../../api/api';
-import { useNotifications } from '../../context/NotificationContext';
 
 export default function TabsLayout() {
   const [role, setRole] = useState('student');
-  const { notifications } = useNotifications();
-  const notificationCount = Array.isArray(notifications)
-    ? notifications.length
-    : 0;
-  const badgeValue = notificationCount > 99 ? '99+' : `${notificationCount}`;
 
   useEffect(() => {
     const loadUser = async () => {
@@ -83,27 +77,6 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.iconWrapper}>
-              <Ionicons
-                name="notifications-outline"
-                size={size}
-                color={color}
-              />
-              {notificationCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{badgeValue}</Text>
-                </View>
-              ) : null}
-            </View>
-          ),
-        }}
-      />
-
-      <Tabs.Screen
         name="account-profile"
         options={{
           title: 'Profile',
@@ -116,27 +89,4 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  iconWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -8,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 3,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-});
+const styles = StyleSheet.create({});

@@ -21,18 +21,12 @@ import { resolveImageSource } from '../../utils/image';
 
 const BACKEND = 'http://192.168.166.179:8000';
 const COLLAGE_GAP = 3;
-const STATUS_STEPS = [
-  'pending',
-  'in_prep',
-  'in_progress',
-  'ready',
-  'completed',
-];
+const STATUS_STEPS = ['pending', 'in_prep', 'ready', 'completed'];
 const STATUS_LABELS = {
   pending: 'Pending',
   in_queue: 'Pending',
   in_prep: 'Preparing',
-  in_progress: 'In Progress',
+  in_progress: 'Preparing',
   ready: 'Ready',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -44,7 +38,7 @@ const STATUS_COLORS = {
   pending: '#F97316',
   in_queue: '#F97316',
   in_prep: '#FB923C',
-  in_progress: '#38BDF8',
+  in_progress: '#FB923C',
   ready: '#10B981',
   completed: '#10B981',
   cancelled: '#EF4444',
@@ -56,7 +50,7 @@ const STATUS_BG = {
   pending: '#FFE7C7',
   in_queue: '#FFE7C7',
   in_prep: '#FFE7C7',
-  in_progress: '#DBEAFE',
+  in_progress: '#FFE7C7',
   ready: '#DCFCE7',
   completed: '#DCFCE7',
   cancelled: '#FEE2E2',
@@ -71,10 +65,10 @@ const STATUS_MAPPING = {
   accepted: 'in_prep',
   in_prep: 'in_prep',
   preparing: 'in_prep',
-  assembly: 'in_progress',
-  assembling: 'in_progress',
-  in_progress: 'in_progress',
-  inprogress: 'in_progress',
+  assembly: 'in_prep',
+  assembling: 'in_prep',
+  in_progress: 'in_prep',
+  inprogress: 'in_prep',
   staged: 'ready',
   ready: 'ready',
   handoff: 'ready',
@@ -85,6 +79,7 @@ const STATUS_MAPPING = {
   refunded: 'refunded',
   voided: 'voided',
 };
+const ORDER_POLL_INTERVAL_MS = 12000;
 
 const normalizeStatusKey = (value) => {
   if (!value) return 'pending';
@@ -393,9 +388,7 @@ const isPreviousStatus = (status) => {
 };
 
 const isCancelableStatus = (status) =>
-  ['pending', 'in_queue', 'in_prep', 'in_progress'].includes(
-    normalizeStatusKey(status)
-  );
+  ['pending', 'in_queue', 'in_prep'].includes(normalizeStatusKey(status));
 
 export default function OrderTrackingScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
@@ -407,6 +400,7 @@ export default function OrderTrackingScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
+  const isFetchingRef = useRef(false);
   const translateY = useRef(new Animated.Value(0)).current;
 
   const panResponder = useRef(
@@ -478,19 +472,25 @@ export default function OrderTrackingScreen() {
     return map;
   }, [menuItems]);
 
-  const loadData = async ({ silent = false } = {}) => {
+  const loadData = async ({ silent = false, includeMenu = true } = {}) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (!silent) setLoading(true);
     try {
       const [orderData, menuData] = await Promise.all([
         fetchUserOrders(),
-        fetchMenuItems().catch((err) => {
-          console.error('Failed to fetch menu items:', err);
-          return [];
-        }),
+        includeMenu
+          ? fetchMenuItems().catch((err) => {
+              console.error('Failed to fetch menu items:', err);
+              return [];
+            })
+          : Promise.resolve(null),
       ]);
       const orders = Array.isArray(orderData) ? orderData : [];
-      const menus = Array.isArray(menuData) ? menuData : [];
-      setMenuItems(menus);
+      if (includeMenu) {
+        const menus = Array.isArray(menuData) ? menuData : [];
+        setMenuItems(menus);
+      }
       const sorted = [...orders].sort((a, b) => {
         const dateA = new Date(resolveOrderDate(a)).getTime() || 0;
         const dateB = new Date(resolveOrderDate(b)).getTime() || 0;
@@ -511,11 +511,19 @@ export default function OrderTrackingScreen() {
       console.error('Failed to fetch orders:', err);
     } finally {
       if (!silent) setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadData({ silent: true, includeMenu: false });
+    }, ORDER_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleRefresh = () => {
@@ -591,8 +599,6 @@ export default function OrderTrackingScreen() {
         {STATUS_STEPS.map((step, index) => {
           const isActive = activeIndex >= index;
           const isLineActive = activeIndex > index;
-          const isLinePartial =
-            statusKey === 'in_progress' && activeIndex === index;
           return (
             <View key={step} style={styles.statusStep}>
               <View
@@ -611,13 +617,13 @@ export default function OrderTrackingScreen() {
               </Text>
               {index < STATUS_STEPS.length - 1 && (
                 <View style={styles.statusLineTrack}>
-                  {(isLineActive || isLinePartial) && (
+                  {isLineActive && (
                     <View
                       style={[
                         styles.statusLineFill,
                         {
                           backgroundColor: activeColor,
-                          width: isLinePartial ? '55%' : '100%',
+                          width: '100%',
                         },
                       ]}
                     />
@@ -1120,33 +1126,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    marginTop: 12,
+    marginTop: 16,
   },
   statusStep: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 25,
+    height: 25,
+    borderRadius: 12.5,
   },
   statusLabel: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
-    marginLeft: 4,
-    marginRight: 6,
+    marginLeft: 8,
+    marginRight: 10,
   },
   statusLineTrack: {
-    width: 24,
-    height: 2,
+    width: 40,
+    height: 4,
     backgroundColor: '#F3D6B7',
     borderRadius: 999,
     overflow: 'hidden',
-    marginRight: 6,
+    marginRight: 10,
   },
   statusLineFill: {
-    height: 2,
+    height: 4,
   },
   itemsPreview: {
     marginTop: 12,

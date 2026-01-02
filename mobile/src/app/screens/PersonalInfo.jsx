@@ -13,7 +13,6 @@ import {
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 
 import { useAuth } from '../../context/AuthContext';
@@ -153,32 +152,7 @@ export default function PersonalInfoScreen() {
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
 
-  const [faceSupported, setFaceSupported] = useState(false);
-  const [biometricEnrolled, setBiometricEnrolled] = useState(false);
-
   const isGuest = Boolean(user?.is_guest);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      const types =
-        await LocalAuthentication.supportedAuthenticationTypesAsync();
-      if (mounted) {
-        setFaceSupported(
-          compatible &&
-            types.includes(
-              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
-            )
-        );
-        setBiometricEnrolled(enrolled);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -425,24 +399,6 @@ export default function PersonalInfoScreen() {
     setConfirmPwd('');
   }, [oldPwd, newPwd, confirmPwd]);
 
-  const handleFaceRecognition = useCallback(async () => {
-    if (!faceSupported || !biometricEnrolled) {
-      Alert.alert(
-        'Not available',
-        'Face recognition is not supported on this device.'
-      );
-      return;
-    }
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Verify with Face ID',
-    });
-    if (result.success) {
-      Alert.alert('Verified', 'Identity confirmed!');
-    } else {
-      Alert.alert('Failed', 'Face recognition failed. Try again.');
-    }
-  }, [faceSupported, biometricEnrolled]);
-
   const saveDisabled = !hasChanges || isSaving || profileLoading || isGuest;
   const heroSubtitle = user?.email?.trim() || '';
 
@@ -601,33 +557,6 @@ export default function PersonalInfoScreen() {
             <Text style={styles.btnText}>Update Password</Text>
           </TouchableOpacity>
         </FieldCard>
-
-        {faceSupported ? (
-          <FieldCard
-            title="Face Recognition"
-            subtitle="Use Face ID for a faster and safer log in."
-            icon={<Feather name="smile" size={18} color="#F07F13" />}
-          >
-            <Text style={styles.helperText}>
-              {biometricEnrolled
-                ? 'You are enrolled for biometric login. Test it below.'
-                : 'Enroll your face on this device to enable biometric login.'}
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.btnPrimary,
-                styles.btnSecondary,
-                !biometricEnrolled && styles.btnDisabled,
-              ]}
-              onPress={handleFaceRecognition}
-              disabled={!biometricEnrolled}
-            >
-              <Text style={styles.btnText}>
-                {biometricEnrolled ? 'Test Face ID' : 'No Face Enrolled'}
-              </Text>
-            </TouchableOpacity>
-          </FieldCard>
-        ) : null}
 
         <TouchableOpacity
           style={[styles.saveButton, saveDisabled && styles.saveButtonDisabled]}

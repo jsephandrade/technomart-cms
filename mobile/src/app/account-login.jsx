@@ -9,15 +9,11 @@ import {
   Image,
   Alert,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
 import {
   clearStoredTokens,
-  refreshAccessToken,
   getValidToken,
-  REFRESH_TOKEN_KEY,
   storeTokens,
   USER_CACHE_KEY,
 } from '../api/api';
@@ -33,7 +29,6 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -41,11 +36,6 @@ WebBrowser.maybeCompleteAuthSession();
 // ✅ Backend API base
 const LOCAL_IP = '192.168.1.5';
 const API_BASE = `http://${LOCAL_IP}:8000/api/accounts`;
-const FACE_RING_SIZE = 220;
-const FACE_RING_STROKE = 10;
-const FACE_RING_RADIUS = (FACE_RING_SIZE - FACE_RING_STROKE) / 2;
-const FACE_RING_CIRCUMFERENCE = 2 * Math.PI * FACE_RING_RADIUS;
-const FACE_RING_ARC = FACE_RING_CIRCUMFERENCE * 0.16;
 
 export default function AccountLoginScreen() {
   const router = useRouter();
@@ -55,8 +45,6 @@ export default function AccountLoginScreen() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [faceLoading, setFaceLoading] = useState(false);
-  const [faceScanVisible, setFaceScanVisible] = useState(false);
   const [attemptCount, setAttemptCount] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [focusedField, setFocusedField] = useState(null);
@@ -71,23 +59,6 @@ export default function AccountLoginScreen() {
     if (typeof msg === 'object' && msg !== null) return JSON.stringify(msg);
     return String(msg);
   };
-
-  const runBiometricGate = useCallback(async () => {
-    try {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      if (!compatible) return;
-
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) return;
-
-      await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Confirm with biometrics to continue',
-        fallbackLabel: 'Use Passcode',
-      });
-    } catch (error) {
-      console.warn('Biometric prompt failed:', error?.message || error);
-    }
-  }, []);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return undefined;
@@ -219,7 +190,6 @@ export default function AccountLoginScreen() {
       setAttemptCount(0);
       setCooldownSeconds(0);
 
-      await runBiometricGate();
       router.replace('/home-dashboard');
     } catch (error) {
       console.error('Login error:', error);
@@ -269,7 +239,6 @@ export default function AccountLoginScreen() {
         await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
         setUser(profile);
 
-        await runBiometricGate();
         router.replace('/home-dashboard');
       } else {
         Alert.alert(
@@ -285,96 +254,11 @@ export default function AccountLoginScreen() {
     } finally {
       setGoogleLoading(false);
     }
-  }, [promptAsync, request, router, runBiometricGate]);
+  }, [promptAsync, request, router]);
 
-  const handleFaceSignIn = useCallback(async () => {
-    if (faceLoading) return;
-    setFaceLoading(true);
-
-    try {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      if (!compatible) {
-        Alert.alert('Face Scan Unavailable', 'This device has no biometrics.');
-        return;
-      }
-
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!enrolled) {
-        Alert.alert(
-          'Face Scan Disabled',
-          'Enable Face Unlock in device settings first.'
-        );
-        return;
-      }
-
-      const types =
-        await LocalAuthentication.supportedAuthenticationTypesAsync();
-      const hasFace = types.includes(
-        LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
-      );
-      if (!hasFace) {
-        Alert.alert(
-          'Face Scan Unavailable',
-          'Face Unlock is not supported on this device.'
-        );
-        return;
-      }
-
-      const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-      if (!refreshToken) {
-        Alert.alert(
-          'Face Scan Not Ready',
-          'Please sign in with email and password once to enable Face scan.'
-        );
-        return;
-      }
-
-      setFaceScanVisible(true);
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Continue with Face Scan',
-        fallbackLabel: 'Use Passcode',
-      });
-
-      if (!result.success) {
-        Alert.alert(
-          'Face Scan Failed',
-          result.error || 'Authentication was canceled.'
-        );
-        return;
-      }
-
-      const accessToken = await refreshAccessToken();
-      if (!accessToken) {
-        Alert.alert(
-          'Session Expired',
-          'Please sign in with your password again.'
-        );
-        return;
-      }
-
-      const profileRes = await fetch(`${API_BASE}/profile/`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (!profileRes.ok) {
-        const errData = await profileRes.json();
-        throw new Error(errData.detail || 'Failed to fetch profile');
-      }
-
-      const profile = await profileRes.json();
-      await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
-      setUser(profile);
-      router.replace('/home-dashboard');
-    } catch (error) {
-      console.error('Face scan login error:', error);
-      Alert.alert('Face Scan Failed', formatMessage(error.message));
-    } finally {
-      setFaceScanVisible(false);
-      setFaceLoading(false);
-    }
-  }, [faceLoading, router]);
+  const handleFaceSignIn = useCallback(() => {
+    router.push({ pathname: '/face-scan', params: { mode: 'login' } });
+  }, [router]);
 
   const [fontsLoaded] = useFonts({
     Roboto_400Regular,
@@ -525,25 +409,17 @@ export default function AccountLoginScreen() {
 
             {/* Face Scan Button */}
             <TouchableOpacity
-              style={[
-                styles.faceButton,
-                faceLoading && styles.faceButtonDisabled,
-              ]}
+              style={styles.faceButton}
               onPress={handleFaceSignIn}
-              disabled={faceLoading}
             >
-              {faceLoading ? (
-                <ActivityIndicator size="small" color="#F97316" />
-              ) : (
-                <View style={styles.faceContent}>
-                  <Ionicons
-                    name="scan-circle-outline"
-                    size={20}
-                    color="#F97316"
-                  />
-                  <Text style={styles.faceText}>Continue with Face scan</Text>
-                </View>
-              )}
+              <View style={styles.faceContent}>
+                <Ionicons
+                  name="scan-circle-outline"
+                  size={20}
+                  color="#F97316"
+                />
+                <Text style={styles.faceText}>Continue with Face scan</Text>
+              </View>
             </TouchableOpacity>
 
             {/* Google Button */}
@@ -583,56 +459,6 @@ export default function AccountLoginScreen() {
           </View>
         </View>
       </KeyboardAwareScrollView>
-
-      <Modal
-        transparent
-        animationType="fade"
-        visible={faceScanVisible}
-        onRequestClose={() => {
-          if (!faceLoading) setFaceScanVisible(false);
-        }}
-      >
-        <View style={styles.faceModalBackdrop}>
-          <View style={styles.faceModalCard}>
-            <View style={styles.faceRing}>
-              <Svg width={FACE_RING_SIZE} height={FACE_RING_SIZE}>
-                <Circle
-                  cx={FACE_RING_SIZE / 2}
-                  cy={FACE_RING_SIZE / 2}
-                  r={FACE_RING_RADIUS}
-                  stroke="#E5E7EB"
-                  strokeWidth={FACE_RING_STROKE}
-                  fill="none"
-                />
-                <Circle
-                  cx={FACE_RING_SIZE / 2}
-                  cy={FACE_RING_SIZE / 2}
-                  r={FACE_RING_RADIUS}
-                  stroke="#22C55E"
-                  strokeWidth={FACE_RING_STROKE}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={`${FACE_RING_ARC} ${FACE_RING_CIRCUMFERENCE}`}
-                  rotation="-90"
-                  origin={`${FACE_RING_SIZE / 2}, ${FACE_RING_SIZE / 2}`}
-                />
-              </Svg>
-              <View style={styles.facePreview}>
-                <LinearGradient
-                  colors={['#E5E7EB', '#CBD5F5', '#D1FAE5']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.facePreviewFill}
-                />
-              </View>
-            </View>
-            <Text style={styles.faceTitle}>Hold phone upright</Text>
-            <Text style={styles.faceSubtitle}>
-              Align your face inside the circle.
-            </Text>
-          </View>
-        </View>
-      </Modal>
     </ImageBackground>
   );
 }
@@ -761,9 +587,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 15,
   },
-  faceButtonDisabled: {
-    opacity: 0.7,
-  },
   faceContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -773,59 +596,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Roboto_700Bold',
     color: '#C2410C',
     marginLeft: 8,
-  },
-  faceModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  faceModalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    alignItems: 'center',
-    paddingVertical: 28,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: '#FCE1C6',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  faceRing: {
-    width: FACE_RING_SIZE,
-    height: FACE_RING_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  facePreview: {
-    position: 'absolute',
-    width: FACE_RING_SIZE - 28,
-    height: FACE_RING_SIZE - 28,
-    borderRadius: (FACE_RING_SIZE - 28) / 2,
-    overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
-  },
-  facePreviewFill: {
-    flex: 1,
-  },
-  faceTitle: {
-    fontSize: 18,
-    fontFamily: 'Roboto_700Bold',
-    color: '#111827',
-    marginBottom: 6,
-  },
-  faceSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Roboto_400Regular',
-    color: '#6B7280',
-    textAlign: 'center',
   },
   linkText: {
     color: '#EA580C',

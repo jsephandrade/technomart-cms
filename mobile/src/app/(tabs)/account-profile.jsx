@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import api, {
   clearStoredTokens,
+  FACE_REGISTERED_KEY,
   getValidToken,
   USER_CACHE_KEY,
 } from '../../api/api';
@@ -51,6 +52,7 @@ export default function AccountProfile() {
   const [creditPoints, setCreditPoints] = useState(0);
   const [isGuest, setIsGuest] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [faceRegistered, setFaceRegistered] = useState(false);
   const [creditModal, setCreditModal] = useState(false);
   const [specialOffers, setSpecialOffers] = useState([]);
 
@@ -156,12 +158,23 @@ export default function AccountProfile() {
     }
   }, [isGuest]);
 
+  const loadFaceStatus = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(FACE_REGISTERED_KEY);
+      setFaceRegistered(stored === 'true');
+    } catch (err) {
+      console.warn('Failed to load face status:', err);
+      setFaceRegistered(false);
+    }
+  }, []);
+
   // --- Run on screen focus ---
   useFocusEffect(
     useCallback(() => {
       loadProfile();
       loadSpecialOffers();
-    }, [loadProfile, loadSpecialOffers])
+      loadFaceStatus();
+    }, [loadProfile, loadSpecialOffers, loadFaceStatus])
   );
 
   const openCreditModal = useCallback(() => {
@@ -172,6 +185,17 @@ export default function AccountProfile() {
   const handleRewardsPress = useCallback(() => {
     router.push('/customer-cart');
   }, [router]);
+
+  const handleFaceRegister = useCallback(() => {
+    if (isGuest) {
+      Alert.alert(
+        'Sign in required',
+        'Create an account to register face scan.'
+      );
+      return;
+    }
+    router.push({ pathname: '/face-scan', params: { mode: 'register' } });
+  }, [isGuest, router]);
 
   // --- Logout ---
   const handleLogout = () => {
@@ -236,6 +260,12 @@ export default function AccountProfile() {
       Alert.alert('Error', message);
     }
   };
+
+  const faceActionLabel = isGuest
+    ? 'Sign in to register'
+    : faceRegistered
+      ? 'Face registered'
+      : 'Register face';
 
   // --- Pick avatar ---
   const pickAvatar = async () => {
@@ -499,6 +529,21 @@ export default function AccountProfile() {
           </View>
         </View>
 
+        <TouchableOpacity
+          style={[styles.infoCard, isGuest && styles.infoCardDisabled]}
+          onPress={handleFaceRegister}
+          disabled={isGuest}
+        >
+          <View style={styles.infoIconWrap}>
+            <Ionicons name="scan-outline" size={18} color="#F97316" />
+          </View>
+          <View style={styles.infoBody}>
+            <Text style={styles.infoLabel}>Face Scan</Text>
+            <Text style={styles.infoValue}>{faceActionLabel}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={18} color="#fff" />
           <Text style={styles.logoutText}>Logout</Text>
@@ -758,6 +803,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
+  },
+  infoCardDisabled: {
+    opacity: 0.6,
   },
   infoIconWrap: {
     width: 36,

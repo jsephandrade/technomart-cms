@@ -28,6 +28,7 @@ export default function RootLayout() {
                   <Stack.Screen name="account-login" />
                   <Stack.Screen name="account-registration" />
                   <Stack.Screen name="account-password-reset" />
+                  <Stack.Screen name="face-scan" />
                   <Stack.Screen name="(tabs)" />
                 </Stack>
               </DietaryProvider>

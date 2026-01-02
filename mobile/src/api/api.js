@@ -8,6 +8,7 @@ import { API_CONFIG } from './config';
 export const ACCESS_TOKEN_KEY = '@sanaol/auth/accessToken';
 export const REFRESH_TOKEN_KEY = '@sanaol/auth/refreshToken';
 export const USER_CACHE_KEY = '@sanaol/auth/user';
+export const FACE_REGISTERED_KEY = '@sanaol/auth/faceRegistered';
 
 // Base URLs
 export const BASE_URL = `http://192.168.1.5:8000/api`;
@@ -182,6 +183,7 @@ export async function clearStoredTokens() {
     ACCESS_TOKEN_KEY,
     REFRESH_TOKEN_KEY,
     USER_CACHE_KEY,
+    FACE_REGISTERED_KEY,
     'accessToken',
     'refreshToken',
     'user',

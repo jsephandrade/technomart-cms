@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Image,
+  Linking,
   Modal,
   PanResponder,
   RefreshControl,
@@ -19,6 +20,7 @@ import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { fetchMenuItems, fetchUserOrders } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
+const SUPPORT_EMAIL = 'support@example.com';
 const COLLAGE_GAP = 3;
 const STATUS_STEPS = ['pending', 'in_prep', 'ready'];
 const STATUS_LABELS = {
@@ -550,6 +552,35 @@ export default function OrderTrackingScreen() {
     });
   };
 
+  const handleContactSupport = async (order) => {
+    const orderNumber = resolveOrderNumber(order);
+    const subject = orderNumber
+      ? `Order Support ${orderNumber}`
+      : 'Order Support';
+    const statusLabel = formatStatusLabel(order?.status);
+    const bodyLines = [
+      orderNumber ? `Order: ${orderNumber}` : null,
+      statusLabel ? `Status: ${statusLabel}` : null,
+      '',
+      'Hi Support,',
+      'I need help with my order.',
+    ].filter(Boolean);
+    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
+    try {
+      const supported = await Linking.canOpenURL(mailto);
+      if (!supported) {
+        Alert.alert('Contact Support', `Please email us at ${SUPPORT_EMAIL}.`);
+        return;
+      }
+      await Linking.openURL(mailto);
+    } catch (err) {
+      console.error('Contact support failed:', err);
+      Alert.alert('Contact Support', `Please email us at ${SUPPORT_EMAIL}.`);
+    }
+  };
+
   const renderStatusBar = (statusKey) => {
     if (!statusKey || statusKey === 'cancelled') return null;
     const activeIndex = STATUS_STEPS.indexOf(statusKey);
@@ -920,6 +951,19 @@ export default function OrderTrackingScreen() {
                   {formatPeso(selectedTotal)}
                 </Text>
               </View>
+
+              <TouchableOpacity
+                style={styles.supportButton}
+                onPress={() => handleContactSupport(selectedOrder)}
+              >
+                <Ionicons
+                  name="help-circle-outline"
+                  size={18}
+                  color="#9A3412"
+                  style={styles.supportButtonIcon}
+                />
+                <Text style={styles.supportButtonText}>Contact Support</Text>
+              </TouchableOpacity>
             </ScrollView>
           </Animated.View>
         </View>
@@ -1363,6 +1407,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Roboto_700Bold',
     color: '#111827',
+  },
+  supportButton: {
+    marginTop: 12,
+    backgroundColor: '#FFE7C7',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  supportButtonIcon: {
+    marginRight: 6,
+  },
+  supportButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
   },
   loadingContainer: {
     flex: 1,

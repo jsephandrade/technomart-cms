@@ -510,7 +510,7 @@ export const createOrder = async (payload) => {
       }
     );
 
-    return response.data; // { success: true, order_number: ..., total, credit_points_used }
+    return response.data; // { success: true, checkout_id: ..., order_number: ..., total, credit_points_used }
   } catch (err) {
     console.error('CreateOrder API error:', err.response?.data || err.message);
 
@@ -538,12 +538,12 @@ export const createOrder = async (payload) => {
 // --------------------
 // Fetch GCash QR
 // --------------------
-export const fetchGcashQR = async (orderNumber) => {
+export const fetchGcashQR = async (checkoutId) => {
   try {
     const token = await getValidToken(); // get valid token if needed
     if (!token) throw new Error('No valid token found. Please log in again.');
 
-    const res = await api.get(`/orders/${orderNumber}/gcash_qr/`, {
+    const res = await api.get(`/orders/${checkoutId}/gcash_qr/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -736,9 +736,10 @@ export const placeOrder = async (profile, cartItems, creditPointsToUse = 0) => {
     const result = await createOrder(payload);
 
     if (result.success) {
-      console.log('Order placed successfully:', result.order_number);
+      console.log('Checkout created successfully:', result.order_number);
       return {
         success: true,
+        checkoutId: result.checkout_id,
         orderNumber: result.order_number,
         total: result.total, // backend-calculated final total
         creditPointsUsed: result.credit_points_used,
@@ -756,9 +757,9 @@ export const placeOrder = async (profile, cartItems, creditPointsToUse = 0) => {
   }
 };
 // api.js
-export const confirmPayment = async (orderNumber, method) => {
+export const confirmPayment = async (checkoutId, method) => {
   try {
-    const response = await api.post(`/orders/${orderNumber}/confirm_payment/`, {
+    const response = await api.post(`/orders/${checkoutId}/confirm_payment/`, {
       method,
     });
     return response.data;
@@ -820,9 +821,9 @@ export const fetchFeedback = async () => {
     return [];
   }
 };
-export const getGcashLink = async (orderNumber) => {
+export const getGcashLink = async (checkoutId) => {
   try {
-    const res = await api.get(`/orders/${orderNumber}/gcash_link/`);
+    const res = await api.get(`/orders/${checkoutId}/gcash_link/`);
     return res.data; // expected: { success: true, payment_url: 'gcash://...' }
   } catch (err) {
     console.log('getGcashLink error:', err.response?.data || err.message);

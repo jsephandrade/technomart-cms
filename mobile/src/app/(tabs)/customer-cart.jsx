@@ -234,6 +234,11 @@ export default function CustomerCartScreen() {
         setLoading(false);
         return;
       }
+      if (!res.checkout_id) {
+        Alert.alert('Order Error', 'Checkout session could not be created.');
+        setLoading(false);
+        return;
+      }
 
       clearCart();
       setSelectedTime(null);
@@ -245,7 +250,8 @@ export default function CustomerCartScreen() {
           orderType: 'pickup',
           total: finalTotal.toFixed(2),
           selectedTime,
-          orderId: res.order_number,
+          checkoutId: res.checkout_id,
+          orderNumber: res.order_number,
           celebrate: '1',
         },
       });

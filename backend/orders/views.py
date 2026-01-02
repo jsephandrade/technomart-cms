@@ -11,7 +11,9 @@ from rest_framework import serializers
 from decimal import Decimal
 
 from django.http import JsonResponse
-from api.models import Order, OrderItem, MenuItem, PaymentTransaction
+from django.db import transaction
+from django.utils.dateparse import parse_datetime
+from api.models import Order, OrderItem, MenuItem, PaymentTransaction, CheckoutSession
 from .serializers import OrderSerializer
 from notifications.models import Notification
 from decimal import Decimal
@@ -58,6 +60,52 @@ def _get_display_name(user, order=None):
     return ""
 
 
+CHECKOUT_EXPIRY_MINUTES = 30
+
+
+def _parse_uuid(value):
+    try:
+        return uuid.UUID(str(value))
+    except Exception:
+        return None
+
+
+def _parse_promised_time(value):
+    if not value:
+        return None
+    parsed = parse_datetime(str(value))
+    return parsed
+
+
+def _coerce_decimal(value, default=Decimal("0.00")):
+    try:
+        return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    except Exception:
+        return default
+
+
+def _get_checkout_session(identifier):
+    if not identifier:
+        return None
+    uid = _parse_uuid(identifier)
+    if uid:
+        session = CheckoutSession.objects.filter(id=uid).first()
+        if session:
+            return session
+    return (
+        CheckoutSession.objects.filter(order_number__iexact=str(identifier))
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _resolve_order_or_checkout(identifier):
+    order = Order.objects.filter(order_number=identifier).first()
+    if order:
+        return order, None
+    return None, _get_checkout_session(identifier)
+
+
 def _ensure_pending_cash_payment(order, *, customer_name=""):
     order_ids = [str(order.id)]
     if order.order_number:
@@ -96,7 +144,17 @@ def generate_unique_order_number(prefix="O", order_model=None, max_attempts=64):
             length=6, allowed_chars=ORDER_NUMBER_RANDOM_CHARS
         )
         candidate = f"{prefix_clean}-{random_component}"
-        if not order_model.objects.filter(order_number__iexact=candidate).exists():
+        exists_in_sessions = False
+        try:
+            exists_in_sessions = CheckoutSession.objects.filter(
+                order_number__iexact=candidate
+            ).exists()
+        except Exception:
+            exists_in_sessions = False
+        if (
+            not order_model.objects.filter(order_number__iexact=candidate).exists()
+            and not exists_in_sessions
+        ):
             return candidate
         attempt += 1
 
@@ -186,10 +244,32 @@ def create_order(request):
     data = request.data
 
     try:
-        # 1️⃣ Parse credit points requested
-        requested_points = Decimal(data.get('credit_points_used', 0)).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+        idempotency_key = (
+            request.headers.get("Idempotency-Key") or data.get("idempotency_key")
+        )
+        if idempotency_key:
+            existing = (
+                CheckoutSession.objects.filter(
+                    user=user, idempotency_key=str(idempotency_key).strip()
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if existing and existing.status != CheckoutSession.STATUS_EXPIRED:
+                return Response(
+                    {
+                        "success": True,
+                        "checkout_id": str(existing.id),
+                        "order_number": existing.order_number,
+                        "total": float(existing.total_amount or 0),
+                        "credit_points_used": float(existing.credit_points_used or 0),
+                    }
+                )
 
-        # 2️⃣ Fetch Paid orders to calculate earned points
+        # 1?,???? Parse credit points requested
+        requested_points = _coerce_decimal(data.get("credit_points_used", 0))
+
+        # 2?,???? Fetch Paid orders to calculate earned points
         paid_orders = Order.objects.filter(placed_by=user, status='Paid')
 
         total_earned_points = sum(
@@ -202,49 +282,50 @@ def create_order(request):
             for order in paid_orders
         )
 
-        # 3️⃣ Compute available points
+        # 3?,???? Compute available points
         available_points = max(total_earned_points - total_used_points, Decimal('0.0'))
 
-        # 4️⃣ Clamp requested points to available points and order total
-        order_total = Decimal(data['total_amount']).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+        # 4?,???? Clamp requested points to available points and order total
+        order_total = _coerce_decimal(data.get("total_amount", 0))
         requested_points = min(requested_points, available_points, order_total)
 
-        # 5️⃣ Check if requested points exceed available points
+        # 5?,???? Check if requested points exceed available points
         if requested_points > available_points:
             return Response(
                 {'success': False, 'message': 'Insufficient backend points'},
                 status=400
             )
 
-        # 6️⃣ Generate unique order number
-
+        # 6?,???? Reserve order number for checkout
         order_number = generate_unique_order_number(prefix="O", order_model=Order)
+        promised_time = _parse_promised_time(data.get("promised_time"))
+        payload = data if isinstance(data, dict) else dict(data)
 
-        # 7️⃣ Create the order
-        order = Order.objects.create(
+        session = CheckoutSession.objects.create(
+            user=user,
             order_number=order_number,
-            placed_by=user,
+            status=CheckoutSession.STATUS_PENDING,
+            subtotal=_coerce_decimal(data.get("subtotal", order_total)),
+            discount=_coerce_decimal(data.get("discount", 0)),
             total_amount=order_total,
             credit_points_used=requested_points,
-            status='Pending',
-            customer_name=data['customer_name'],
-            promised_time=data['promised_time'],
-            order_type=data.get('order_type', 'pickup')
+            order_type=data.get("order_type", "pickup"),
+            customer_name=data.get("customer_name", ""),
+            promised_time=promised_time,
+            payload=payload,
+            idempotency_key=str(idempotency_key).strip() if idempotency_key else "",
+            expires_at=dj_tz.now() + timedelta(minutes=CHECKOUT_EXPIRY_MINUTES),
         )
 
-        # 8️⃣ Create order items
-        for item in data.get('items', []):
-            OrderItem.objects.create(
-                order=order,
-                item_name=item['name'],
-                price=Decimal(item['price']).quantize(Decimal('0.01'), rounding=ROUND_DOWN),
-                quantity=int(item['quantity']),
-                menu_item_id=item['menu_item_id'],
-                size=item.get('size'),
-                customize=item.get('customize')
-            )
-
-        return Response({'success': True, 'order_number': order.order_number})
+        return Response(
+            {
+                "success": True,
+                "checkout_id": str(session.id),
+                "order_number": session.order_number,
+                "total": float(order_total),
+                "credit_points_used": float(requested_points),
+            }
+        )
 
     except Exception as e:
         return Response({'success': False, 'message': str(e)}, status=500)
@@ -275,12 +356,13 @@ def user_credit_points(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def gcash_link(request, order_number):
-    try:
-        order = Order.objects.get(order_number=order_number)
-        gcash_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
-        return JsonResponse({"success": True, "gcash_url": gcash_url})
-    except Order.DoesNotExist:
+    order, session = _resolve_order_or_checkout(order_number)
+    if not order and not session:
         return JsonResponse({"success": False, "message": "Order not found"}, status=404)
+    amount = order.total_amount if order else session.total_amount
+    ref = order.order_number if order else (session.order_number or str(session.id))
+    gcash_url = f"https://pay.gcash.com/pay?amount={amount}&note=Order{ref}"
+    return JsonResponse({"success": True, "gcash_url": gcash_url})
 
 # ------------------------------
 # ✅ CONFIRM PAYMENT
@@ -288,14 +370,19 @@ def gcash_link(request, order_number):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def confirm_payment(request, order_number):
-    try:
-        data = request.data
-        method = data.get('method', None)
-        order = Order.objects.get(order_number=order_number)
+    data = request.data
+    method = data.get("method", None)
+    if not method:
+        return Response(
+            {"success": False, "message": "Payment method is required"},
+            status=400,
+        )
 
+    order = Order.objects.filter(order_number=order_number).first()
+    if order:
         order.payment_method = method
-        order.status = "pending"  # start at pending
-        order.save()
+        order.status = "pending"
+        order.save(update_fields=["payment_method", "status"])
 
         if _is_cash_method(method):
             _ensure_pending_cash_payment(
@@ -303,41 +390,157 @@ def confirm_payment(request, order_number):
                 customer_name=_get_display_name(request.user, order),
             )
 
-        # Optionally, add credit points if needed
         user = order.placed_by
-        earned_points = order.total_amount * Decimal('0.01')
-        if not hasattr(user, 'credit_points'):
-            user.credit_points = Decimal('0.0')
+        earned_points = order.total_amount * Decimal("0.01")
+        if user:
+            if not hasattr(user, "credit_points"):
+                user.credit_points = Decimal("0.0")
+            user.credit_points += earned_points
+            user.save()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Payment confirmed",
+                "status": map_order_status(order.status),
+                "order_number": order.order_number,
+                "order_id": str(order.id),
+                "earned_points": float(earned_points),
+            }
+        )
+
+    session = _get_checkout_session(order_number)
+    if not session:
+        return Response({"success": False, "message": "Order not found"}, status=404)
+
+    if session.expires_at and session.expires_at < dj_tz.now():
+        session.status = CheckoutSession.STATUS_EXPIRED
+        session.save(update_fields=["status", "updated_at"])
+        return Response(
+            {"success": False, "message": "Checkout session expired"},
+            status=400,
+        )
+
+    if session.order_id:
+        existing = Order.objects.filter(id=session.order_id).first() or Order.objects.filter(
+            order_number=session.order_number
+        ).first()
+        if existing:
+            return Response(
+                {
+                    "success": True,
+                    "message": "Payment confirmed",
+                    "status": map_order_status(existing.status),
+                    "order_number": existing.order_number,
+                    "order_id": str(existing.id),
+                }
+            )
+
+    payload = session.payload or {}
+    items = payload.get("items", [])
+    order_total = session.total_amount or _coerce_decimal(payload.get("total_amount", 0))
+    subtotal = session.subtotal or _coerce_decimal(payload.get("subtotal", order_total))
+    discount = session.discount or _coerce_decimal(payload.get("discount", 0))
+    credit_points_used = session.credit_points_used or _coerce_decimal(
+        payload.get("credit_points_used", 0)
+    )
+    promised_time = session.promised_time or _parse_promised_time(
+        payload.get("promised_time")
+    )
+    order_number_value = session.order_number or generate_unique_order_number(
+        prefix="O", order_model=Order
+    )
+    customer_name = session.customer_name or payload.get("customer_name") or _get_display_name(
+        session.user
+    )
+    order_type = session.order_type or payload.get("order_type", "pickup")
+    channel = payload.get("channel") or "online"
+
+    with transaction.atomic():
+        order = Order.objects.create(
+            order_number=order_number_value,
+            placed_by=session.user,
+            total_amount=order_total,
+            credit_points_used=credit_points_used,
+            status="pending",
+            customer_name=customer_name,
+            promised_time=promised_time,
+            order_type=order_type,
+            subtotal=subtotal,
+            discount=discount,
+            channel=channel,
+        )
+
+        for item in items:
+            OrderItem.objects.create(
+                order=order,
+                item_name=item.get("name") or item.get("item_name") or "Item",
+                price=_coerce_decimal(item.get("price", 0)),
+                quantity=int(item.get("quantity") or 1),
+                menu_item_id=item.get("menu_item_id") or item.get("menuItemId"),
+                size=item.get("size"),
+                customize=item.get("customize"),
+            )
+
+        order.payment_method = method
+        order.save(update_fields=["payment_method"])
+
+        if _is_cash_method(method):
+            _ensure_pending_cash_payment(
+                order,
+                customer_name=_get_display_name(session.user, order),
+            )
+
+        session.order_id = order.id
+        session.order_number = order.order_number
+        session.status = (
+            CheckoutSession.STATUS_AWAITING_CASH
+            if _is_cash_method(method)
+            else CheckoutSession.STATUS_FINALIZED
+        )
+        session.save(update_fields=["order_id", "order_number", "status", "updated_at"])
+
+    earned_points = order.total_amount * Decimal("0.01")
+    user = order.placed_by
+    if user:
+        if not hasattr(user, "credit_points"):
+            user.credit_points = Decimal("0.0")
         user.credit_points += earned_points
         user.save()
 
-        return Response({
+    return Response(
+        {
             "success": True,
             "message": "Payment confirmed",
             "status": map_order_status(order.status),
-            "earned_points": float(earned_points)
-        })
-
-    except Order.DoesNotExist:
-        return Response({"success": False, "message": "Order not found"}, status=404)
+            "order_number": order.order_number,
+            "order_id": str(order.id),
+            "earned_points": float(earned_points),
+        }
+    )
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def fetch_gcash_qr(request, order_number):
-    try:
-        order = Order.objects.get(order_number=order_number)
-        qr_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
+    order, session = _resolve_order_or_checkout(order_number)
+    if not order and not session:
+        return Response(
+            {
+                "success": False,
+                "message": "Order not found",
+            },
+            status=404,
+        )
+    amount = order.total_amount if order else session.total_amount
+    ref = order.order_number if order else (session.order_number or str(session.id))
+    qr_url = f"https://pay.gcash.com/pay?amount={amount}&note=Order{ref}"
 
-        return Response({
+    return Response(
+        {
             "success": True,
             "qr_url": qr_url,
-            "total_amount": float(order.total_amount),
-        })
-
-    except Order.DoesNotExist:
-        return Response({
-            "success": False,
-            "message": "Order not found"
-        }, status=404)
+            "total_amount": float(amount),
+        }
+    )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

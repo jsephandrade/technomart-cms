@@ -610,6 +610,64 @@ class PaymentMethodConfig(models.Model):
 
 
 # -----------------------------
+# Checkout Sessions
+# -----------------------------
+
+
+class CheckoutSession(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_AWAITING_CASH = "awaiting_cash"
+    STATUS_PAID = "paid"
+    STATUS_FINALIZED = "finalized"
+    STATUS_EXPIRED = "expired"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_AWAITING_CASH, "Awaiting Cash"),
+        (STATUS_PAID, "Paid"),
+        (STATUS_FINALIZED, "Finalized"),
+        (STATUS_EXPIRED, "Expired"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    user = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="checkout_sessions",
+    )
+    order_id = models.UUIDField(null=True, blank=True)
+    order_number = models.CharField(max_length=32, blank=True)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit_points_used = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0
+    )
+    order_type = models.CharField(max_length=32, blank=True)
+    customer_name = models.CharField(max_length=255, blank=True)
+    promised_time = models.DateTimeField(blank=True, null=True)
+    payload = models.JSONField(default=dict, blank=True)
+    idempotency_key = models.CharField(max_length=64, blank=True)
+    expires_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "checkout_session"
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="checkout_status_created_idx",
+            ),
+            models.Index(fields=["order_number"], name="checkout_order_number_idx"),
+            models.Index(fields=["idempotency_key"], name="checkout_idempotency_idx"),
+        ]
+
+# -----------------------------
 # Attendance & Leave
 # -----------------------------
 

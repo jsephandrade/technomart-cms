@@ -73,8 +73,15 @@ const formatLabel = (value) => {
 
 export default function PaymentPage() {
   const router = useRouter();
-  const { orderType, total, selectedTime, orderId, celebrate } =
-    useLocalSearchParams();
+  const {
+    orderType,
+    total,
+    selectedTime,
+    orderId,
+    checkoutId,
+    orderNumber,
+    celebrate,
+  } = useLocalSearchParams();
   const { width, height } = useWindowDimensions();
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -91,6 +98,8 @@ export default function PaymentPage() {
   const fallDistance = Math.max(240, height + 120);
   const orderTypeLabel = formatLabel(orderType) || 'Pickup';
   const timeLabel = selectedTime || 'Not set';
+  const resolvedCheckoutId = checkoutId || orderId;
+  const displayOrderNumber = orderNumber || orderId || checkoutId || '';
 
   useEffect(() => {
     if (showSuccess) {
@@ -158,24 +167,28 @@ export default function PaymentPage() {
   let [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
   if (!fontsLoaded) return null;
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = (confirmedOrderNumber) => {
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
       router.push({
         pathname: '/order-tracking',
-        params: { orderId },
+        params: { orderId: confirmedOrderNumber || displayOrderNumber },
       });
     }, 4000);
   };
 
   const handlePaymentSelect = async (method) => {
+    if (!resolvedCheckoutId) {
+      Alert.alert('Error', 'Checkout session is missing.');
+      return;
+    }
     const normalizedMethod = method === 'counter' ? 'cash' : method;
     setSelectedPayment(normalizedMethod);
 
     if (normalizedMethod === 'gcash') {
       try {
-        const { gcash_url } = await getGcashLink(orderId, total);
+        const { gcash_url } = await getGcashLink(resolvedCheckoutId);
         const supported = await Linking.canOpenURL(gcash_url);
         if (!supported) {
           Alert.alert(
@@ -189,10 +202,13 @@ export default function PaymentPage() {
 
         // Polling after GCash payment
         setTimeout(async () => {
-          const res = await confirmPayment(orderId, normalizedMethod);
+          const res = await confirmPayment(
+            resolvedCheckoutId,
+            normalizedMethod
+          );
           setLoading(false);
           if (res.success) {
-            handlePaymentSuccess();
+            handlePaymentSuccess(res.order_number);
           } else {
             Alert.alert('Payment Failed', res.message);
           }
@@ -218,10 +234,10 @@ export default function PaymentPage() {
 
     try {
       setLoading(true);
-      const res = await confirmPayment(orderId, normalizedMethod);
+      const res = await confirmPayment(resolvedCheckoutId, normalizedMethod);
       setLoading(false);
       if (res.success) {
-        handlePaymentSuccess();
+        handlePaymentSuccess(res.order_number);
       } else {
         Alert.alert('Payment Failed', res.message);
       }
@@ -236,11 +252,11 @@ export default function PaymentPage() {
     }
   };
 
-  if (!orderId) {
+  if (!resolvedCheckoutId) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>
-          Missing order details. Go back to cart.
+          Missing checkout details. Go back to cart.
         </Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnText}>Back</Text>
@@ -330,7 +346,9 @@ export default function PaymentPage() {
             <Text style={styles.sectionTitle}>Order Summary</Text>
             <View style={styles.sectionBadge}>
               <Ionicons name="receipt-outline" size={14} color="#b45309" />
-              <Text style={styles.sectionBadgeText}>Order #{orderId}</Text>
+              <Text style={styles.sectionBadgeText}>
+                Order #{displayOrderNumber || 'Pending'}
+              </Text>
             </View>
           </View>
         </View>

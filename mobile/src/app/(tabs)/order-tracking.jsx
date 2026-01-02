@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     marginTop: 16,
   },
   statusStep: {
@@ -1149,16 +1149,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 6,
     textAlign: 'center',
-    width: 90,
+    width: 78,
   },
   statusLineTrack: {
-    width: 32,
+    width: 28,
     height: 3,
     backgroundColor: '#F3D6B7',
     borderRadius: 999,
     overflow: 'hidden',
     marginTop: 6,
-    marginHorizontal: 8,
+    marginHorizontal: 6,
   },
   statusLineFill: {
     height: 3,

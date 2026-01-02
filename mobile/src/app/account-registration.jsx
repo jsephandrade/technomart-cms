@@ -266,6 +266,7 @@ export default function AccountRegistrationScreen() {
             <View
               style={[
                 styles.inputWrapper,
+                styles.roleInputWrapper,
                 roleHasError && styles.inputWrapperError,
               ]}
             >
@@ -291,6 +292,9 @@ export default function AccountRegistrationScreen() {
             {errors.role && (
               <Text style={styles.errorText}>{formatError(errors.role)}</Text>
             )}
+            <Text style={styles.roleHint}>
+              Customer is for regular orders; Faculty unlocks catering access.
+            </Text>
 
             {/* Email */}
             <View
@@ -556,6 +560,11 @@ const styles = StyleSheet.create({
   inputWrapperError: {
     borderColor: '#EF4444',
   },
+  roleInputWrapper: {
+    borderColor: '#FDBA74',
+    backgroundColor: '#FFF1E6',
+    marginBottom: 8,
+  },
   input: {
     flex: 1,
     paddingVertical: 12,
@@ -617,6 +626,12 @@ const styles = StyleSheet.create({
   },
   googleIcon: { width: 22, height: 22, marginRight: 10 },
   googleText: { fontSize: 16, fontFamily: 'Roboto_700Bold', color: '#333' },
+  roleHint: {
+    color: '#9A3412',
+    fontSize: 12,
+    fontFamily: 'Roboto_400Regular',
+    marginBottom: 12,
+  },
   linkText: {
     color: '#EA580C',
     marginTop: 6,

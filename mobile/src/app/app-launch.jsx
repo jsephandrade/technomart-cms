@@ -12,9 +12,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ACCESS_TOKEN_KEY,
-  REFRESH_TOKEN_KEY,
+  BASE_URL,
   USER_CACHE_KEY,
+  clearStoredTokens,
+  getValidToken,
 } from '../api/api';
 
 export default function AppLaunchScreen() {
@@ -47,18 +48,48 @@ export default function AppLaunchScreen() {
     let active = true;
     const checkAuth = async () => {
       try {
-        const keys = [
-          ACCESS_TOKEN_KEY,
-          REFRESH_TOKEN_KEY,
-          USER_CACHE_KEY,
-          'accessToken',
-          'refreshToken',
-          'user',
-        ];
-        const entries = await AsyncStorage.multiGet(keys);
-        const hasStoredAuth = entries.some(([, value]) => Boolean(value));
+        const token = await getValidToken();
+        if (!token) {
+          if (active) {
+            setIsAuthenticated(false);
+          }
+          return;
+        }
+
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const storedUser = entries[0][1] || entries[1][1];
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            const email = String(parsed?.email || '').toLowerCase();
+            if (email.endsWith('@guest.local')) {
+              if (active) {
+                setIsAuthenticated(false);
+              }
+              return;
+            }
+          } catch (err) {
+            console.warn('Failed to parse stored user:', err);
+          }
+        }
+
+        try {
+          const res = await fetch(`${BASE_URL}/accounts/profile/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.status === 401) {
+            await clearStoredTokens();
+            if (active) {
+              setIsAuthenticated(false);
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn('Profile check failed, continuing session:', err);
+        }
+
         if (active) {
-          setIsAuthenticated(hasStoredAuth);
+          setIsAuthenticated(true);
         }
       } finally {
         if (active) {

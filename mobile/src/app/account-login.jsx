@@ -11,7 +11,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { storeTokens, USER_CACHE_KEY, getGuestToken } from '../api/api';
+import {
+  getValidToken,
+  getGuestToken,
+  storeTokens,
+  USER_CACHE_KEY,
+} from '../api/api';
 
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -86,11 +91,25 @@ export default function AccountLoginScreen() {
   // ✅ Auto redirect if already logged in
   useEffect(() => {
     const checkUser = async () => {
+      const token = await getValidToken();
+      if (!token) {
+        await AsyncStorage.multiRemove([USER_CACHE_KEY, 'user']);
+        return;
+      }
       const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
       const storedUser = entries[0][1] || entries[1][1];
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      if (!storedUser) return;
+      try {
+        const parsed = JSON.parse(storedUser);
+        const email = String(parsed?.email || '').toLowerCase();
+        if (email.endsWith('@guest.local')) {
+          return;
+        }
+        setUser(parsed);
         router.replace('/home-dashboard');
+      } catch (err) {
+        console.warn('Failed to parse stored user:', err);
+        await AsyncStorage.multiRemove([USER_CACHE_KEY, 'user']);
       }
     };
     checkUser();

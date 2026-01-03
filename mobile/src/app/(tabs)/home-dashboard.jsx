@@ -385,23 +385,21 @@ export default function HomeDashboardScreen() {
                   {searchPlaceholder}
                 </Text>
               </Pressable>
-              {userRole === 'faculty' ? (
-                <TouchableOpacity
-                  style={styles.alertButton}
-                  onPress={handleAlertsPress}
-                >
-                  <Ionicons
-                    name="notifications-outline"
-                    size={18}
-                    color="#1F2937"
-                  />
-                  {notificationCount > 0 ? (
-                    <View style={styles.alertBadge}>
-                      <Text style={styles.alertBadgeText}>{badgeValue}</Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              ) : null}
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleAlertsPress}
+              >
+                <Ionicons
+                  name="notifications-outline"
+                  size={18}
+                  color="#1F2937"
+                />
+                {notificationCount > 0 ? (
+                  <View style={styles.alertBadge}>
+                    <Text style={styles.alertBadgeText}>{badgeValue}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
             </View>
           </View>
         </LinearGradient>

@@ -418,6 +418,7 @@ def face_login(request):
 
     embeddings = []
     metadata_list = []
+    last_error = None
     for image in images:
         _, raw = _extract_dataurl_image(image)
         if not raw:
@@ -426,26 +427,27 @@ def face_login(request):
             raw, model_name=model_name, enforce_detection=True
         )
         if embedding_vec is None:
-            error_msg = (
+            last_error = (
                 metadata.get("message", "Face processing failed")
                 if metadata
                 else "Face processing failed"
             )
+            continue
+        embeddings.append(embedding_vec)
+        metadata_list.append(metadata or {})
+
+    if len(embeddings) < required_frames:
+        if last_error:
             try:
                 record_audit(
                     request,
                     type="login",
                     action="Login failed",
-                    details=f"Face login: {error_msg}",
+                    details=f"Face login: {last_error}",
                     severity="warning",
                 )
             except Exception:
                 pass
-            return JsonResponse({"success": False, "message": error_msg}, status=400)
-        embeddings.append(embedding_vec)
-        metadata_list.append(metadata or {})
-
-    if len(embeddings) < required_frames:
         return JsonResponse({"success": False, "message": "Face not recognized"}, status=401)
 
     try:

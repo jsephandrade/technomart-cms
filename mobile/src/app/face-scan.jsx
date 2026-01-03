@@ -28,7 +28,8 @@ const RING_STROKE = 10;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const CAPTURE_FRAMES = 3;
+const CAPTURE_FRAMES = 4;
+const MIN_LOGIN_FRAMES = 3;
 const CAPTURE_DELAY_MS = 120;
 const RING_ANIMATION_MS = 1200;
 
@@ -96,9 +97,8 @@ export default function FaceScanScreen() {
 
     for (let i = 0; i < CAPTURE_FRAMES; i += 1) {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.35,
+        quality: 0.4,
         base64: true,
-        skipProcessing: true,
       });
       if (photo?.base64) {
         frames.push(photo);
@@ -141,7 +141,7 @@ export default function FaceScanScreen() {
       if (!cleanBase64 || frameImages.length === 0) {
         throw new Error('Unable to capture the image. Please try again.');
       }
-      if (!isRegister && frameImages.length < CAPTURE_FRAMES) {
+      if (!isRegister && frameImages.length < MIN_LOGIN_FRAMES) {
         throw new Error('Unable to capture the image. Please try again.');
       }
 

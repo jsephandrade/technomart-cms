@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
+import { resolveImageSource } from '../../utils/image';
 import {
   USER_CACHE_KEY,
   fetchMenuItems,
@@ -64,6 +65,7 @@ const to24Hour = (timeValue) => {
 };
 
 const MIN_EVENT_LEAD_DAYS = 5;
+const COLLAGE_GAP = 3;
 
 const formatPeso = (value) => {
   const amount = Number(value);
@@ -78,6 +80,95 @@ const sanitizePositiveInt = (value, fallback = 1) => {
   const parsed = parseInt(digits, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+};
+
+const resolveItemImage = (item) => {
+  if (!item) return '';
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.thumbnail,
+    item?.image?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return '';
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboItem = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients = resolveIngredientEntries(item);
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveItemImage(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  return sources.filter((src, index, arr) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return arr.indexOf(src) === index;
+  });
 };
 
 const startOfDay = (date) => {
@@ -153,6 +244,7 @@ export default function CateringTab() {
   const [showPaymentSection, setShowPaymentSection] = useState(false);
   const [paymentType, setPaymentType] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [expandedEvents, setExpandedEvents] = useState({});
 
   const [scheduleForm, setScheduleForm] = useState({
     eventName: '',
@@ -167,6 +259,18 @@ export default function CateringTab() {
     notes: '',
     selectedItems: [],
   });
+  const menuImageById = useMemo(() => {
+    const map = new Map();
+    menuItems.forEach((item) => {
+      if (!item) return;
+      const id = item.id ?? item.menu_item_id ?? item.menuItemId;
+      const image = resolveItemImage(item);
+      if (id !== null && id !== undefined && image) {
+        map.set(String(id), image);
+      }
+    });
+    return map;
+  }, [menuItems]);
 
   /* ------------------ Load Data ------------------ */
   const loadData = useCallback(async () => {
@@ -272,6 +376,40 @@ export default function CateringTab() {
     setPaymentMethod('');
   };
 
+  const toggleEventDetails = (eventId) => {
+    setExpandedEvents((prev) => ({
+      ...prev,
+      [eventId]: !prev[eventId],
+    }));
+  };
+
+  const resolveMenuItemMatch = (eventItem) => {
+    if (!eventItem) return null;
+    const id =
+      eventItem.menu_item ||
+      eventItem.menu_item_id ||
+      eventItem.menuItemId ||
+      eventItem.menu_item?.id ||
+      eventItem.menuItem?.id;
+    if (id !== null && id !== undefined) {
+      const match = menuItems.find((item) => String(item.id) === String(id));
+      if (match) return match;
+    }
+    const name = String(eventItem.name || '')
+      .trim()
+      .toLowerCase();
+    if (name) {
+      const match = menuItems.find(
+        (item) =>
+          String(item.name || '')
+            .trim()
+            .toLowerCase() === name
+      );
+      if (match) return match;
+    }
+    return null;
+  };
+
   /* ------------------ Schedule Event + Payment ------------------ */
   const handleScheduleSubmit = async () => {
     const required = [
@@ -351,8 +489,7 @@ export default function CateringTab() {
     const paymentStatus = isFullPayment ? 'paid' : 'partial';
 
     try {
-      const newEvent = {
-        id: Date.now(),
+      const payload = {
         name: scheduleForm.eventName,
         client_name: scheduleForm.client,
         contact_name: scheduleForm.contactName,
@@ -368,19 +505,25 @@ export default function CateringTab() {
         deposit_amount: paidAmount,
         deposit_paid: true,
         payment_status: paymentStatus,
-        payment_method: paymentMethod,
-        total_price: totalPrice,
-        paid_amount: paidAmount,
       };
 
-      const result = await createCateringEvent(newEvent);
+      const result = await createCateringEvent(payload);
       if (!result?.success) {
         Alert.alert('Error', result?.message || 'Failed to schedule event.');
         return;
       }
 
-      const createdEvent = result?.data?.data || result?.data || newEvent;
-      setCateringEvents((prev) => [...prev, { ...newEvent, ...createdEvent }]);
+      const createdEvent = result?.data?.data || result?.data || payload;
+      const localEvent = {
+        id: Date.now(),
+        ...payload,
+        total_price: totalPrice,
+        paid_amount: paidAmount,
+      };
+      setCateringEvents((prev) => [
+        ...prev,
+        { ...localEvent, ...createdEvent },
+      ]);
 
       Alert.alert(
         'Success',
@@ -630,6 +773,17 @@ export default function CateringTab() {
         ) : (
           displayedEvents.map((event) => {
             const statusStyle = resolveStatusStyle(event.status);
+            const isExpanded = !!expandedEvents[event.id];
+            const itemCount = Array.isArray(event.items)
+              ? event.items.length
+              : 0;
+            const paidAmount =
+              event.paid_amount ??
+              event.deposit_amount ??
+              event.paidAmount ??
+              0;
+            const paymentStatus =
+              event.payment_status || event.paymentStatus || '';
             return (
               <View key={event.id} style={styles.eventCard}>
                 <View style={styles.orderHeader}>
@@ -670,6 +824,16 @@ export default function CateringTab() {
                     {event.guest_count} attendees
                   </Text>
                 </View>
+                <View style={styles.eventMetaRow}>
+                  <Ionicons
+                    name="fast-food-outline"
+                    size={16}
+                    color="#9A3412"
+                  />
+                  <Text style={styles.eventMetaText}>
+                    {itemCount} menu item{itemCount === 1 ? '' : 's'}
+                  </Text>
+                </View>
 
                 {event.notes ? (
                   <Text style={styles.eventNotes}>{event.notes}</Text>
@@ -680,7 +844,7 @@ export default function CateringTab() {
                     <Text style={styles.eventTotalLabel}>Total</Text>
                     {event.status === 'Pending Payment' ? (
                       <Text style={styles.eventTotalNote}>
-                        Paid: ₱{(event.paid_amount || 0).toLocaleString()}
+                        Paid: ₱{Number(paidAmount || 0).toLocaleString()}
                       </Text>
                     ) : null}
                   </View>
@@ -689,27 +853,125 @@ export default function CateringTab() {
                   </Text>
                 </View>
 
-                <Text style={styles.menuTitle}>Menu Items</Text>
-                <View style={styles.menuGrid}>
-                  {event.items?.map((item, idx) => (
-                    <View key={idx} style={styles.menuCard}>
-                      {item.image ? (
-                        <Image
-                          source={{ uri: item.image }}
-                          style={styles.menuImage}
-                        />
-                      ) : (
-                        <View style={styles.menuImagePlaceholder} />
-                      )}
-                      <Text style={styles.menuCardText}>
-                        {item.name} x {item.quantity}
-                      </Text>
-                      <Text style={styles.menuCardPrice}>
-                        ₱{(item.unit_price * item.quantity).toLocaleString()}
+                <TouchableOpacity
+                  style={styles.detailsToggle}
+                  onPress={() => toggleEventDetails(event.id)}
+                >
+                  <Text style={styles.detailsToggleText}>
+                    {isExpanded ? 'Hide Details' : 'See Details'}
+                  </Text>
+                  <Ionicons
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color="#9A3412"
+                  />
+                </TouchableOpacity>
+
+                {isExpanded && (
+                  <View style={styles.detailsPanel}>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Contact</Text>
+                      <Text style={styles.detailsValue}>
+                        {event.contact_name || '—'}
                       </Text>
                     </View>
-                  ))}
-                </View>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Phone</Text>
+                      <Text style={styles.detailsValue}>
+                        {event.contact_phone || '—'}
+                      </Text>
+                    </View>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Payment</Text>
+                      <Text style={styles.detailsValue}>
+                        {paymentStatus || (paidAmount ? 'partial' : 'unpaid')}
+                      </Text>
+                    </View>
+
+                    <View style={styles.detailsDivider} />
+                    <Text style={styles.detailsSectionTitle}>Menu Items</Text>
+                    {Array.isArray(event.items) && event.items.length ? (
+                      event.items.map((item, idx) => {
+                        const matchedMenu = resolveMenuItemMatch(item);
+                        const baseItem = matchedMenu || item;
+                        const combo = isComboItem(baseItem);
+                        const collageImages = combo
+                          ? resolveComboImages(baseItem, menuImageById).slice(
+                              0,
+                              3
+                            )
+                          : [];
+                        const showCollage = collageImages.length === 3;
+                        const imageSource = resolveImageSource(
+                          resolveItemImage(baseItem)
+                        );
+                        return (
+                          <View
+                            key={`${item.id || idx}`}
+                            style={styles.detailsMenuRow}
+                          >
+                            {showCollage ? (
+                              <View style={styles.menuCollage}>
+                                <View style={styles.menuCollageMain}>
+                                  <Image
+                                    source={{ uri: collageImages[0] }}
+                                    style={styles.menuCollageImage}
+                                  />
+                                </View>
+                                <View style={styles.menuCollageSide}>
+                                  <View
+                                    style={[
+                                      styles.menuCollageTile,
+                                      styles.menuCollageTileTop,
+                                    ]}
+                                  >
+                                    <Image
+                                      source={{ uri: collageImages[1] }}
+                                      style={styles.menuCollageImage}
+                                    />
+                                  </View>
+                                  <View style={styles.menuCollageTile}>
+                                    <Image
+                                      source={{ uri: collageImages[2] }}
+                                      style={styles.menuCollageImage}
+                                    />
+                                  </View>
+                                </View>
+                              </View>
+                            ) : (
+                              <Image
+                                source={imageSource}
+                                style={styles.menuImage}
+                              />
+                            )}
+                            <View style={styles.detailsMenuInfo}>
+                              <Text
+                                style={styles.detailsMenuName}
+                                numberOfLines={1}
+                              >
+                                {item.name || baseItem.name || 'Menu item'}
+                              </Text>
+                              <Text style={styles.detailsMenuMeta}>
+                                Qty: {item.quantity || 0}
+                              </Text>
+                            </View>
+                            <Text style={styles.detailsMenuPrice}>
+                              ₱
+                              {(
+                                Number(item.unit_price || 0) *
+                                Number(item.quantity || 0)
+                              ).toLocaleString()}
+                            </Text>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.detailsEmptyText}>
+                        No menu items added.
+                      </Text>
+                    )}
+                  </View>
+                )}
 
                 {event.status === 'Pending Payment' && (
                   <TouchableOpacity
@@ -866,6 +1128,14 @@ export default function CateringTab() {
                     const selected = scheduleForm.selectedItems.includes(
                       item.id
                     );
+                    const combo = isComboItem(item);
+                    const collageImages = combo
+                      ? resolveComboImages(item, menuImageById).slice(0, 3)
+                      : [];
+                    const showCollage = collageImages.length === 3;
+                    const imageSource = resolveImageSource(
+                      resolveItemImage(item)
+                    );
                     return (
                       <View
                         key={item.id}
@@ -877,13 +1147,39 @@ export default function CateringTab() {
                         <TouchableOpacity
                           onPress={() => toggleMenuItem(item.id)}
                         >
-                          {item.image ? (
+                          {showCollage ? (
+                            <View style={styles.menuCollage}>
+                              <View style={styles.menuCollageMain}>
+                                <Image
+                                  source={{ uri: collageImages[0] }}
+                                  style={styles.menuCollageImage}
+                                />
+                              </View>
+                              <View style={styles.menuCollageSide}>
+                                <View
+                                  style={[
+                                    styles.menuCollageTile,
+                                    styles.menuCollageTileTop,
+                                  ]}
+                                >
+                                  <Image
+                                    source={{ uri: collageImages[1] }}
+                                    style={styles.menuCollageImage}
+                                  />
+                                </View>
+                                <View style={styles.menuCollageTile}>
+                                  <Image
+                                    source={{ uri: collageImages[2] }}
+                                    style={styles.menuCollageImage}
+                                  />
+                                </View>
+                              </View>
+                            </View>
+                          ) : (
                             <Image
-                              source={{ uri: item.image }}
+                              source={imageSource}
                               style={styles.menuImage}
                             />
-                          ) : (
-                            <View style={styles.menuImagePlaceholder} />
                           )}
                           <Text
                             style={[
@@ -1326,6 +1622,84 @@ const styles = StyleSheet.create({
     fontFamily: 'Roboto_700Bold',
     color: '#111827',
   },
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFE7C7',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  detailsToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  detailsPanel: {
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    padding: 12,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  detailsLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  detailsValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  detailsDivider: {
+    height: 1,
+    backgroundColor: '#F3D6B7',
+    marginVertical: 10,
+  },
+  detailsSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  detailsMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  detailsMenuInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  detailsMenuName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  detailsMenuMeta: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  detailsMenuPrice: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  detailsEmptyText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
   menuTitle: {
     fontSize: 14,
     fontWeight: '700',
@@ -1362,22 +1736,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#9A3412',
   },
-  menuCardPrice: {
-    marginTop: 4,
-    fontSize: 11,
-    color: '#6B7280',
-  },
   menuImage: {
     width: 64,
     height: 64,
     borderRadius: 12,
     backgroundColor: '#F7EDE2',
   },
-  menuImagePlaceholder: {
+  menuCollage: {
     width: 64,
     height: 64,
     borderRadius: 12,
     backgroundColor: '#F7EDE2',
+    overflow: 'hidden',
+    padding: COLLAGE_GAP,
+    flexDirection: 'row',
+  },
+  menuCollageMain: {
+    flex: 2,
+    marginRight: COLLAGE_GAP,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  menuCollageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  menuCollageTile: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  menuCollageTileTop: {
+    marginBottom: COLLAGE_GAP,
+  },
+  menuCollageImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   qtyRow: {
     flexDirection: 'row',

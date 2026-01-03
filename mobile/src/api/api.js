@@ -626,14 +626,15 @@ const pickImage = async () => {
 // --------------------
 export const requestPasswordReset = async ({ email }) => {
   try {
-    const response = await axios.post(`${API_BASE}/password-reset/`, { email });
+    const response = await axios.post(
+      `${API_BASE}/password-reset/`,
+      { email },
+      { validateStatus: () => true }
+    );
     return response;
   } catch (error) {
-    console.error(
-      'requestPasswordReset error:',
-      error.response || error.message
-    );
-    return error.response || { data: { message: 'Network error' } };
+    console.error('requestPasswordReset error:', error.message || error);
+    return { status: null, data: { message: 'Network error' } };
   }
 };
 
@@ -646,18 +647,19 @@ export const confirmPasswordReset = async ({
   new_password,
 }) => {
   try {
-    const response = await axios.post(`${API_BASE}/password-reset/confirm/`, {
-      email,
-      reset_code,
-      new_password,
-    });
+    const response = await axios.post(
+      `${API_BASE}/password-reset/confirm/`,
+      {
+        email,
+        reset_code,
+        new_password,
+      },
+      { validateStatus: () => true }
+    );
     return response;
   } catch (error) {
-    console.error(
-      'confirmPasswordReset error:',
-      error.response || error.message
-    );
-    return error.response || { data: { message: 'Network error' } };
+    console.error('confirmPasswordReset error:', error.message || error);
+    return { status: null, data: { message: 'Network error' } };
   }
 };
 export async function fetchCategories() {

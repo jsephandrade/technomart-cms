@@ -32,6 +32,8 @@ const STATUS_CANONICAL_MAP = {
   refunded: 'refunded',
 };
 
+const READY_STATUS_SET = new Set(['ready', 'staged', 'handoff']);
+
 const toCanonicalStatus = (status) => {
   const normalized = normalizeStatus(status);
   return STATUS_CANONICAL_MAP[normalized] || normalized;
@@ -108,6 +110,14 @@ export const useOrderAutoAdvance = () => {
         const canonicalStatus = toCanonicalStatus(getOrderStatus(order));
         const key = `${order.id}:${target}`;
         activeKeys.add(key);
+
+        if (
+          canonicalTarget === 'completed' &&
+          READY_STATUS_SET.has(canonicalStatus)
+        ) {
+          autoAdvanceLocksRef.current.delete(key);
+          continue;
+        }
 
         // Skip if paused
         if (order.autoAdvancePaused) {

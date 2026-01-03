@@ -714,6 +714,14 @@ const OrderQueue = ({
                 ].includes(status);
                 const isReady = ['ready', 'staged', 'handoff'].includes(status);
                 const allItemsChecked = areAllItemsChecked(order);
+                const isPaid = isOrderPaid(order);
+                const completeDisabled =
+                  statusUpdating[order.id] || !allItemsChecked || !isPaid;
+                const completeTitle = !allItemsChecked
+                  ? 'Check all items before completing the order'
+                  : !isPaid
+                    ? 'Mark payment as paid before completing the order'
+                    : undefined;
                 const disableAutoAdvance = shouldDisableReadyAutoAdvance(
                   order,
                   status
@@ -827,18 +835,18 @@ const OrderQueue = ({
                             size="sm"
                             variant="default"
                             className="flex-1 bg-green-600 hover:bg-green-700"
-                            disabled={
-                              statusUpdating[order.id] || !allItemsChecked
-                            }
-                            title={
-                              allItemsChecked
-                                ? undefined
-                                : 'Check all items before completing the order'
-                            }
+                            disabled={completeDisabled}
+                            title={completeTitle}
                             onClick={() => {
                               if (!allItemsChecked) {
                                 toast.error(
                                   'Please check all items before completing the order.'
+                                );
+                                return;
+                              }
+                              if (!isPaid) {
+                                toast.error(
+                                  'Please mark payment as paid before completing the order.'
                                 );
                                 return;
                               }
@@ -973,6 +981,13 @@ const OrderQueue = ({
                 const paymentMethodLabel =
                   formatPaymentMethodLabel(paymentMethod) || 'Cash';
                 const pickupTimeLabel = formatPickupTime(order);
+                const completeDisabled =
+                  statusUpdating[order.id] || !allItemsChecked || !isPaid;
+                const completeTitle = !allItemsChecked
+                  ? 'Check all items before completing the order'
+                  : !isPaid
+                    ? 'Mark payment as paid before completing the order'
+                    : undefined;
 
                 return (
                   <div key={order.id} className="p-4 flex flex-col gap-3">
@@ -1120,18 +1135,18 @@ const OrderQueue = ({
                             size="sm"
                             variant="default"
                             className="flex-1 bg-green-600 hover:bg-green-700"
-                            disabled={
-                              statusUpdating[order.id] || !allItemsChecked
-                            }
-                            title={
-                              allItemsChecked
-                                ? undefined
-                                : 'Check all items before completing the order'
-                            }
+                            disabled={completeDisabled}
+                            title={completeTitle}
                             onClick={() => {
                               if (!allItemsChecked) {
                                 toast.error(
                                   'Please check all items before completing the order.'
+                                );
+                                return;
+                              }
+                              if (!isPaid) {
+                                toast.error(
+                                  'Please mark payment as paid before completing the order.'
                                 );
                                 return;
                               }

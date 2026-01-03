@@ -75,10 +75,16 @@ const formatPeso = (value) => {
 
 const sanitizeDigits = (value) => String(value ?? '').replace(/[^0-9]/g, '');
 
-const sanitizePositiveInt = (value, fallback = 1) => {
+const sanitizeNonNegativeInt = (value, fallback = 0) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === 'string' && value.trim().startsWith('-')) {
+    return fallback;
+  }
   const digits = sanitizeDigits(value);
   const parsed = parseInt(digits, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return parsed;
 };
 
@@ -361,7 +367,7 @@ export default function CateringTab() {
   };
 
   const handleQuantityChange = (itemId, qty) => {
-    const nextQty = sanitizePositiveInt(qty, 1);
+    const nextQty = sanitizeNonNegativeInt(qty, 0);
     setMenuItems((prev) =>
       prev.map((i) =>
         i.id === itemId ? { ...i, selectedQuantity: nextQty } : i
@@ -459,17 +465,23 @@ export default function CateringTab() {
       return;
     }
 
-    const selectedItemsData = scheduleForm.selectedItems.map((itemId) => {
-      const item = menuItems.find((i) => i.id === itemId);
-      return {
+    const selectedItemsData = scheduleForm.selectedItems
+      .map((itemId) => menuItems.find((i) => i.id === itemId))
+      .filter(Boolean)
+      .map((item) => ({
         menu_item: item.id,
         name: item.name,
-        quantity: sanitizePositiveInt(item.selectedQuantity, 1),
+        quantity: sanitizeNonNegativeInt(item.selectedQuantity, 0),
         unit_price: item.price || 0,
         notes: item.notes || '',
         image: item.image || null,
-      };
-    });
+      }))
+      .filter((item) => item.quantity > 0);
+
+    if (selectedItemsData.length === 0) {
+      Alert.alert('Error', 'Please set a quantity for at least one item.');
+      return;
+    }
 
     const totalPrice = selectedItemsData.reduce(
       (sum, item) => sum + item.unit_price * item.quantity,
@@ -649,7 +661,7 @@ export default function CateringTab() {
     .filter(Boolean);
   const currentTotal = selectedMenuItems.reduce((sum, item) => {
     const price = Number(item.price || 0);
-    const qty = sanitizePositiveInt(item.selectedQuantity, 1);
+    const qty = sanitizeNonNegativeInt(item.selectedQuantity, 0);
     return sum + price * qty;
   }, 0);
   const downPaymentAmount = currentTotal * 0.5;
@@ -1193,14 +1205,54 @@ export default function CateringTab() {
                         {selected && (
                           <View style={styles.qtyRow}>
                             <Text style={styles.qtyLabel}>Qty</Text>
-                            <TextInput
-                              keyboardType="number-pad"
-                              style={styles.qtyInput}
-                              value={item.selectedQuantity.toString()}
-                              onChangeText={(val) =>
-                                handleQuantityChange(item.id, val)
-                              }
-                            />
+                            <View style={styles.qtyControls}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.qtyButton,
+                                  sanitizeNonNegativeInt(
+                                    item.selectedQuantity,
+                                    0
+                                  ) === 0 && styles.qtyButtonDisabled,
+                                ]}
+                                onPress={() =>
+                                  handleQuantityChange(
+                                    item.id,
+                                    sanitizeNonNegativeInt(
+                                      item.selectedQuantity,
+                                      0
+                                    ) - 1
+                                  )
+                                }
+                                disabled={
+                                  sanitizeNonNegativeInt(
+                                    item.selectedQuantity,
+                                    0
+                                  ) === 0
+                                }
+                              >
+                                <Text style={styles.qtyButtonText}>-</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.qtyValue}>
+                                {sanitizeNonNegativeInt(
+                                  item.selectedQuantity,
+                                  0
+                                )}
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.qtyButton}
+                                onPress={() =>
+                                  handleQuantityChange(
+                                    item.id,
+                                    sanitizeNonNegativeInt(
+                                      item.selectedQuantity,
+                                      0
+                                    ) + 1
+                                  )
+                                }
+                              >
+                                <Text style={styles.qtyButtonText}>+</Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
                         )}
                       </View>
@@ -1741,6 +1793,7 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 12,
     backgroundColor: '#F7EDE2',
+    alignSelf: 'center',
   },
   menuCollage: {
     width: 64,
@@ -1750,6 +1803,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: COLLAGE_GAP,
     flexDirection: 'row',
+    alignSelf: 'center',
   },
   menuCollageMain: {
     flex: 2,
@@ -1785,16 +1839,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  qtyInput: {
-    width: 50,
-    borderWidth: 1,
-    borderColor: '#F3D6B7',
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-    textAlign: 'center',
+  qtyControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: 90,
+  },
+  qtyButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#FFE7C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyButtonDisabled: {
+    opacity: 0.4,
+  },
+  qtyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  qtyValue: {
+    fontSize: 12,
+    fontWeight: '700',
     color: '#111827',
-    backgroundColor: '#fff',
   },
   payButton: {
     marginTop: 12,

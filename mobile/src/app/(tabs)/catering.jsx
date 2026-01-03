@@ -42,6 +42,12 @@ const to24Hour = (timeString) => {
 
 const MIN_EVENT_LEAD_DAYS = 5;
 
+const formatPeso = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '\u20b10';
+  return `\u20b1${amount.toLocaleString()}`;
+};
+
 const sanitizeDigits = (value) => String(value ?? '').replace(/[^0-9]/g, '');
 
 const sanitizePositiveInt = (value, fallback = 1) => {
@@ -439,6 +445,15 @@ export default function CateringTab() {
     eventTab === 'upcoming'
       ? 'Schedule a new catering event to get started.'
       : 'Your completed events will appear here.';
+  const selectedMenuItems = scheduleForm.selectedItems
+    .map((itemId) => menuItems.find((item) => item.id === itemId))
+    .filter(Boolean);
+  const currentTotal = selectedMenuItems.reduce((sum, item) => {
+    const price = Number(item.price || 0);
+    const qty = sanitizePositiveInt(item.selectedQuantity, 1);
+    return sum + price * qty;
+  }, 0);
+  const downPaymentAmount = currentTotal * 0.5;
 
   /* ------------------ Render ------------------ */
   return (
@@ -834,6 +849,21 @@ export default function CateringTab() {
                       </View>
                     );
                   })}
+                </View>
+
+                <View style={styles.paymentSummary}>
+                  <View style={styles.paymentRow}>
+                    <Text style={styles.paymentLabel}>Total</Text>
+                    <Text style={styles.paymentValue}>
+                      {formatPeso(currentTotal)}
+                    </Text>
+                  </View>
+                  <View style={[styles.paymentRow, styles.paymentRowLast]}>
+                    <Text style={styles.paymentLabel}>50% Downpayment</Text>
+                    <Text style={styles.paymentValue}>
+                      {formatPeso(downPaymentAmount)}
+                    </Text>
+                  </View>
                 </View>
 
                 <Pressable
@@ -1271,6 +1301,31 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 8,
+  },
+  paymentSummary: {
+    backgroundColor: '#FFF0E0',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
+  },
+  paymentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  paymentRowLast: {
+    marginBottom: 0,
+  },
+  paymentLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  paymentValue: {
+    fontSize: 14,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
   },
   submitBtnText: {
     color: '#fff',

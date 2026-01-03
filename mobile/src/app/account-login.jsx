@@ -16,6 +16,7 @@ import {
   getValidToken,
   storeTokens,
   USER_CACHE_KEY,
+  BASE_URL,
 } from '../api/api';
 
 import { useRouter } from 'expo-router';
@@ -34,8 +35,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 WebBrowser.maybeCompleteAuthSession();
 
 // ✅ Backend API base
-const LOCAL_IP = '192.168.1.5';
-const API_BASE = `http://${LOCAL_IP}:8000/api/accounts`;
+const API_BASE = `${BASE_URL}/accounts`;
 
 export default function AccountLoginScreen() {
   const router = useRouter();

@@ -1,4 +1,12 @@
-import Constants from 'expo-constants';
+const normalizeBaseUrl = (value) => {
+  if (!value) return '';
+  return String(value).trim().replace(/\/+$/, '');
+};
+
+const API_ORIGIN = normalizeBaseUrl(
+  process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
+);
+const API_PREFIX = '/api';
 
 /**
  * 🌐 API Configuration
@@ -7,12 +15,11 @@ import Constants from 'expo-constants';
  * and your phone + PC are on the same Wi-Fi network.
  */
 
-const LOCAL_IP = '192.168.1.6'; // Your PC LAN IP
-const DEV_API_PREFIX = '/api/v1'; // Django REST API prefix
-
 // Base URLs
-export const BASE_URL = `http://${LOCAL_IP}:8000${DEV_API_PREFIX}`; // For normal REST API calls
-export const BASE_URL_MENU = `http://${LOCAL_IP}:8000/menu`; // For menu endpoints
+export const BASE_URL = `${API_ORIGIN}${API_PREFIX}`; // For normal REST API calls
+export const BASE_URL_MENU = `${BASE_URL}/menu`; // For menu endpoints
+export const BASE_URL_FEEDBACK = API_ORIGIN;
+export const BASE_URL_ACCOUNTS = `${BASE_URL}/accounts`;
 
 // Optional: timeout config
 export const API_CONFIG = {

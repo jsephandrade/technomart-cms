@@ -1,6 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_CONFIG } from './config';
+import {
+  API_CONFIG,
+  BASE_URL as CONFIG_BASE_URL,
+  BASE_URL_FEEDBACK as CONFIG_BASE_URL_FEEDBACK,
+  BASE_URL_MENU as CONFIG_BASE_URL_MENU,
+} from './config';
 
 // --------------------
 // Constants
@@ -22,12 +27,12 @@ export const getFaceRegisteredKey = (userOrEmail) => {
 };
 
 // Base URLs
-export const BASE_URL = `http://192.168.1.5:8000/api`;
-export const BASE_URL_MENU = `http://192.168.1.5:8000/api/menu`;
-export const BASE_URL_FEEDBACK = `http://192.168.1.5:8000`;
-const API_BASE = `http://192.168.1.5:8000/api/accounts`;
+export const BASE_URL = CONFIG_BASE_URL;
+export const BASE_URL_MENU = CONFIG_BASE_URL_MENU;
+export const BASE_URL_FEEDBACK = CONFIG_BASE_URL_FEEDBACK;
+const API_BASE = `${BASE_URL}/accounts`;
 
-const BASE_ORIGIN = BASE_URL.replace(/\/api\/?$/, '') || BASE_URL_FEEDBACK;
+const BASE_ORIGIN = BASE_URL_FEEDBACK;
 
 const normalizeMediaUrl = (value) => {
   if (!value || typeof value !== 'string') return value;
@@ -463,16 +468,12 @@ export const createOrder = async (payload) => {
     const token = await getValidToken();
     if (!token) throw new Error('No valid token found. Please log in again.');
 
-    const response = await axios.post(
-      `http://192.168.1.5:8000/api/create_order/`,
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const response = await axios.post(`${BASE_URL}/create_order/`, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
     return response.data; // { success: true, checkout_id: ..., order_number: ..., total, credit_points_used }
   } catch (err) {
@@ -602,7 +603,7 @@ const pickImage = async () => {
 
     try {
       await axios.patch(
-        `http://your-ip:8000/api/accounts/update-avatar/`,
+        `${API_BASE}/update-avatar/`,
         { avatar: base64Image },
         {
           headers: {

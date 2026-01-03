@@ -135,6 +135,13 @@ const normalizePaymentMethod = (value) =>
     .trim()
     .toLowerCase();
 
+const parseDateValue = (value) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+};
+
 const getPaymentMethod = (order) => {
   const candidates = [
     order?.paymentMethod,
@@ -177,6 +184,45 @@ const formatPaymentMethodLabel = (method) => {
   return normalized
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, (match) => match.toUpperCase());
+};
+
+const resolvePickupDate = (order) => {
+  const directCandidates = [
+    order?.promisedTime,
+    order?.promised_time,
+    order?.promisedAt,
+    order?.promised_at,
+    order?.pickupTime,
+    order?.pickup_time,
+  ];
+  for (const value of directCandidates) {
+    const parsed = parseDateValue(value);
+    if (parsed) return parsed;
+  }
+  const received = parseDateValue(
+    order?.timeReceived ?? order?.createdAt ?? order?.created_at
+  );
+  const quoteMinutes = Number(
+    order?.quoteMinutes ?? order?.quotedMinutes ?? order?.quoted_minutes
+  );
+  if (received && Number.isFinite(quoteMinutes) && quoteMinutes > 0) {
+    return new Date(received.getTime() + quoteMinutes * 60 * 1000);
+  }
+  return received;
+};
+
+const getPickupTimestamp = (order) => {
+  const pickupDate = resolvePickupDate(order);
+  return pickupDate ? pickupDate.getTime() : Number.POSITIVE_INFINITY;
+};
+
+const formatPickupTime = (order) => {
+  const pickupDate = resolvePickupDate(order);
+  if (!pickupDate) return '—';
+  return pickupDate.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 };
 
 const isOrderPaid = (order) => {
@@ -347,13 +393,16 @@ const OrderQueue = ({
   }, []);
 
   const visibleOrders = useMemo(() => {
-    return queueOrders.filter((order) => {
+    const filtered = queueOrders.filter((order) => {
       if (getOrderStatus(order) === 'completed') return false;
       if (isOrderPaid(order)) return true;
       const channel = getOrderChannel(order);
       const method = getPaymentMethod(order);
       return channel !== 'walk-in' && isCashMethod(method);
     });
+    return [...filtered].sort(
+      (a, b) => getPickupTimestamp(a) - getPickupTimestamp(b)
+    );
   }, [queueOrders]);
 
   const walkInOrders = useMemo(
@@ -923,6 +972,7 @@ const OrderQueue = ({
                     : 'border-amber-200 bg-amber-100 text-amber-800';
                 const paymentMethodLabel =
                   formatPaymentMethodLabel(paymentMethod) || 'Cash';
+                const pickupTimeLabel = formatPickupTime(order);
 
                 return (
                   <div key={order.id} className="p-4 flex flex-col gap-3">
@@ -987,6 +1037,13 @@ const OrderQueue = ({
                         </div>
                       </div>
                     )}
+
+                    <div className="text-xs text-muted-foreground">
+                      Pickup Time:{' '}
+                      <span className="font-medium text-slate-700">
+                        {pickupTimeLabel}
+                      </span>
+                    </div>
 
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState } from 'react';
+import { BASE_URL } from '../api/config';
 
 const AuthContext = createContext();
 
@@ -6,13 +7,13 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(false);
 
-  const API_URL = "http://127.0.0.1:8000/api"; // Change to your Django backend URL
+  const API_URL = BASE_URL;
 
   const signIn = async ({ email, password }) => {
     try {
       const response = await fetch(`${API_URL}/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       const data = await response.json();
@@ -24,7 +25,7 @@ export const AuthProvider = ({ children }) => {
       return data;
     } catch (error) {
       console.error(error);
-      return { success: false, message: "Network error" };
+      return { success: false, message: 'Network error' };
     }
   };
 

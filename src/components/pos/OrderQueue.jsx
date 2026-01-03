@@ -47,6 +47,15 @@ const PAYMENT_CASH_ALIASES = new Set([
   'pay at counter',
   'cod',
 ]);
+const PAYMENT_GCASH_ALIASES = new Set([
+  'gcash',
+  'g-cash',
+  'g cash',
+  'mobile',
+  'e-wallet',
+  'ewallet',
+  'e_wallet',
+]);
 
 const normalizeStatus = (value) => {
   if (!value) return '';
@@ -156,6 +165,19 @@ const getPaymentStatus = (order) => {
 
 const isCashMethod = (method) =>
   method ? PAYMENT_CASH_ALIASES.has(normalizePaymentMethod(method)) : false;
+const isGcashMethod = (method) =>
+  method ? PAYMENT_GCASH_ALIASES.has(normalizePaymentMethod(method)) : false;
+
+const formatPaymentMethodLabel = (method) => {
+  if (!method) return '—';
+  const normalized = normalizePaymentMethod(method);
+  if (isGcashMethod(normalized)) return 'GCash';
+  if (isCashMethod(normalized)) return 'Cash';
+  if (['card', 'debit', 'credit'].includes(normalized)) return 'Card';
+  return normalized
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+};
 
 const isOrderPaid = (order) => {
   if (!order || typeof order !== 'object') return false;
@@ -881,16 +903,26 @@ const OrderQueue = ({
                 const paymentMethod = getPaymentMethod(order);
                 const paymentStatus = getPaymentStatus(order);
                 const isPaid = isOrderPaid(order);
+                const isGcash = isGcashMethod(paymentMethod);
                 const showPayment =
-                  channel !== 'walk-in' && isCashMethod(paymentMethod);
+                  (channel !== 'walk-in' && isCashMethod(paymentMethod)) ||
+                  isGcash;
                 const showMarkPaid =
-                  showPayment && !isPaid && can('payment.process');
-                const paymentLabel = isPaid
+                  showPayment &&
+                  !isPaid &&
+                  can('payment.process') &&
+                  isCashMethod(paymentMethod);
+                const paymentLabel = isGcash
                   ? 'Paid'
-                  : formatPaymentStatusLabel(paymentStatus);
-                const paymentBadgeClasses = isPaid
-                  ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
-                  : 'border-amber-200 bg-amber-100 text-amber-800';
+                  : isPaid
+                    ? 'Paid'
+                    : formatPaymentStatusLabel(paymentStatus);
+                const paymentBadgeClasses =
+                  isGcash || isPaid
+                    ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                    : 'border-amber-200 bg-amber-100 text-amber-800';
+                const paymentMethodLabel =
+                  formatPaymentMethodLabel(paymentMethod) || 'Cash';
 
                 return (
                   <div key={order.id} className="p-4 flex flex-col gap-3">
@@ -925,7 +957,7 @@ const OrderQueue = ({
                     {showPayment && (
                       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-slate-200 bg-white/70 px-3 py-2 text-xs">
                         <span className="text-muted-foreground">
-                          Payment ({paymentMethod || 'cash'})
+                          Payment ({paymentMethodLabel})
                         </span>
                         <div className="flex items-center gap-2">
                           <Badge

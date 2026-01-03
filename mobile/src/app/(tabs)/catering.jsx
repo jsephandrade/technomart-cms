@@ -41,6 +41,39 @@ const to24Hour = (timeString) => {
   return `${hours.toString().padStart(2, '0')}:${minutes}`;
 };
 
+const MIN_EVENT_LEAD_DAYS = 5;
+
+const startOfDay = (date) => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const parseLocalDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return new Date(value);
+  if (typeof value === 'string') {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+  }
+  return null;
+};
+
+const getDaysUntilEvent = (date) => {
+  const eventDate = parseLocalDate(date);
+  if (!eventDate) return null;
+  const diffMs =
+    startOfDay(eventDate).getTime() - startOfDay(new Date()).getTime();
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+};
+
+const getMinEventDate = () => {
+  const minDate = startOfDay(new Date());
+  minDate.setDate(minDate.getDate() + MIN_EVENT_LEAD_DAYS);
+  return minDate;
+};
+
 const STATUS_STYLES = {
   pending: { label: 'Pending', color: '#FACC15', bg: '#FEF3C7' },
   pending_payment: {
@@ -203,6 +236,18 @@ export default function CateringTab() {
     );
     if (missing.length) {
       Alert.alert('Error', 'Please fill all required fields.');
+      return;
+    }
+
+    const daysUntilEvent = getDaysUntilEvent(scheduleForm.date);
+    if (
+      typeof daysUntilEvent === 'number' &&
+      daysUntilEvent <= MIN_EVENT_LEAD_DAYS - 1
+    ) {
+      Alert.alert(
+        'Error',
+        `Events must be scheduled at least ${MIN_EVENT_LEAD_DAYS} days in advance.`
+      );
       return;
     }
 
@@ -631,20 +676,30 @@ export default function CateringTab() {
                   </TouchableOpacity>
                   {showDatePicker && (
                     <DateTimePicker
-                      value={
-                        scheduleForm.date
-                          ? new Date(scheduleForm.date)
-                          : new Date()
-                      }
+                      value={parseLocalDate(scheduleForm.date) || new Date()}
+                      minimumDate={getMinEventDate()}
                       mode="date"
                       display="default"
                       onChange={(e, selectedDate) => {
                         setShowDatePicker(false);
-                        if (selectedDate)
+                        if (selectedDate) {
+                          const daysUntilEvent =
+                            getDaysUntilEvent(selectedDate);
+                          if (
+                            typeof daysUntilEvent === 'number' &&
+                            daysUntilEvent <= MIN_EVENT_LEAD_DAYS - 1
+                          ) {
+                            Alert.alert(
+                              'Error',
+                              `Events must be scheduled at least ${MIN_EVENT_LEAD_DAYS} days in advance.`
+                            );
+                            return;
+                          }
                           handleInputChange(
                             'date',
                             selectedDate.toISOString().split('T')[0]
                           );
+                        }
                       }}
                     />
                   )}

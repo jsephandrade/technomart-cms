@@ -97,6 +97,7 @@ const Users = () => {
         return 'secondary';
       case 'faculty':
         return 'outline';
+      case 'student':
       case 'customer':
         return 'outline';
       default:

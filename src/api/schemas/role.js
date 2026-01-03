@@ -5,6 +5,7 @@ export const RoleValue = z.enum([
   'manager',
   'staff',
   'faculty',
+  'student',
   'customer',
 ]);
 

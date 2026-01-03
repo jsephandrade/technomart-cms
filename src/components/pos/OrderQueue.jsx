@@ -605,8 +605,14 @@ const OrderQueue = ({
   const renderAutoBadge = useCallback(
     (order) => {
       if (!order?.autoAdvanceTarget) return null;
-      if (getOrderChannel(order) === 'walk-in') return null;
-      if (shouldDisableReadyAutoAdvance(order)) return null;
+      const channel = getOrderChannel(order);
+      const status = getOrderStatus(order);
+      const isPreparing = ['preparing', 'in_progress', 'in_prep'].includes(
+        status
+      );
+
+      if (channel === 'walk-in' && !isPreparing) return null;
+      if (shouldDisableReadyAutoAdvance(order, status)) return null;
       const countdown = computeCountdownSeconds(order);
       const paused = order.autoAdvancePaused;
       const displayCountdown =

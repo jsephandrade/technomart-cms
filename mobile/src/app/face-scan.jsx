@@ -28,7 +28,7 @@ const RING_STROKE = 10;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const CAPTURE_FRAMES = 4;
+const CAPTURE_FRAMES = 3;
 const CAPTURE_DELAY_MS = 120;
 const RING_ANIMATION_MS = 1200;
 
@@ -96,7 +96,7 @@ export default function FaceScanScreen() {
 
     for (let i = 0; i < CAPTURE_FRAMES; i += 1) {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.45,
+        quality: 0.35,
         base64: true,
         skipProcessing: true,
       });
@@ -141,12 +141,18 @@ export default function FaceScanScreen() {
       if (!cleanBase64 || frameImages.length === 0) {
         throw new Error('Unable to capture the image. Please try again.');
       }
+      if (!isRegister && frameImages.length < CAPTURE_FRAMES) {
+        throw new Error('Unable to capture the image. Please try again.');
+      }
 
       const imageData = `data:image/jpeg;base64,${cleanBase64}`;
+      const extraImages = [...frameImages];
+      const bestIndex = extraImages.indexOf(imageData);
+      if (bestIndex !== -1) {
+        extraImages.splice(bestIndex, 1);
+      }
       const payload = {
         image: imageData,
-        imageData,
-        images: frameImages,
       };
 
       if (isRegister) {
@@ -203,7 +209,11 @@ export default function FaceScanScreen() {
       const res = await fetch(`${BASE_URL}/auth/face-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, tokenType: 'simplejwt' }),
+        body: JSON.stringify({
+          ...payload,
+          images: extraImages,
+          tokenType: 'simplejwt',
+        }),
       });
 
       const { ok, status, data } = await parseResponse(res);

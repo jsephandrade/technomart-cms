@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -739,27 +738,11 @@ export default function CateringTab() {
                   />
                 )}
 
-                {/* Location */}
-                <View style={{ marginBottom: 14 }}>
-                  <Text style={styles.inputLabel}>Location</Text>
-                  <View style={styles.inputField}>
-                    <Picker
-                      selectedValue={scheduleForm.location}
-                      onValueChange={(v) => handleInputChange('location', v)}
-                    >
-                      <Picker.Item label="Select location" value="" />
-                      <Picker.Item
-                        label="Conference Room A"
-                        value="Conference Room A"
-                      />
-                      <Picker.Item
-                        label="Conference Room B"
-                        value="Conference Room B"
-                      />
-                      <Picker.Item label="Main Hall" value="Main Hall" />
-                    </Picker>
-                  </View>
-                </View>
+                <Field
+                  label="Location"
+                  value={scheduleForm.location}
+                  onChange={(v) => handleInputChange('location', v)}
+                />
 
                 <Field
                   label="Number of Attendees"

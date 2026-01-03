@@ -42,6 +42,15 @@ const to24Hour = (timeString) => {
 
 const MIN_EVENT_LEAD_DAYS = 5;
 
+const sanitizeDigits = (value) => String(value ?? '').replace(/[^0-9]/g, '');
+
+const sanitizePositiveInt = (value, fallback = 1) => {
+  const digits = sanitizeDigits(value);
+  const parsed = parseInt(digits, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
 const startOfDay = (date) => {
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
@@ -195,6 +204,11 @@ export default function CateringTab() {
 
   /* ------------------ Handlers ------------------ */
   const handleInputChange = (field, value) => {
+    if (field === 'attendees' || field === 'contactPhone') {
+      const cleaned = sanitizeDigits(value);
+      setScheduleForm((prev) => ({ ...prev, [field]: cleaned }));
+      return;
+    }
     setScheduleForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -211,8 +225,11 @@ export default function CateringTab() {
   };
 
   const handleQuantityChange = (itemId, qty) => {
+    const nextQty = sanitizePositiveInt(qty, 1);
     setMenuItems((prev) =>
-      prev.map((i) => (i.id === itemId ? { ...i, selectedQuantity: qty } : i))
+      prev.map((i) =>
+        i.id === itemId ? { ...i, selectedQuantity: nextQty } : i
+      )
     );
   };
 
@@ -748,7 +765,7 @@ export default function CateringTab() {
                   label="Number of Attendees"
                   value={scheduleForm.attendees}
                   onChange={(v) => handleInputChange('attendees', v)}
-                  keyboardType="numeric"
+                  keyboardType="number-pad"
                 />
                 <Field
                   label="Contact Name"
@@ -805,14 +822,11 @@ export default function CateringTab() {
                           <View style={styles.qtyRow}>
                             <Text style={styles.qtyLabel}>Qty</Text>
                             <TextInput
-                              keyboardType="numeric"
+                              keyboardType="number-pad"
                               style={styles.qtyInput}
                               value={item.selectedQuantity.toString()}
                               onChangeText={(val) =>
-                                handleQuantityChange(
-                                  item.id,
-                                  parseInt(val) || 1
-                                )
+                                handleQuantityChange(item.id, val)
                               }
                             />
                           </View>

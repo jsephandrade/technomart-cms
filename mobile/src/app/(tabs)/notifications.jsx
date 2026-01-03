@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -38,16 +39,46 @@ const formatTypeLabel = (value) => {
 export default function NotificationsScreen() {
   const { notifications, loading, refresh } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
+  const [hiddenKeys, setHiddenKeys] = useState([]);
+  const [readKeys, setReadKeys] = useState([]);
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
 
-  const sortedNotifications = useMemo(() => {
+  const buildNotificationKey = useCallback((item, index) => {
+    const id = item?.id ?? item?.uuid ?? item?.pk;
+    if (id !== undefined && id !== null) return String(id);
+    const title = item?.title || item?.subject || 'notif';
+    const createdAt = item?.created_at || item?.createdAt || '';
+    return `${title}-${createdAt}-${index}`;
+  }, []);
+
+  const normalizedNotifications = useMemo(() => {
     const list = Array.isArray(notifications) ? notifications : [];
+    return list.map((item, index) => {
+      const key = buildNotificationKey(item, index);
+      const serverRead = Boolean(item?.read || item?.isRead);
+      const localRead = readKeys.includes(key);
+      return { ...item, __key: key, __isRead: serverRead || localRead };
+    });
+  }, [notifications, readKeys, buildNotificationKey]);
+
+  const visibleNotifications = useMemo(
+    () =>
+      normalizedNotifications.filter(
+        (item) => !hiddenKeys.includes(item.__key)
+      ),
+    [normalizedNotifications, hiddenKeys]
+  );
+
+  const sortedNotifications = useMemo(() => {
+    const list = Array.isArray(visibleNotifications)
+      ? visibleNotifications
+      : [];
     return [...list].sort((a, b) => {
       const aTime = new Date(a.created_at || a.createdAt || 0).getTime();
       const bTime = new Date(b.created_at || b.createdAt || 0).getTime();
       return bTime - aTime;
     });
-  }, [notifications]);
+  }, [visibleNotifications]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -62,6 +93,22 @@ export default function NotificationsScreen() {
     }, [refresh])
   );
 
+  const handleMarkAsRead = useCallback((key) => {
+    if (!key) return;
+    setReadKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+  }, []);
+
+  const handleRemoveAll = useCallback(() => {
+    if (!sortedNotifications.length) return;
+    setHiddenKeys((prev) => {
+      const next = new Set(prev);
+      sortedNotifications.forEach((item) => {
+        if (item?.__key) next.add(item.__key);
+      });
+      return Array.from(next);
+    });
+  }, [sortedNotifications]);
+
   const renderItem = ({ item }) => {
     const typeKey = (item?.type || 'default').toLowerCase();
     const accent = typeStyles[typeKey] || typeStyles.default;
@@ -69,9 +116,16 @@ export default function NotificationsScreen() {
     const message = item?.message || item?.body || item?.description || '';
     const timestamp = formatTime(item?.created_at || item?.createdAt);
     const typeLabel = formatTypeLabel(typeKey);
+    const isRead = Boolean(item?.__isRead);
 
     return (
-      <View style={[styles.card, { borderLeftColor: accent.color }]}>
+      <View
+        style={[
+          styles.card,
+          { borderLeftColor: accent.color },
+          isRead && styles.cardRead,
+        ]}
+      >
         <View
           style={[
             styles.iconWrap,
@@ -98,6 +152,19 @@ export default function NotificationsScreen() {
           </View>
           {timestamp ? <Text style={styles.time}>{timestamp}</Text> : null}
           {message ? <Text style={styles.message}>{message}</Text> : null}
+          <View style={styles.cardActions}>
+            {!isRead ? (
+              <Pressable
+                onPress={() => handleMarkAsRead(item.__key)}
+                style={({ pressed }) => [
+                  styles.readButton,
+                  pressed && styles.readButtonPressed,
+                ]}
+              >
+                <Text style={styles.readButtonText}>Mark as read</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </View>
     );
@@ -140,6 +207,26 @@ export default function NotificationsScreen() {
           </Text>
         </View>
       </View>
+      <View style={styles.sectionActions}>
+        <Pressable
+          onPress={handleRemoveAll}
+          disabled={!sortedNotifications.length}
+          style={({ pressed }) => [
+            styles.actionButton,
+            pressed && styles.actionButtonPressed,
+            !sortedNotifications.length && styles.actionButtonDisabled,
+          ]}
+        >
+          <Text
+            style={[
+              styles.actionButtonText,
+              !sortedNotifications.length && styles.actionButtonTextDisabled,
+            ]}
+          >
+            Remove all
+          </Text>
+        </Pressable>
+      </View>
     </>
   );
 
@@ -165,7 +252,7 @@ export default function NotificationsScreen() {
         <FlatList
           data={sortedNotifications}
           keyExtractor={(item, index) =>
-            item?.id ? String(item.id) : `${item?.title || 'notif'}-${index}`
+            item?.__key ? String(item.__key) : `notif-${index}`
           }
           renderItem={renderItem}
           ListHeaderComponent={renderHeader}
@@ -292,6 +379,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#9A3412',
   },
+  sectionActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  actionButton: {
+    backgroundColor: '#FFF1E6',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  actionButtonPressed: {
+    opacity: 0.85,
+  },
+  actionButtonDisabled: {
+    backgroundColor: '#F3F4F6',
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  actionButtonTextDisabled: {
+    color: '#9CA3AF',
+  },
   listContent: {
     paddingTop: 12,
     paddingBottom: 40,
@@ -315,6 +429,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
+  },
+  cardRead: {
+    opacity: 0.7,
   },
   iconWrap: {
     width: 36,
@@ -351,6 +468,25 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 6,
     lineHeight: 16,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginTop: 10,
+  },
+  readButton: {
+    backgroundColor: '#FFF1E6',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  readButtonPressed: {
+    opacity: 0.8,
+  },
+  readButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9A3412',
   },
   typeBadge: {
     borderRadius: 999,

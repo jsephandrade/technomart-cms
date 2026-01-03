@@ -161,6 +161,9 @@ const Notifications = () => {
     } catch {}
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
+  const removeAllNotifications = () => {
+    setNotifications([]);
+  };
   const handleSettingChange = async (key) => {
     // Special handling for push: request permission before enabling
     if (key === 'pushEnabled') {
@@ -289,6 +292,14 @@ const Notifications = () => {
                   disabled={unreadCount === 0}
                 >
                   Mark all as read
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={removeAllNotifications}
+                  disabled={notifications.length === 0}
+                >
+                  Remove all
                 </Button>
                 <Button
                   variant="outline"

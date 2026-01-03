@@ -202,12 +202,6 @@ export async function clearStoredTokens() {
 // api.js — improved createCateringEvent
 export const createCateringEvent = async (payload) => {
   try {
-    // Log payload for debugging
-    console.log(
-      '📤 Sending Catering Event payload:',
-      JSON.stringify(payload, null, 2)
-    );
-
     // Get valid token (refresh if expired)
     const token = await getValidToken();
     if (!token) throw new Error('No valid token. Please log in again.');
@@ -219,8 +213,6 @@ export const createCateringEvent = async (payload) => {
         'Content-Type': 'application/json',
       },
     });
-
-    console.log('✅ Catering event created:', response.data);
     return { success: true, data: response.data };
   } catch (err) {
     // Detailed logging

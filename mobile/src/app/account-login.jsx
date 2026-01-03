@@ -78,7 +78,7 @@ export default function AccountLoginScreen() {
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     responseType: 'id_token',
-    scopes: ['profile', 'email'],
+    scopes: ['openid', 'profile', 'email'],
     selectAccount: true,
   };
 

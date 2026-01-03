@@ -28,7 +28,12 @@
       "googleServicesFile": "./google-services.json"
     },
 
-    "plugins": ["expo-web-browser"],
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      "@react-native-firebase/app",
+      ["expo-build-properties"]
+    ],
 
     "extra": {
       "eas": {

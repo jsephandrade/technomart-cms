@@ -230,6 +230,43 @@ def _find_best_match(
     return best_match, best_distance
 
 
+def _get_face_login_settings():
+    try:
+        threshold = float(getattr(settings, "FACE_LOGIN_THRESHOLD", 0.35) or 0.35)
+    except Exception:
+        threshold = 0.35
+    try:
+        required_frames = int(
+            getattr(settings, "FACE_LOGIN_REQUIRED_FRAMES", 3) or 3
+        )
+    except Exception:
+        required_frames = 3
+    try:
+        max_frames = int(getattr(settings, "FACE_LOGIN_MAX_FRAMES", 5) or 5)
+    except Exception:
+        max_frames = 5
+    required_frames = max(1, required_frames)
+    max_frames = max(required_frames, max_frames)
+    return threshold, required_frames, max_frames
+
+
+def _collect_images_from_payload(data):
+    images = []
+    primary = data.get("image") or data.get("imageData") or ""
+    if primary:
+        images.append(primary)
+    extra = data.get("images") or []
+    if isinstance(extra, list):
+        for entry in extra:
+            if isinstance(entry, dict):
+                value = entry.get("data") or entry.get("image") or ""
+            else:
+                value = entry
+            if value:
+                images.append(value)
+    return images
+
+
 # ------------------
 # API Endpoints
 # ------------------
@@ -360,7 +397,7 @@ def face_login(request):
     token_type = (data.get("tokenType") or data.get("token_type") or "").lower()
     use_simplejwt = token_type in {"simplejwt", "simple", "jwt"}
 
-    image = data.get("image") or data.get("imageData") or ""
+    images = _collect_images_from_payload(data)
     remember_raw = data.get("remember")
     remember = False
     if isinstance(remember_raw, bool):
@@ -368,9 +405,7 @@ def face_login(request):
     elif isinstance(remember_raw, (int, str)):
         remember = str(remember_raw).lower() in {"1", "true", "yes", "on"}
 
-    # Extract image
-    mime, raw = _extract_dataurl_image(image)
-    if not raw:
+    if not images:
         return JsonResponse({"success": False, "message": "Missing image"}, status=400)
 
     # Optional: specify model (must match registered model for best results)
@@ -378,27 +413,40 @@ def face_login(request):
     if model_name not in ["Facenet512", "VGG-Face", "ArcFace", "Facenet", "DeepFace"]:
         model_name = "Facenet512"
 
-    # Extract face and generate embedding
-    embedding_vec, metadata = _extract_face_and_embedding(raw, model_name=model_name, enforce_detection=True)
+    threshold, required_frames, max_frames = _get_face_login_settings()
+    images = images[:max_frames]
 
-    if embedding_vec is None:
-        error_msg = metadata.get("message", "Face processing failed") if metadata else "Face processing failed"
-        try:
-            record_audit(
-                request,
-                type="login",
-                action="Login failed",
-                details=f"Face login: {error_msg}",
-                severity="warning",
+    embeddings = []
+    metadata_list = []
+    for image in images:
+        _, raw = _extract_dataurl_image(image)
+        if not raw:
+            continue
+        embedding_vec, metadata = _extract_face_and_embedding(
+            raw, model_name=model_name, enforce_detection=True
+        )
+        if embedding_vec is None:
+            error_msg = (
+                metadata.get("message", "Face processing failed")
+                if metadata
+                else "Face processing failed"
             )
-        except Exception:
-            pass
-        return JsonResponse({"success": False, "message": error_msg}, status=400)
+            try:
+                record_audit(
+                    request,
+                    type="login",
+                    action="Login failed",
+                    details=f"Face login: {error_msg}",
+                    severity="warning",
+                )
+            except Exception:
+                pass
+            return JsonResponse({"success": False, "message": error_msg}, status=400)
+        embeddings.append(embedding_vec)
+        metadata_list.append(metadata or {})
 
-    # Matching threshold (cosine distance)
-    # Lower is more similar: 0 = identical, 1 = completely different
-    # Facenet512 typically uses 0.4 threshold
-    THRESHOLD = 0.4
+    if len(embeddings) < required_frames:
+        return JsonResponse({"success": False, "message": "Face not recognized"}, status=401)
 
     try:
         from .models import FaceTemplate
@@ -431,13 +479,38 @@ def face_login(request):
         if not candidates:
             return JsonResponse({"success": False, "message": "No valid face templates found"}, status=404)
 
-        # Find best match
-        best_match, distance = _find_best_match(
-            embedding_vec,
-            candidates,
-            distance_metric="cosine",
-            threshold=THRESHOLD
-        )
+        match_results = []
+        for embedding_vec in embeddings:
+            best_match, distance = _find_best_match(
+                embedding_vec,
+                candidates,
+                distance_metric="cosine",
+                threshold=threshold,
+            )
+            if not best_match:
+                try:
+                    record_audit(
+                        request,
+                        type="login",
+                        action="Login failed",
+                        details="Face login: Not recognized",
+                        severity="warning",
+                    )
+                except Exception:
+                    pass
+                return JsonResponse(
+                    {"success": False, "message": "Face not recognized"}, status=401
+                )
+            match_results.append((best_match, distance))
+
+        user_ids = {str(match.user_id) for match, _ in match_results}
+        if len(user_ids) != 1:
+            return JsonResponse(
+                {"success": False, "message": "Face not recognized"}, status=401
+            )
+
+        best_match = match_results[0][0]
+        distance = max(result[1] for result in match_results)
 
         if not best_match:
             try:
@@ -445,12 +518,14 @@ def face_login(request):
                     request,
                     type="login",
                     action="Login failed",
-                    details=f"Face login: Not recognized (best distance: {distance:.4f})",
+                    details="Face login: Not recognized",
                     severity="warning",
                 )
             except Exception:
                 pass
-            return JsonResponse({"success": False, "message": "Face not recognized"}, status=401)
+            return JsonResponse(
+                {"success": False, "message": "Face not recognized"}, status=401
+            )
 
         user = best_match.user
 

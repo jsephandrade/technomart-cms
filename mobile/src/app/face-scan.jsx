@@ -28,9 +28,9 @@ const RING_STROKE = 10;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const CAPTURE_FRAMES = 2;
-const CAPTURE_DELAY_MS = 80;
-const RING_ANIMATION_MS = 900;
+const CAPTURE_FRAMES = 4;
+const CAPTURE_DELAY_MS = 120;
+const RING_ANIMATION_MS = 1200;
 
 export default function FaceScanScreen() {
   const router = useRouter();
@@ -90,15 +90,19 @@ export default function FaceScanScreen() {
   }, []);
 
   const captureBurst = useCallback(async () => {
+    const frames = [];
     let bestPhoto = null;
     let bestScore = 0;
 
     for (let i = 0; i < CAPTURE_FRAMES; i += 1) {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.5,
+        quality: 0.45,
         base64: true,
         skipProcessing: true,
       });
+      if (photo?.base64) {
+        frames.push(photo);
+      }
 
       const score = photo?.base64 ? photo.base64.length : 0;
       if (score > bestScore) {
@@ -111,7 +115,7 @@ export default function FaceScanScreen() {
       }
     }
 
-    return bestPhoto;
+    return { bestPhoto, frames };
   }, []);
 
   const handleScan = useCallback(async () => {
@@ -119,18 +123,31 @@ export default function FaceScanScreen() {
     setScanning(true);
     startRing();
     try {
-      const photo = await captureBurst();
+      const { bestPhoto, frames } = await captureBurst();
       completeRing();
 
-      const rawBase64 = typeof photo?.base64 === 'string' ? photo.base64 : '';
+      const rawBase64 =
+        typeof bestPhoto?.base64 === 'string' ? bestPhoto.base64 : '';
       const cleanBase64 = rawBase64.replace(/\s/g, '');
+      const frameImages = frames
+        .map((frame) =>
+          typeof frame?.base64 === 'string'
+            ? frame.base64.replace(/\s/g, '')
+            : ''
+        )
+        .filter(Boolean)
+        .map((frame) => `data:image/jpeg;base64,${frame}`);
 
-      if (!cleanBase64) {
+      if (!cleanBase64 || frameImages.length === 0) {
         throw new Error('Unable to capture the image. Please try again.');
       }
 
       const imageData = `data:image/jpeg;base64,${cleanBase64}`;
-      const payload = { image: imageData, imageData, images: [imageData] };
+      const payload = {
+        image: imageData,
+        imageData,
+        images: frameImages,
+      };
 
       if (isRegister) {
         const token = await getValidToken();

@@ -165,6 +165,16 @@ ORDER_PICKUP_GRACE_MINUTES = max(
 ORDER_NO_SHOW_LIMIT = max(1, int(os.getenv("ORDER_NO_SHOW_LIMIT", "3") or 3))
 ORDER_NO_SHOW_LOCK_HOURS = max(1, int(os.getenv("ORDER_NO_SHOW_LOCK_HOURS", "24") or 24))
 
+# Face login tuning
+FACE_LOGIN_THRESHOLD = float(os.getenv("FACE_LOGIN_THRESHOLD", "0.35") or 0.35)
+FACE_LOGIN_REQUIRED_FRAMES = max(
+    1, int(os.getenv("FACE_LOGIN_REQUIRED_FRAMES", "3") or 3)
+)
+FACE_LOGIN_MAX_FRAMES = max(
+    FACE_LOGIN_REQUIRED_FRAMES,
+    int(os.getenv("FACE_LOGIN_MAX_FRAMES", "5") or 5),
+)
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

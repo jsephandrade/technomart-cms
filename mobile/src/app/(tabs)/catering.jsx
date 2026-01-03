@@ -30,14 +30,37 @@ import {
 /* ---------------------------
    Convert "5:32 PM" → "17:32"
 ---------------------------- */
-const to24Hour = (timeString) => {
-  if (!timeString) return '';
-  const [time, modifier] = timeString.split(' ');
-  let [hours, minutes] = time.split(':');
-  hours = parseInt(hours, 10);
-  if (modifier === 'PM' && hours !== 12) hours += 12;
-  if (modifier === 'AM' && hours === 12) hours = 0;
-  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+const to24Hour = (timeValue) => {
+  if (!timeValue) return '';
+  if (timeValue instanceof Date) {
+    const hours = String(timeValue.getHours()).padStart(2, '0');
+    const minutes = String(timeValue.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+  const normalized = String(timeValue).trim().replace(/\s+/g, ' ');
+  const match = normalized.match(
+    /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?$/
+  );
+  if (!match) return normalized;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = match[3] ? parseInt(match[3], 10) : null;
+  const meridiem = match[4];
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return normalized;
+  }
+  if (meridiem) {
+    const upper = meridiem.toUpperCase();
+    if (upper === 'PM' && hours !== 12) hours += 12;
+    if (upper === 'AM' && hours === 12) hours = 0;
+  }
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  if (Number.isFinite(seconds)) {
+    const ss = String(seconds).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+  return `${hh}:${mm}`;
 };
 
 const MIN_EVENT_LEAD_DAYS = 5;
@@ -127,6 +150,9 @@ export default function CateringTab() {
   });
   const [eventTab, setEventTab] = useState('upcoming');
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
+  const [showPaymentSection, setShowPaymentSection] = useState(false);
+  const [paymentType, setPaymentType] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
 
   const [scheduleForm, setScheduleForm] = useState({
     eventName: '',
@@ -239,7 +265,14 @@ export default function CateringTab() {
     );
   };
 
-  /* ------------------ Schedule Event with 50% Down Payment ------------------ */
+  const closeScheduleModal = () => {
+    setModalVisible(false);
+    setShowPaymentSection(false);
+    setPaymentType('');
+    setPaymentMethod('');
+  };
+
+  /* ------------------ Schedule Event + Payment ------------------ */
   const handleScheduleSubmit = async () => {
     const required = [
       'eventName',
@@ -278,12 +311,22 @@ export default function CateringTab() {
       return;
     }
 
+    if (!showPaymentSection) {
+      setShowPaymentSection(true);
+      return;
+    }
+
+    if (!paymentType || !paymentMethod) {
+      Alert.alert('Error', 'Please select payment type and method.');
+      return;
+    }
+
     const selectedItemsData = scheduleForm.selectedItems.map((itemId) => {
       const item = menuItems.find((i) => i.id === itemId);
       return {
         menu_item: item.id,
         name: item.name,
-        quantity: item.selectedQuantity,
+        quantity: sanitizePositiveInt(item.selectedQuantity, 1),
         unit_price: item.price || 0,
         notes: item.notes || '',
         image: item.image || null,
@@ -295,63 +338,76 @@ export default function CateringTab() {
       0
     );
 
-    const downPayment = totalPrice * 0.5; // 50% payment
+    const startTime = to24Hour(scheduleForm.startTime);
+    const endTime = to24Hour(scheduleForm.endTime);
+    const timePattern = /^\d{2}:\d{2}(:\d{2})?$/;
+    if (!timePattern.test(startTime) || !timePattern.test(endTime)) {
+      Alert.alert('Error', 'Please select a valid start and end time.');
+      return;
+    }
 
-    // Ask for down payment confirmation
-    Alert.alert(
-      'Down Payment Required',
-      `You need to pay 50% of the total price (₱${downPayment.toLocaleString()}) to schedule this event. Confirm payment?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Pay Now',
-          onPress: async () => {
-            try {
-              const newEvent = {
-                id: Date.now(),
-                name: scheduleForm.eventName,
-                client_name: scheduleForm.client,
-                contact_name: scheduleForm.contactName,
-                contact_phone: scheduleForm.contactPhone,
-                event_date: scheduleForm.date,
-                start_time: to24Hour(scheduleForm.startTime),
-                end_time: to24Hour(scheduleForm.endTime),
-                location: scheduleForm.location,
-                guest_count: Number(scheduleForm.attendees),
-                notes: scheduleForm.notes,
-                items: selectedItemsData,
-                total_price: totalPrice,
-                paid_amount: downPayment,
-              };
+    const isFullPayment = paymentType === 'full';
+    const paidAmount = isFullPayment ? totalPrice : totalPrice * 0.5;
+    const paymentStatus = isFullPayment ? 'paid' : 'partial';
 
-              await createCateringEvent(newEvent);
-              setCateringEvents((prev) => [...prev, newEvent]);
+    try {
+      const newEvent = {
+        id: Date.now(),
+        name: scheduleForm.eventName,
+        client_name: scheduleForm.client,
+        contact_name: scheduleForm.contactName,
+        contact_phone: scheduleForm.contactPhone,
+        event_date: scheduleForm.date,
+        start_time: startTime,
+        end_time: endTime,
+        location: scheduleForm.location,
+        guest_count: Number(scheduleForm.attendees),
+        notes: scheduleForm.notes,
+        items: selectedItemsData,
+        estimated_total: totalPrice,
+        deposit_amount: paidAmount,
+        deposit_paid: true,
+        payment_status: paymentStatus,
+        payment_method: paymentMethod,
+        total_price: totalPrice,
+        paid_amount: paidAmount,
+      };
 
-              Alert.alert('Success', 'Event scheduled! 50% payment received.');
-              setModalVisible(false);
+      const result = await createCateringEvent(newEvent);
+      if (!result?.success) {
+        Alert.alert('Error', result?.message || 'Failed to schedule event.');
+        return;
+      }
 
-              // Reset form
-              setScheduleForm((prev) => ({
-                ...prev,
-                eventName: '',
-                date: '',
-                startTime: '',
-                endTime: '',
-                location: '',
-                attendees: '',
-                contactName: '',
-                contactPhone: '',
-                notes: '',
-                selectedItems: [],
-              }));
-            } catch (err) {
-              console.error(err);
-              Alert.alert('Error', 'Failed to schedule event.');
-            }
-          },
-        },
-      ]
-    );
+      const createdEvent = result?.data?.data || result?.data || newEvent;
+      setCateringEvents((prev) => [...prev, { ...newEvent, ...createdEvent }]);
+
+      Alert.alert(
+        'Success',
+        `Event scheduled! ${
+          isFullPayment ? 'Full payment' : '50% downpayment'
+        } recorded via ${paymentMethod}.`
+      );
+      closeScheduleModal();
+
+      // Reset form
+      setScheduleForm((prev) => ({
+        ...prev,
+        eventName: '',
+        date: '',
+        startTime: '',
+        endTime: '',
+        location: '',
+        attendees: '',
+        contactName: '',
+        contactPhone: '',
+        notes: '',
+        selectedItems: [],
+      }));
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to schedule event.');
+    }
   };
 
   /* ------------------ Pay Remaining 50% ------------------ */
@@ -454,6 +510,12 @@ export default function CateringTab() {
     return sum + price * qty;
   }, 0);
   const downPaymentAmount = currentTotal * 0.5;
+  const paymentDue =
+    paymentType === 'full'
+      ? currentTotal
+      : paymentType === 'downpayment'
+        ? downPaymentAmount
+        : 0;
 
   /* ------------------ Render ------------------ */
   return (
@@ -667,13 +729,13 @@ export default function CateringTab() {
           visible={modalVisible}
           animationType="slide"
           transparent
-          onRequestClose={() => setModalVisible(false)}
+          onRequestClose={closeScheduleModal}
         >
           <View style={styles.modalOverlay}>
             <TouchableOpacity
               style={styles.modalBackdrop}
               activeOpacity={1}
-              onPress={() => setModalVisible(false)}
+              onPress={closeScheduleModal}
             />
             <View style={styles.modalCard}>
               <View style={styles.modalHandle} />
@@ -760,11 +822,10 @@ export default function CateringTab() {
                     onChange={(e, selected) => {
                       setShowTimePicker({ field: '', visible: false });
                       if (selected) {
-                        const formatted = selected.toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        });
-                        handleInputChange(showTimePicker.field, formatted);
+                        handleInputChange(
+                          showTimePicker.field,
+                          to24Hour(selected)
+                        );
                       }
                     }}
                   />
@@ -866,14 +927,123 @@ export default function CateringTab() {
                   </View>
                 </View>
 
+                {showPaymentSection && (
+                  <View style={styles.paymentSection}>
+                    <Text style={styles.paymentSectionTitle}>Payment</Text>
+
+                    <View style={{ marginBottom: 14 }}>
+                      <Text style={styles.inputLabel}>Payment Type *</Text>
+                      <View style={styles.paymentOptionRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.paymentOption,
+                            paymentType === 'full' &&
+                              styles.paymentOptionActive,
+                          ]}
+                          onPress={() => setPaymentType('full')}
+                        >
+                          <Text
+                            style={[
+                              styles.paymentOptionText,
+                              paymentType === 'full' &&
+                                styles.paymentOptionTextActive,
+                            ]}
+                          >
+                            Full Payment
+                          </Text>
+                          <Text style={styles.paymentOptionValue}>
+                            {formatPeso(currentTotal)}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.paymentOption,
+                            styles.paymentOptionLast,
+                            paymentType === 'downpayment' &&
+                              styles.paymentOptionActive,
+                          ]}
+                          onPress={() => setPaymentType('downpayment')}
+                        >
+                          <Text
+                            style={[
+                              styles.paymentOptionText,
+                              paymentType === 'downpayment' &&
+                                styles.paymentOptionTextActive,
+                            ]}
+                          >
+                            50% Downpayment
+                          </Text>
+                          <Text style={styles.paymentOptionValue}>
+                            {formatPeso(downPaymentAmount)}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={{ marginBottom: 14 }}>
+                      <Text style={styles.inputLabel}>Payment Method *</Text>
+                      <View style={styles.paymentOptionRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.paymentOption,
+                            paymentMethod === 'GCash' &&
+                              styles.paymentOptionActive,
+                          ]}
+                          onPress={() => setPaymentMethod('GCash')}
+                        >
+                          <Text
+                            style={[
+                              styles.paymentOptionText,
+                              paymentMethod === 'GCash' &&
+                                styles.paymentOptionTextActive,
+                            ]}
+                          >
+                            GCash
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.paymentOption,
+                            styles.paymentOptionLast,
+                            paymentMethod === 'Cash' &&
+                              styles.paymentOptionActive,
+                          ]}
+                          onPress={() => setPaymentMethod('Cash')}
+                        >
+                          <Text
+                            style={[
+                              styles.paymentOptionText,
+                              paymentMethod === 'Cash' &&
+                                styles.paymentOptionTextActive,
+                            ]}
+                          >
+                            Cash
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={styles.paymentDueRow}>
+                      <Text style={styles.paymentLabel}>Amount Due Now</Text>
+                      <Text style={styles.paymentValue}>
+                        {formatPeso(paymentDue)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
                 <Pressable
                   onPress={handleScheduleSubmit}
                   style={styles.submitBtn}
                 >
-                  <Text style={styles.submitBtnText}>Submit</Text>
+                  <Text style={styles.submitBtnText}>
+                    {showPaymentSection
+                      ? 'Confirm Payment'
+                      : 'Continue to Payment'}
+                  </Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setModalVisible(false)}
+                  onPress={closeScheduleModal}
                   style={styles.cancelBtn}
                 >
                   <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -1326,6 +1496,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Roboto_700Bold',
     color: '#111827',
+  },
+  paymentSection: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+  },
+  paymentSectionTitle: {
+    fontSize: 14,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  paymentOptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  paymentOption: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  paymentOptionLast: {
+    marginLeft: 8,
+  },
+  paymentOptionActive: {
+    borderColor: '#F97316',
+    backgroundColor: '#FFF0E0',
+  },
+  paymentOptionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  paymentOptionTextActive: {
+    color: '#9A3412',
+  },
+  paymentOptionValue: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  paymentDueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3D6B7',
   },
   submitBtnText: {
     color: '#fff',

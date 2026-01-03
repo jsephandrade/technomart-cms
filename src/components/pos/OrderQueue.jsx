@@ -442,6 +442,7 @@ const OrderQueue = ({
     };
 
     visibleOrders.forEach((order) => {
+      if (getOrderChannel(order) === 'walk-in') return;
       const status = getOrderStatus(order);
       if (!READY_STATUS_SET.has(status)) return;
 
@@ -604,6 +605,7 @@ const OrderQueue = ({
   const renderAutoBadge = useCallback(
     (order) => {
       if (!order?.autoAdvanceTarget) return null;
+      if (getOrderChannel(order) === 'walk-in') return null;
       if (shouldDisableReadyAutoAdvance(order)) return null;
       const countdown = computeCountdownSeconds(order);
       const paused = order.autoAdvancePaused;
@@ -730,7 +732,8 @@ const OrderQueue = ({
                   updateOrderAutoFlow &&
                     order.autoAdvanceTarget &&
                     can('order.status.update') &&
-                    !disableAutoAdvance
+                    !disableAutoAdvance &&
+                    getOrderChannel(order) !== 'walk-in'
                 );
 
                 return (

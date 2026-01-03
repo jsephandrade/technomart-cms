@@ -54,6 +54,46 @@ const getOrderStatus = (order) => {
   return '';
 };
 
+const WALK_IN_ALIASES = new Set([
+  'walk-in',
+  'walkin',
+  'walk_in',
+  'walk in',
+  'counter',
+]);
+const ONLINE_ALIASES = new Set([
+  'online',
+  'web',
+  'delivery',
+  'pickup',
+  'app',
+  'mobile',
+]);
+
+const getOrderChannel = (order) => {
+  const candidates = [
+    order?.type,
+    order?.orderType,
+    order?.order_type,
+    order?.channel,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (WALK_IN_ALIASES.has(normalized)) {
+        return 'walk-in';
+      }
+      if (ONLINE_ALIASES.has(normalized)) {
+        return 'online';
+      }
+      return normalized;
+    }
+  }
+  return 'walk-in';
+};
+
+const isWalkInOrder = (order) => getOrderChannel(order) === 'walk-in';
+
 const resolveAutoAdvanceTarget = (order) => {
   if (!order) return null;
   const direct = normalizeStatus(order.autoAdvanceTarget);
@@ -100,6 +140,16 @@ export const useOrderAutoAdvance = () => {
       const activeKeys = new Set();
 
       for (const order of orders) {
+        if (isWalkInOrder(order)) {
+          if (order?.id) {
+            for (const key of Array.from(autoAdvanceLocksRef.current.keys())) {
+              if (key.startsWith(`${order.id}:`)) {
+                autoAdvanceLocksRef.current.delete(key);
+              }
+            }
+          }
+          continue;
+        }
         const targetResolved = resolveAutoAdvanceTarget(order);
         if (!targetResolved) {
           continue;

@@ -340,7 +340,10 @@ def _get_no_show_settings():
         0, _coerce_int(getattr(settings, "ORDER_PICKUP_GRACE_MINUTES", 15), 15)
     )
     limit = max(1, _coerce_int(getattr(settings, "ORDER_NO_SHOW_LIMIT", 3), 3))
-    return pickup_window, grace_window, limit
+    lock_hours = max(
+        1, _coerce_int(getattr(settings, "ORDER_NO_SHOW_LOCK_HOURS", 24), 24)
+    )
+    return pickup_window, grace_window, limit, lock_hours
 
 
 @shared_task
@@ -369,7 +372,7 @@ def auto_expire_no_show_orders(limit: int = 50):
         logger.error(f"No-show auto cancel initialization failed: {exc}")
         return 0
 
-    pickup_window, grace_window, no_show_limit = _get_no_show_settings()
+    pickup_window, grace_window, no_show_limit, lock_hours = _get_no_show_settings()
     now_ts = dj_timezone.now()
     cutoff = now_ts - timedelta(minutes=pickup_window + grace_window)
 
@@ -377,7 +380,7 @@ def auto_expire_no_show_orders(limit: int = 50):
         Order.objects.filter(
             promised_time__isnull=False,
             promised_time__lte=cutoff,
-            status__in={"ready", "staged"},
+            status__in={"ready", "staged", "handoff"},
         )
         .exclude(status__in={"completed", "cancelled", "voided", "refunded"})
         .values_list("id", flat=True)[: max(1, int(limit or 50))]
@@ -394,7 +397,7 @@ def auto_expire_no_show_orders(limit: int = 50):
                     .get(id=order_id)
                 )
 
-                if canonical_status(order.status) != "staged":
+                if canonical_status(order.status) not in {"staged", "handoff"}:
                     continue
                 if not order.promised_time:
                     continue
@@ -474,13 +477,19 @@ def auto_expire_no_show_orders(limit: int = 50):
                         locked_user.no_show_count = next_count
                         update_user_fields = ["no_show_count", "updated_at"]
 
-                        should_lock = (
-                            next_count >= no_show_limit and locked_user.is_active
+                        should_lock = next_count >= no_show_limit and (
+                            locked_user.is_active
+                            or (locked_user.status or "").lower() != "deactivated"
                         )
                         if should_lock:
                             locked_user.status = "deactivated"
                             locked_user.is_active = False
-                            update_user_fields.extend(["status", "is_active"])
+                            locked_user.no_show_locked_until = now_ts + timedelta(
+                                hours=lock_hours
+                            )
+                            update_user_fields.extend(
+                                ["status", "is_active", "no_show_locked_until"]
+                            )
 
                         locked_user.save(update_fields=update_user_fields)
 
@@ -492,7 +501,8 @@ def auto_expire_no_show_orders(limit: int = 50):
                                 message=(
                                     "Your account has been locked for violating the "
                                     "pickup policy. You missed 3 pickup orders without "
-                                    "showing up and paying. Please contact support."
+                                    "showing up and paying. You can try again after "
+                                    f"{lock_hours} hours."
                                 ),
                                 notification_type="warning",
                             )
@@ -502,6 +512,40 @@ def auto_expire_no_show_orders(limit: int = 50):
             continue
         except Exception as exc:
             logger.error(f"Failed to auto cancel no-show order {order_id}: {exc}")
+            continue
+
+    return processed
+
+
+@shared_task
+def auto_unlock_no_show_accounts(limit: int = 200):
+    """
+    Re-activate accounts locked by no-show rule once the lock window expires.
+    """
+    from django.utils import timezone as dj_timezone
+
+    try:
+        from .models import AppUser
+    except Exception as exc:
+        logger.error(f"No-show unlock initialization failed: {exc}")
+        return 0
+
+    now_ts = dj_timezone.now()
+    qs = AppUser.objects.filter(
+        no_show_locked_until__isnull=False,
+        no_show_locked_until__lte=now_ts,
+        status__iexact="deactivated",
+    ).order_by("no_show_locked_until")[: max(1, int(limit or 200))]
+
+    processed = 0
+    for user in qs:
+        try:
+            user.no_show_locked_until = None
+            user.status = "active"
+            user.is_active = True
+            user.save(update_fields=["no_show_locked_until", "status", "is_active", "updated_at"])
+            processed += 1
+        except Exception:
             continue
 
     return processed

@@ -478,6 +478,32 @@ def _has_permission(user_or_dict, perm_code: str) -> bool:
     return "all" in perms or perm_code in perms
 
 
+def _maybe_unlock_no_show_user(user):
+    if not user or not hasattr(user, "no_show_locked_until"):
+        return None
+    locked_until = getattr(user, "no_show_locked_until", None)
+    if not locked_until:
+        return None
+    now_ts = dj_timezone.now()
+    if locked_until > now_ts:
+        return locked_until
+    update_fields = []
+    if (getattr(user, "status", "") or "").lower() == "deactivated":
+        user.status = "active"
+        update_fields.append("status")
+    if getattr(user, "is_active", True) is False:
+        user.is_active = True
+        update_fields.append("is_active")
+    user.no_show_locked_until = None
+    update_fields.append("no_show_locked_until")
+    update_fields.append("updated_at")
+    try:
+        user.save(update_fields=update_fields)
+    except Exception:
+        pass
+    return None
+
+
 def _actor_from_token(token: str):
     """Decode JWT tokens issued by either our custom signer or SimpleJWT.
 
@@ -532,6 +558,9 @@ def _actor_from_token(token: str):
         if not actor and email:
             actor = AppUser.objects.filter(email=email).first()
         if actor:
+            locked_until = _maybe_unlock_no_show_user(actor)
+            if locked_until:
+                return None
             status_l = (getattr(actor, "status", "") or "").lower()
             if status_l == "deactivated" or getattr(actor, "is_active", True) is False:
                 return None

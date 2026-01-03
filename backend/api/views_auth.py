@@ -19,6 +19,27 @@ import requests as _requests
 logger = logging.getLogger(__name__)
 
 
+def _no_show_lock_response(locked_until):
+    unlock_at = None
+    try:
+        unlock_at = locked_until.isoformat() if locked_until else None
+    except Exception:
+        unlock_at = None
+    return JsonResponse(
+        {
+            "success": False,
+            "message": (
+                "Your account is temporarily locked for violating the pickup policy. "
+                "You missed 3 pickup orders without showing up and paying. "
+                "Please try again later."
+            ),
+            "reason": "no_show_lock",
+            "unlockAt": unlock_at,
+        },
+        status=403,
+    )
+
+
 def _wants_cookie_auth(request, data=None):
     header_mode = (request.META.get("HTTP_X_AUTH_MODE", "") or "").lower()
     if header_mode == "cookie":
@@ -77,6 +98,7 @@ from .views_common import (
     _revoke_all_refresh_tokens_mem,
     _issue_verify_token_from_db,
     _issue_verify_token_from_dict,
+    _maybe_unlock_no_show_user,
 )
 from .utils_audit import record_audit
 from .utils_login_otp import (
@@ -227,9 +249,23 @@ def auth_login(request):
         if db_user:
             user_exists = True
         if db_user and db_user.password_hash and password and check_password(password, db_user.password_hash):
+            locked_until = _maybe_unlock_no_show_user(db_user)
             status_l = (db_user.status or "").lower()
             safe_user = _safe_user_from_db(db_user)
             # Block deactivated accounts
+            if locked_until:
+                try:
+                    record_audit(
+                        request,
+                        user=db_user,
+                        type="security",
+                        action="Login blocked (no-show lock)",
+                        details="Password login",
+                        severity="warning",
+                    )
+                except Exception:
+                    pass
+                return _no_show_lock_response(locked_until)
             if status_l == "deactivated":
                 try:
                     record_audit(
@@ -480,7 +516,10 @@ def auth_login_verify_otp(request):
         return JsonResponse({"success": False, "message": message or "Invalid code."}, status=401)
 
     db_user = otp.user
+    locked_until = _maybe_unlock_no_show_user(db_user)
     status_l = (getattr(db_user, "status", "") or "").lower()
+    if locked_until:
+        return _no_show_lock_response(locked_until)
     if status_l == "deactivated":
         return JsonResponse(
             {
@@ -855,7 +894,21 @@ def auth_google(request):
             pass
 
         safe_user = _safe_user_from_db(db_user)
+        locked_until = _maybe_unlock_no_show_user(db_user)
         status_l = (db_user.status or "").lower()
+        if locked_until:
+            try:
+                record_audit(
+                    request,
+                    user=db_user,
+                    type="security",
+                    action="Login blocked (no-show lock)",
+                    details="Google login",
+                    severity="warning",
+                )
+            except Exception:
+                pass
+            return _no_show_lock_response(locked_until)
         if status_l == "deactivated":
             try:
                 record_audit(
@@ -1428,7 +1481,10 @@ def refresh_token(request):
                 )
             return JsonResponse({"success": False, "message": "Invalid or expired refresh token"}, status=401)
         user = rt.user
+        locked_until = _maybe_unlock_no_show_user(user)
         status_l = (user.status or "").lower()
+        if locked_until:
+            return _no_show_lock_response(locked_until)
         if status_l == "deactivated":
             return JsonResponse({
                 "success": False,

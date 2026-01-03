@@ -40,6 +40,7 @@ class AppUser(models.Model):
         help_text="Loyalty credits available for purchases.",
     )
     no_show_count = models.PositiveIntegerField(default=0)
+    no_show_locked_until = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(blank=True, null=True)

@@ -163,6 +163,7 @@ ORDER_PICKUP_GRACE_MINUTES = max(
     0, int(os.getenv("ORDER_PICKUP_GRACE_MINUTES", "15") or 15)
 )
 ORDER_NO_SHOW_LIMIT = max(1, int(os.getenv("ORDER_NO_SHOW_LIMIT", "3") or 3))
+ORDER_NO_SHOW_LOCK_HOURS = max(1, int(os.getenv("ORDER_NO_SHOW_LOCK_HOURS", "24") or 24))
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [

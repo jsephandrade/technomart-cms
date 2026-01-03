@@ -532,6 +532,9 @@ def _actor_from_token(token: str):
         if not actor and email:
             actor = AppUser.objects.filter(email=email).first()
         if actor:
+            status_l = (getattr(actor, "status", "") or "").lower()
+            if status_l == "deactivated" or getattr(actor, "is_active", True) is False:
+                return None
             return actor
     except Exception:
         pass

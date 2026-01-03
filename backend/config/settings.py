@@ -156,6 +156,14 @@ ORDER_QUEUE_PUBLIC = (
     or DEBUG
 )
 
+ORDER_PICKUP_WINDOW_MINUTES = max(
+    1, int(os.getenv("ORDER_PICKUP_WINDOW_MINUTES", "30") or 30)
+)
+ORDER_PICKUP_GRACE_MINUTES = max(
+    0, int(os.getenv("ORDER_PICKUP_GRACE_MINUTES", "15") or 15)
+)
+ORDER_NO_SHOW_LIMIT = max(1, int(os.getenv("ORDER_NO_SHOW_LIMIT", "3") or 3))
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

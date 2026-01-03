@@ -498,11 +498,6 @@ AUTO_ADVANCE_PHASE_RULES = [
         "current": {"in_progress", "in_prep", "assembling"},
         "target": "ready",
     },
-    {
-        "name": "complete",
-        "current": {"ready", "staged"},
-        "target": "completed",
-    },
 ]
 
 

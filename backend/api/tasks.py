@@ -238,6 +238,18 @@ def auto_advance_orders(limit: int = 50):
 
                 current_canonical = canonical_status(order.status)
                 target_canonical = canonical_status(target_status)
+                if target_canonical == "completed" and current_canonical in {
+                    "staged",
+                    "handoff",
+                }:
+                    clear_fields = _clear_auto_flow(
+                        order, reason="manual_complete_required"
+                    )
+                    if clear_fields:
+                        if "updated_at" not in clear_fields:
+                            clear_fields.append("updated_at")
+                        order.save(update_fields=clear_fields)
+                    continue
 
                 if not can_transition(current_canonical, target_canonical):
                     clear_fields = _clear_auto_flow(order, reason="auto_invalid_transition")
@@ -307,6 +319,189 @@ def auto_advance_orders(limit: int = 50):
             continue
         except Exception as exc:
             logger.error(f"Failed to auto advance order {order_id}: {exc}")
+            continue
+
+    return processed
+
+
+def _coerce_int(value, fallback):
+    try:
+        parsed = int(value)
+        return parsed
+    except Exception:
+        return fallback
+
+
+def _get_no_show_settings():
+    pickup_window = max(
+        1, _coerce_int(getattr(settings, "ORDER_PICKUP_WINDOW_MINUTES", 30), 30)
+    )
+    grace_window = max(
+        0, _coerce_int(getattr(settings, "ORDER_PICKUP_GRACE_MINUTES", 15), 15)
+    )
+    limit = max(1, _coerce_int(getattr(settings, "ORDER_NO_SHOW_LIMIT", 3), 3))
+    return pickup_window, grace_window, limit
+
+
+@shared_task
+def auto_expire_no_show_orders(limit: int = 50):
+    """
+    Automatically cancel online pickup orders that missed the pickup window and
+    increment no-show counters for the customer.
+    """
+    from django.utils import timezone as dj_timezone
+
+    try:
+        from .models import Order, AppUser
+        from .views_common import _revoke_all_refresh_tokens
+        from .views_orders import (
+            canonical_status,
+            _clear_auto_flow,
+            _is_order_fully_paid,
+            _is_walk_in_channel,
+            _is_guest_user,
+            _safe_order,
+            record_order_event,
+            recalc_order_counters,
+            publish_event,
+        )
+    except Exception as exc:
+        logger.error(f"No-show auto cancel initialization failed: {exc}")
+        return 0
+
+    pickup_window, grace_window, no_show_limit = _get_no_show_settings()
+    now_ts = dj_timezone.now()
+    cutoff = now_ts - timedelta(minutes=pickup_window + grace_window)
+
+    candidate_ids = list(
+        Order.objects.filter(
+            promised_time__isnull=False,
+            promised_time__lte=cutoff,
+            status__in={"ready", "staged"},
+        )
+        .exclude(status__in={"completed", "cancelled", "voided", "refunded"})
+        .values_list("id", flat=True)[: max(1, int(limit or 50))]
+    )
+
+    processed = 0
+
+    for order_id in candidate_ids:
+        try:
+            with transaction.atomic():
+                order = (
+                    Order.objects.select_for_update()
+                    .select_related("placed_by")
+                    .get(id=order_id)
+                )
+
+                if canonical_status(order.status) != "staged":
+                    continue
+                if not order.promised_time:
+                    continue
+                if _is_walk_in_channel(order.channel) or _is_walk_in_channel(
+                    order.order_type
+                ):
+                    continue
+                if _is_order_fully_paid(order):
+                    continue
+
+                meta = order.meta or {}
+                if meta.get("no_show_processed"):
+                    continue
+
+                due_at = order.promised_time + timedelta(
+                    minutes=pickup_window + grace_window
+                )
+                if due_at > now_ts:
+                    continue
+
+                previous_status = order.status
+                order.status = "cancelled"
+                meta["no_show_processed"] = True
+                meta["no_show_processed_at"] = now_ts.isoformat()
+                meta["no_show_reason"] = "pickup_window_expired"
+                order.meta = meta
+
+                update_fields = ["status", "meta", "updated_at"]
+                auto_fields = _clear_auto_flow(order, reason="no_show")
+                if auto_fields:
+                    update_fields.extend(auto_fields)
+                update_fields = list(dict.fromkeys(update_fields))
+                order.save(update_fields=update_fields)
+
+                try:
+                    recalc_order_counters(order)
+                except Exception:
+                    pass
+
+                record_order_event(
+                    order,
+                    event_type="order.no_show",
+                    from_state=canonical_status(previous_status),
+                    to_state=canonical_status(order.status),
+                    actor=None,
+                    payload={
+                        "previousStatus": previous_status,
+                        "pickupWindowMinutes": pickup_window,
+                        "graceMinutes": grace_window,
+                    },
+                )
+
+                order_payload = _safe_order(order)
+                publish_event(
+                    "order.status_changed",
+                    {
+                        "order": order_payload,
+                        "status": canonical_status(order.status),
+                        "reason": "no_show",
+                    },
+                    roles={"admin", "manager", "staff"},
+                    user_ids=[str(order.placed_by_id)]
+                    if getattr(order, "placed_by_id", None)
+                    else None,
+                )
+
+                user = order.placed_by
+                if user and not _is_guest_user(user):
+                    locked_user = (
+                        AppUser.objects.select_for_update()
+                        .filter(id=user.id)
+                        .first()
+                    )
+                    if locked_user:
+                        current_count = int(locked_user.no_show_count or 0)
+                        next_count = current_count + 1
+                        locked_user.no_show_count = next_count
+                        update_user_fields = ["no_show_count", "updated_at"]
+
+                        should_lock = (
+                            next_count >= no_show_limit and locked_user.is_active
+                        )
+                        if should_lock:
+                            locked_user.status = "deactivated"
+                            locked_user.is_active = False
+                            update_user_fields.extend(["status", "is_active"])
+
+                        locked_user.save(update_fields=update_user_fields)
+
+                        if should_lock:
+                            _revoke_all_refresh_tokens(locked_user)
+                            create_notification_sync(
+                                user_id=locked_user.id,
+                                title="Account locked for no-shows",
+                                message=(
+                                    "Your account has been locked for violating the "
+                                    "pickup policy. You missed 3 pickup orders without "
+                                    "showing up and paying. Please contact support."
+                                ),
+                                notification_type="warning",
+                            )
+
+                processed += 1
+        except Order.DoesNotExist:
+            continue
+        except Exception as exc:
+            logger.error(f"Failed to auto cancel no-show order {order_id}: {exc}")
             continue
 
     return processed

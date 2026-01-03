@@ -123,7 +123,7 @@ The following modules are implemented or planned in the UI. Use this matrix when
   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=<Web client ID - optional fallback>
   ```
 - `src/app/login.jsx` reads these values at runtime; when absent, the "Continue with Google" button stays disabled.
-- Add the Expo redirect URIs (`https://auth.expo.io/@<account>/<project>` for Expo Go, plus native scheme `mobilecapstone://`) to the OAuth consent screen.
+- Add the Expo redirect URIs (`https://auth.expo.io/@<account>/technomart` for Expo Go, plus native scheme `technomart://`) to the OAuth consent screen.
 
 ### Biometric & Camera Permissions
 

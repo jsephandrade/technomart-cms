@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -24,11 +24,22 @@ import {
   Roboto_700Bold,
   Roboto_900Black,
 } from '@expo-google-fonts/roboto';
-import { registerAccount, loginWithGoogle } from '../api/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  registerAccount,
+  loginWithGoogle,
+  storeTokens,
+  USER_CACHE_KEY,
+  BASE_URL,
+} from '../api/api';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { auth } from '../firebase';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const API_BASE = `${BASE_URL}/accounts`;
 
 export default function AccountRegistrationScreen() {
   const router = useRouter();
@@ -46,38 +57,76 @@ export default function AccountRegistrationScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [roleModalVisible, setRoleModalVisible] = useState(false);
 
   // Google Auth setup
-  const [request, response, promptAsync] = Google.useAuthRequest({
+  const [request, , promptAsync] = Google.useAuthRequest({
     expoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    responseType: 'id_token',
     scopes: ['profile', 'email'],
   });
 
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      handleGoogleLogin(authentication.accessToken);
+  const handleGoogleSignIn = async () => {
+    if (!request) {
+      Alert.alert(
+        'Unavailable',
+        'Google Sign-In not configured for this build.'
+      );
+      return;
     }
-  }, [response]);
 
-  const handleGoogleLogin = async (accessToken) => {
+    setGoogleLoading(true);
     try {
-      const result = await loginWithGoogle({ accessToken }); // call your backend to register/login
-      if (result.success) {
-        Alert.alert('Success', 'Logged in with Google!', [
-          { text: 'OK', onPress: () => router.replace('/dashboard') },
-        ]);
-      } else {
-        Alert.alert('Error', result.message || 'Google login failed.');
+      const res = await promptAsync({ useProxy: true });
+      if (!res || res.type !== 'success') return;
+
+      const idToken = res.authentication?.idToken || res.params?.id_token;
+      const accessToken =
+        res.authentication?.accessToken || res.params?.access_token;
+      if (!idToken) throw new Error('Missing Google ID token');
+
+      const firebaseCredential = GoogleAuthProvider.credential(
+        idToken,
+        accessToken
+      );
+      await signInWithCredential(auth, firebaseCredential);
+
+      const result = await loginWithGoogle({ credential: idToken });
+      if (!result.success || !result.data?.access) {
+        Alert.alert(
+          'Google Login Failed',
+          formatError(result.message || 'Unable to authenticate with Google.')
+        );
+        return;
       }
+
+      await storeTokens({
+        accessToken: result.data.access,
+        refreshToken: result.data.refresh,
+      });
+
+      const profileRes = await fetch(`${API_BASE}/profile/`, {
+        headers: { Authorization: `Bearer ${result.data.access}` },
+      });
+
+      if (!profileRes.ok) {
+        const errData = await profileRes.json();
+        throw new Error(errData.detail || 'Failed to fetch profile');
+      }
+
+      const profile = await profileRes.json();
+      await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
+      router.replace('/home-dashboard');
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Unable to login with Google.');
+      console.error('Google login error:', error);
+      Alert.alert('Google Login Failed', formatError(error.message));
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -526,14 +575,20 @@ export default function AccountRegistrationScreen() {
             {/* Google Sign-Up */}
             <TouchableOpacity
               style={styles.googleButton}
-              onPress={() => promptAsync()}
-              disabled={!request}
+              onPress={handleGoogleSignIn}
+              disabled={!request || googleLoading}
             >
-              <Image
-                source={require('../../assets/google.png')}
-                style={styles.googleIcon}
-              />
-              <Text style={styles.googleText}>Continue with Google</Text>
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <Image
+                  source={require('../../assets/google.png')}
+                  style={styles.googleIcon}
+                />
+              )}
+              <Text style={styles.googleText}>
+                {googleLoading ? 'Connecting...' : 'Continue with Google'}
+              </Text>
             </TouchableOpacity>
 
             {/* Back to Login */}

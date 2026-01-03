@@ -1,4 +1,5 @@
 import random,string
+import os
 import uuid
 import base64
 from django.contrib.auth import get_user_model
@@ -64,6 +65,85 @@ class LoginView(APIView):
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         })
+
+
+# ----------------------
+# GOOGLE LOGIN
+# ----------------------
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_login(request):
+    credential = (
+        request.data.get('credential')
+        or request.data.get('id_token')
+        or request.data.get('idToken')
+        or ''
+    )
+    credential = str(credential).strip()
+    if not credential:
+        return Response(
+            {"message": "Google credential is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    client_id = (settings.GOOGLE_CLIENT_ID or os.getenv('GOOGLE_CLIENT_ID', '')).strip()
+    if not client_id:
+        return Response(
+            {"message": "Server missing GOOGLE_CLIENT_ID"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    try:
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_requests
+
+        req = google_requests.Request()
+        idinfo = google_id_token.verify_oauth2_token(credential, req, client_id)
+    except Exception as exc:
+        return Response(
+            {"message": f"Invalid Google credential: {exc}"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    email = (idinfo.get('email') or '').lower().strip()
+    if not email:
+        return Response(
+            {"message": "Google account missing email"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    name = (idinfo.get('name') or '').strip() or email
+    picture = idinfo.get('picture') or ''
+    email_verified = bool(idinfo.get('email_verified', False))
+
+    user, created = AppUser.objects.get_or_create(
+        email=email,
+        defaults={
+            "name": name,
+            "role": "customer",
+            "avatar": picture or "",
+            "email_verified": email_verified,
+        },
+    )
+
+    updates = {"last_login": timezone.now()}
+    if not created:
+        if name and name != user.name:
+            updates["name"] = name
+        if picture and picture != user.avatar:
+            updates["avatar"] = picture
+        if email_verified and not user.email_verified:
+            updates["email_verified"] = True
+
+    for key, value in updates.items():
+        setattr(user, key, value)
+    user.save(update_fields=list(updates.keys()))
+
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {"refresh": str(refresh), "access": str(refresh.access_token)},
+        status=status.HTTP_200_OK,
+    )
 
 
 # ----------------------

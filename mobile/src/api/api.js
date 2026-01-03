@@ -296,6 +296,35 @@ export const registerAccount = async (data) => {
   }
 };
 
+export const loginWithGoogle = async ({ credential }) => {
+  if (!credential) {
+    return { success: false, message: 'Missing Google credential.' };
+  }
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/accounts/google-login/`,
+      { credential },
+      { validateStatus: () => true }
+    );
+
+    if (response.status >= 200 && response.status < 300) {
+      return { success: true, data: response.data };
+    }
+
+    return {
+      success: false,
+      message:
+        response.data?.detail ||
+        response.data?.message ||
+        'Google login failed.',
+    };
+  } catch (error) {
+    console.error('Google login error:', error.message || error);
+    return { success: false, message: 'Network error or server unavailable.' };
+  }
+};
+
 // --------------------
 // Feedback API
 // --------------------

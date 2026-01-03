@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   clearStoredTokens,
   getValidToken,
+  loginWithGoogle,
   storeTokens,
   USER_CACHE_KEY,
   BASE_URL,
@@ -31,6 +32,8 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { auth } from '../firebase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -209,43 +212,45 @@ export default function AccountLoginScreen() {
 
     setGoogleLoading(true);
     try {
-      const res = await promptAsync();
+      const res = await promptAsync({ useProxy: true });
       if (!res || res.type !== 'success') return;
 
       const idToken = res.authentication?.idToken || res.params?.id_token;
+      const accessToken =
+        res.authentication?.accessToken || res.params?.access_token;
       if (!idToken) throw new Error('Missing Google ID token');
 
-      const loginResponse = await fetch(`${API_BASE}/google-login/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: idToken }),
-      });
+      const firebaseCredential = GoogleAuthProvider.credential(
+        idToken,
+        accessToken
+      );
+      await signInWithCredential(auth, firebaseCredential);
 
-      const loginData = await loginResponse.json();
-
-      if (loginResponse.ok && loginData.access) {
-        await storeTokens({
-          accessToken: loginData.access,
-          refreshToken: loginData.refresh,
-        });
-
-        const profileRes = await fetch(`${API_BASE}/profile/`, {
-          headers: { Authorization: `Bearer ${loginData.access}` },
-        });
-
-        const profile = await profileRes.json();
-        await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
-        setUser(profile);
-
-        router.replace('/home-dashboard');
-      } else {
+      const loginResult = await loginWithGoogle({ credential: idToken });
+      if (!loginResult.success || !loginResult.data?.access) {
         Alert.alert(
           'Google Login Failed',
           formatMessage(
-            loginData.detail || 'Unable to authenticate with Google.'
+            loginResult.message || 'Unable to authenticate with Google.'
           )
         );
+        return;
       }
+
+      await storeTokens({
+        accessToken: loginResult.data.access,
+        refreshToken: loginResult.data.refresh,
+      });
+
+      const profileRes = await fetch(`${API_BASE}/profile/`, {
+        headers: { Authorization: `Bearer ${loginResult.data.access}` },
+      });
+
+      const profile = await profileRes.json();
+      await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
+      setUser(profile);
+
+      router.replace('/home-dashboard');
     } catch (error) {
       console.error('Google login error:', error);
       Alert.alert('Google Login Failed', formatMessage(error.message));

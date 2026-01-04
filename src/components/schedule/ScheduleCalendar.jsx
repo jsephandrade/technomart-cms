@@ -374,11 +374,6 @@ const ScheduleCalendar = ({
               const employee = employeeLookup.get(entry.employeeId);
               const displayName =
                 employee?.name || entry.employeeName || 'Unassigned';
-              const displayRole =
-                employee?.position ||
-                entry?.position ||
-                entry?.employee?.position ||
-                'N/A';
               const compositeKey =
                 entry.id ??
                 `${entry.employeeId || 'unknown'}-${entry.day}-${entry.startTime}-${entry.endTime}`;
@@ -391,9 +386,6 @@ const ScheduleCalendar = ({
                   <div>
                     <p className="text-sm font-semibold leading-tight">
                       {displayName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {displayRole}
                     </p>
                   </div>
                   <Badge variant="secondary">

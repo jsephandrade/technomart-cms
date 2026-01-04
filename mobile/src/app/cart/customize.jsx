@@ -5,7 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Image,
+  ImageBackground,
   ActivityIndicator,
   Alert,
 } from 'react-native';
@@ -18,7 +18,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCart } from '../../context/CartContext';
-import { resolveImageSource } from '../../utils/image';
 
 const SIZE_OPTIONS = [
   { label: 'Regular', value: 'Regular', price: 0, hint: 'Standard serving' },
@@ -145,35 +144,33 @@ export default function CustomizeOrderScreen() {
     <View style={styles.container}>
       <View style={styles.backgroundGlowTop} />
       <View style={styles.backgroundGlowBottom} />
+      <ImageBackground
+        source={require('../../../assets/drop_1.png')}
+        resizeMode="cover"
+        style={styles.headerBackground}
+      >
+        <View style={styles.overlay} />
+        <View style={styles.headerContainer}>
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={26} color="black" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Customize</Text>
+            <Ionicons name="fast-food-outline" size={26} color="black" />
+          </View>
+          <Text
+            style={styles.headerSubtitle}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {item.name}
+          </Text>
+        </View>
+      </ImageBackground>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <LinearGradient
-          colors={['#FFE4C7', '#FFC37A', '#FF8A3D']}
-          start={[0, 0]}
-          end={[1, 1]}
-          style={styles.heroCard}
-        >
-          <View style={styles.heroRow}>
-            <TouchableOpacity
-              style={styles.heroIconButton}
-              onPress={() => router.back()}
-            >
-              <Ionicons name="arrow-back" size={18} color="#1F2937" />
-            </TouchableOpacity>
-            <View style={styles.heroContent}>
-              <Text style={styles.heroTitle}>Customize</Text>
-              <Text style={styles.heroSubtitle}>{item.name}</Text>
-            </View>
-            <Image
-              source={resolveImageSource(item.image)}
-              style={styles.heroImage}
-              resizeMode="cover"
-            />
-          </View>
-        </LinearGradient>
-
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>Size</Text>
@@ -375,46 +372,44 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   scrollContent: {
-    paddingTop: 12,
+    paddingTop: 16,
     paddingBottom: 140,
   },
-  heroCard: {
-    margin: 16,
-    borderRadius: 24,
-    padding: 16,
+  headerBackground: {
+    width: '100%',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     overflow: 'hidden',
+    paddingBottom: 8,
   },
-  heroRow: {
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(254,192,117,0.5)',
+  },
+  headerContainer: {
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  heroIconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: '#FFE7C7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroContent: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  heroTitle: {
-    fontSize: 22,
+  headerTitle: {
+    fontSize: 30,
     fontFamily: 'Roboto_700Bold',
-    color: '#111827',
+    color: '#1F2937',
+    textAlign: 'center',
+    flex: 1,
+    marginHorizontal: 10,
   },
-  heroSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  heroImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: '#F7EDE2',
+  headerSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    fontFamily: 'Roboto_400Regular',
+    color: '#4B5563',
+    textAlign: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',

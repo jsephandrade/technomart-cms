@@ -676,19 +676,23 @@ def get_available_points(user):
     if _is_guest_user(user):
         return Decimal("0.00")
     all_orders = Order.objects.filter(placed_by=user)
-    earned_points = sum(
+    completed_orders = [
         (Decimal(order.total_amount or 0) * Decimal("0.01")).quantize(
             Decimal("0.01"), rounding=ROUND_DOWN
         )
         for order in all_orders
         if str(getattr(order, "status", "")).strip().lower() == "completed"
         and _is_order_fully_paid(order)
-    )
+    ]
+    earned_points = sum(completed_orders, Decimal("0.00"))
     used_points = sum(
-        Decimal(order.credit_points_used or 0).quantize(
-            Decimal("0.01"), rounding=ROUND_DOWN
-        )
-        for order in all_orders
+        [
+            Decimal(order.credit_points_used or 0).quantize(
+                Decimal("0.01"), rounding=ROUND_DOWN
+            )
+            for order in all_orders
+        ],
+        Decimal("0.00"),
     )
     return max(earned_points - used_points, Decimal("0.00")).quantize(
         Decimal("0.01"), ROUND_DOWN

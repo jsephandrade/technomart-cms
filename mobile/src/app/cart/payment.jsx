@@ -24,12 +24,7 @@ import {
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  getGcashLink,
-  confirmPayment,
-  getCreditPoints,
-  USER_CACHE_KEY,
-} from '../../api/api';
+import { confirmPayment, getCreditPoints, USER_CACHE_KEY } from '../../api/api';
 
 const PARTY_DURATION_MS = 2600;
 const PARTY_PIECE_COUNT = 18;
@@ -41,6 +36,8 @@ const PARTY_COLORS = [
   '#38BDF8',
   '#FB7185',
 ];
+const GCASH_CHECKOUT_URL =
+  'https://checkout-staging.xendit.co/od/technomart-gcashpayment';
 
 const createPartyPieces = () =>
   Array.from({ length: PARTY_PIECE_COUNT }, (_, index) => {
@@ -221,16 +218,15 @@ export default function PaymentPage() {
 
     if (normalizedMethod === 'gcash') {
       try {
-        const { gcash_url } = await getGcashLink(resolvedCheckoutId);
-        const supported = await Linking.canOpenURL(gcash_url);
+        const supported = await Linking.canOpenURL(GCASH_CHECKOUT_URL);
         if (!supported) {
           Alert.alert(
-            'GCash not installed',
-            'Please install GCash to continue.'
+            'Unable to open GCash checkout',
+            'Please try again or choose another payment method.'
           );
           return;
         }
-        await Linking.openURL(gcash_url);
+        await Linking.openURL(GCASH_CHECKOUT_URL);
         setLoading(true);
 
         // Polling after GCash payment
@@ -310,7 +306,7 @@ export default function PaymentPage() {
     {
       key: 'gcash',
       title: 'Pay with GCash',
-      subtitle: 'Instant confirmation via the GCash app.',
+      subtitle: 'Complete payment via the Xendit GCash checkout.',
       icon: require('../../../assets/gcash.png'),
     },
     {

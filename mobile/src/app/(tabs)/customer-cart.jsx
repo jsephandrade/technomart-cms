@@ -23,7 +23,7 @@ import { resolveImageSource, selectMenuImage } from '../../utils/image';
 
 const PICKUP_RANGE_MINUTES = 30;
 const PICKUP_START_HOUR = 8;
-const PICKUP_END_HOUR = 16;
+const PICKUP_END_HOUR = 24;
 
 const formatPickupTime = (date) => {
   let hours = date.getHours();
@@ -160,7 +160,7 @@ export default function CustomerCartScreen() {
     const slotTime = new Date(now);
     slotTime.setHours(hour24, parsed.minute, 0, 0);
 
-    if (hour24 >= 21 || hour24 < 4) return true;
+    if (hour24 < 4) return true;
     return slotTime <= now;
   };
 

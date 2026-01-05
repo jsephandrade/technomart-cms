@@ -24,6 +24,7 @@ import {
 } from '../api/api';
 
 const RING_SIZE = 230;
+const FACE_OWNER_KEY = '@technomart/face-owner';
 const RING_STROKE = 10;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -189,9 +190,10 @@ export default function FaceScanScreen() {
         ]);
         const rawUser = storedUser[0][1] || storedUser[1][1];
         let faceKey = null;
+        let parsedUser = null;
         if (rawUser) {
           try {
-            const parsedUser = JSON.parse(rawUser);
+            parsedUser = JSON.parse(rawUser);
             faceKey = getFaceRegisteredKey(parsedUser);
           } catch (err) {
             console.warn('Failed to parse stored user for face key:', err);
@@ -199,6 +201,24 @@ export default function FaceScanScreen() {
         }
         if (faceKey) {
           await AsyncStorage.setItem(faceKey, 'true');
+          const ownerProfile = parsedUser || null;
+          if (ownerProfile) {
+            const faceOwner = {
+              id:
+                ownerProfile.id ||
+                ownerProfile.user_id ||
+                ownerProfile.employeeId ||
+                ownerProfile.employee_id,
+              email:
+                ownerProfile.email ||
+                ownerProfile.username ||
+                ownerProfile.user_email,
+            };
+            await AsyncStorage.setItem(
+              FACE_OWNER_KEY,
+              JSON.stringify(faceOwner)
+            );
+          }
         }
         Alert.alert('Face registered', 'You can now sign in with Face scan.', [
           { text: 'Done', onPress: () => router.back() },
@@ -211,8 +231,10 @@ export default function FaceScanScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...payload,
-          images: extraImages,
+          images: extraImages.map((img) => ({ data: img })),
           tokenType: 'simplejwt',
+          model: 'Facenet512',
+          authMode: 'simplejwt',
         }),
       });
 
@@ -244,6 +266,26 @@ export default function FaceScanScreen() {
         tokenType === 'simplejwt'
           ? data.refresh
           : data.refreshToken || data.refresh;
+      const ownerRaw = await AsyncStorage.getItem(FACE_OWNER_KEY);
+      const expectedOwner = ownerRaw ? JSON.parse(ownerRaw) : null;
+      const recognizedId =
+        data?.user?.id ||
+        data?.user?.user_id ||
+        data?.user?.employeeId ||
+        data?.user?.employee_id;
+      if (
+        expectedOwner &&
+        expectedOwner.id &&
+        recognizedId &&
+        String(expectedOwner.id) !== String(recognizedId)
+      ) {
+        Alert.alert(
+          'Face mismatch',
+          'This face does not belong to the registered user on this device.'
+        );
+        return;
+      }
+
       if (accessToken || refreshToken) {
         await storeTokens({ accessToken, refreshToken });
       }
@@ -253,8 +295,30 @@ export default function FaceScanScreen() {
 
       router.replace('/home-dashboard');
     } catch (error) {
-      console.error('Face scan error:', error);
-      Alert.alert('Face Scan Failed', error.message || 'Please try again.');
+      const normalized = (error.message || '').toLowerCase();
+      if (
+        normalized.includes('face not recognized') ||
+        normalized.includes('no registered faces')
+      ) {
+        Alert.alert(
+          'Face not recognized',
+          'Your face is not yet linked to an account. Would you like to register it now?',
+          [
+            {
+              text: 'Register face',
+              onPress: () =>
+                router.push({
+                  pathname: '/face-scan',
+                  params: { mode: 'register' },
+                }),
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+      } else {
+        console.error('Face scan error:', error);
+        Alert.alert('Face Scan Failed', error.message || 'Please try again.');
+      }
     } finally {
       setScanning(false);
     }

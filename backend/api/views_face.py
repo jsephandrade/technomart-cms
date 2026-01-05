@@ -309,8 +309,24 @@ def face_register(request):
     if model_name not in ["Facenet512", "VGG-Face", "ArcFace", "Facenet", "DeepFace"]:
         model_name = "Facenet512"  # fallback to default
 
-    # Extract face and generate embedding
-    embedding_vec, metadata = _extract_face_and_embedding(raw, model_name=model_name, enforce_detection=True)
+    # Extract face and generate embedding (try strict detection first, fall back if necessary)
+    enforce_detection = (
+        bool(data.get("enforce_detection"))
+        if isinstance(data.get("enforce_detection"), bool)
+        else True
+    )
+    embedding_vec, metadata = _extract_face_and_embedding(
+        raw, model_name=model_name, enforce_detection=enforce_detection
+    )
+
+    if embedding_vec is None and enforce_detection:
+        fallback_vec, fallback_meta = _extract_face_and_embedding(
+            raw, model_name=model_name, enforce_detection=False
+        )
+        if fallback_vec is not None:
+            embedding_vec = fallback_vec
+            metadata = metadata or {}
+            metadata["fallback_detection"] = True
 
     if embedding_vec is None:
         error_msg = metadata.get("message", "Face processing failed") if metadata else "Face processing failed"
@@ -427,12 +443,21 @@ def face_login(request):
             raw, model_name=model_name, enforce_detection=True
         )
         if embedding_vec is None:
-            last_error = (
-                metadata.get("message", "Face processing failed")
-                if metadata
-                else "Face processing failed"
+            # Attempt a fallback pass with relaxed detection
+            fallback_vec, fallback_meta = _extract_face_and_embedding(
+                raw, model_name=model_name, enforce_detection=False
             )
-            continue
+            if fallback_vec is not None:
+                embedding_vec = fallback_vec
+                metadata = metadata or {}
+                metadata["fallback_detection"] = True
+            else:
+                last_error = (
+                    metadata.get("message", "Face processing failed")
+                    if metadata
+                    else "Face processing failed"
+                )
+                continue
         embeddings.append(embedding_vec)
         metadata_list.append(metadata or {})
 

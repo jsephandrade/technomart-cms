@@ -34,11 +34,13 @@ import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../firebase';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 WebBrowser.maybeCompleteAuthSession();
 
 // ✅ Backend API base
 const API_BASE = `${BASE_URL}/accounts`;
+const BIOMETRIC_STORAGE_KEY = '@technomart/biometric';
 
 export default function AccountLoginScreen() {
   const router = useRouter();
@@ -53,6 +55,8 @@ export default function AccountLoginScreen() {
   const [focusedField, setFocusedField] = useState(null);
   const [user, setUser] = useState(null);
   const passwordInputRef = useRef(null);
+  const [biometricData, setBiometricData] = useState(null);
+  const [biometricReady, setBiometricReady] = useState(false);
 
   const MAX_LOGIN_ATTEMPTS = 3;
   const LOGIN_COOLDOWN_SECONDS = 20;
@@ -84,6 +88,31 @@ export default function AccountLoginScreen() {
     }, 1000);
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
+
+  useEffect(() => {
+    let active = true;
+    const loadBiometric = async () => {
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        if (!hasHardware) return;
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (!isEnrolled) return;
+        const stored = await AsyncStorage.getItem(BIOMETRIC_STORAGE_KEY);
+        if (!stored) return;
+        const parsed = JSON.parse(stored);
+        if (active) {
+          setBiometricData(parsed);
+          setBiometricReady(true);
+        }
+      } catch (err) {
+        console.warn('Biometric load error:', err);
+      }
+    };
+    loadBiometric();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // ✅ Google Auth Config
   const googleConfig = {
@@ -206,6 +235,12 @@ export default function AccountLoginScreen() {
       setAttemptCount(0);
       setCooldownSeconds(0);
 
+      await promptBiometricEnrollment({
+        email: email.trim().toLowerCase(),
+        tokens: { access: data.access, refresh: data.refresh },
+        profile,
+      });
+
       router.replace('/home-dashboard');
     } catch (error) {
       console.error('Login error:', error);
@@ -214,6 +249,91 @@ export default function AccountLoginScreen() {
       setLoading(false);
     }
   };
+
+  const promptBiometricEnrollment = useCallback(async (payload) => {
+    if (!payload) return;
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      if (!hasHardware) return;
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!isEnrolled) return;
+      const stored = await AsyncStorage.getItem(BIOMETRIC_STORAGE_KEY);
+      if (stored) return;
+
+      Alert.alert(
+        'Enable Fingerprint Login',
+        'Use your fingerprint to sign in faster next time.',
+        [
+          { text: 'Maybe later', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              try {
+                const auth = await LocalAuthentication.authenticateAsync({
+                  promptMessage: 'Confirm fingerprint to enable',
+                  cancelLabel: 'Cancel',
+                });
+                if (!auth.success) {
+                  Alert.alert(
+                    'Authentication failed',
+                    'Fingerprint not recognized.'
+                  );
+                  return;
+                }
+                const dataToStore = {
+                  ...payload,
+                  method: 'biometric',
+                };
+                await AsyncStorage.setItem(
+                  BIOMETRIC_STORAGE_KEY,
+                  JSON.stringify(dataToStore)
+                );
+                setBiometricData(dataToStore);
+                setBiometricReady(true);
+                Alert.alert(
+                  'Enabled',
+                  'Fingerprint login is now active for this device.'
+                );
+              } catch (authErr) {
+                console.warn('Failed to enable biometric login:', authErr);
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      console.warn('Biometric enrollment skipped:', err);
+    }
+  }, []);
+
+  const handleBiometricLogin = useCallback(async () => {
+    if (!biometricData) return;
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Use fingerprint to login',
+        cancelLabel: 'Cancel',
+      });
+      if (!result.success) {
+        return Alert.alert(
+          'Authentication failed',
+          'Unable to read your fingerprint.'
+        );
+      }
+      await storeTokens({
+        accessToken: biometricData.tokens.access,
+        refreshToken: biometricData.tokens.refresh,
+      });
+      await AsyncStorage.setItem(
+        USER_CACHE_KEY,
+        JSON.stringify(biometricData.profile)
+      );
+      setUser(biometricData.profile);
+      router.replace('/home-dashboard');
+    } catch (err) {
+      console.error('Biometric login failed:', err);
+      Alert.alert('Error', 'Unable to login with fingerprint.');
+    }
+  }, [biometricData, router]);
 
   // ✅ Google login handler
   const handleGoogleSignIn = useCallback(async () => {
@@ -440,6 +560,24 @@ export default function AccountLoginScreen() {
               </View>
             </TouchableOpacity>
 
+            {biometricReady && biometricData && (
+              <TouchableOpacity
+                style={[styles.faceButton, styles.biometricButton]}
+                onPress={handleBiometricLogin}
+              >
+                <View style={styles.faceContent}>
+                  <Ionicons
+                    name="finger-print-outline"
+                    size={20}
+                    color="#16A34A"
+                  />
+                  <Text style={[styles.faceText, styles.biometricText]}>
+                    Login with Fingerprint
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             {/* Google Button */}
             <TouchableOpacity
               style={styles.googleButton}
@@ -614,6 +752,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Roboto_700Bold',
     color: '#C2410C',
     marginLeft: 8,
+  },
+  biometricButton: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#D1FAE5',
+  },
+  biometricText: {
+    color: '#16A34A',
   },
   linkText: {
     color: '#EA580C',

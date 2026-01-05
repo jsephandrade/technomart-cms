@@ -54,6 +54,12 @@ const EditItemDialog = ({
     () => String(item?.category || '').trim(),
     [item]
   );
+  const priceValue = useMemo(() => String(item?.price ?? '').trim(), [item]);
+  const hasPriceValue = priceValue !== '';
+  const parsedPrice = hasPriceValue ? Number(priceValue) : Number.NaN;
+  const priceInvalid =
+    hasPriceValue && (!Number.isFinite(parsedPrice) || parsedPrice < 0);
+  const priceError = submitted && priceInvalid;
   const categoryOptions = useMemo(() => {
     const unique = new Set();
     (Array.isArray(categories) ? categories : []).forEach((entry) => {
@@ -118,7 +124,7 @@ const EditItemDialog = ({
     if (saving) return;
 
     setSubmitted(true);
-    if (!nameValue || !categoryValue) return;
+    if (!nameValue || !categoryValue || priceInvalid) return;
 
     setSaving(true);
     try {
@@ -280,11 +286,19 @@ const EditItemDialog = ({
                   onChange={handlePriceChange}
                   onKeyDown={blockExponentInput}
                   placeholder="0.00"
+                  className={cn(priceError && 'border-destructive')}
                   disabled={saving}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter the price in PHP (₱).
-                </p>
+                {priceError ? (
+                  <div className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Price cannot be negative.</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Enter the price in PHP (₱).
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

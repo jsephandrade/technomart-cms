@@ -1,6 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_CONFIG } from './config';
+import {
+  API_CONFIG,
+  BASE_URL as CONFIG_BASE_URL,
+  BASE_URL_FEEDBACK as CONFIG_BASE_URL_FEEDBACK,
+  BASE_URL_MENU as CONFIG_BASE_URL_MENU,
+} from './config';
 
 // --------------------
 // Constants
@@ -8,12 +13,73 @@ import { API_CONFIG } from './config';
 export const ACCESS_TOKEN_KEY = '@sanaol/auth/accessToken';
 export const REFRESH_TOKEN_KEY = '@sanaol/auth/refreshToken';
 export const USER_CACHE_KEY = '@sanaol/auth/user';
+export const FACE_REGISTERED_KEY_PREFIX = '@sanaol/auth/faceRegistered:';
+
+export const getFaceRegisteredKey = (userOrEmail) => {
+  const raw =
+    typeof userOrEmail === 'string'
+      ? userOrEmail
+      : userOrEmail?.email || userOrEmail?.id || '';
+  const normalized = String(raw || '')
+    .trim()
+    .toLowerCase();
+  return normalized ? `${FACE_REGISTERED_KEY_PREFIX}${normalized}` : null;
+};
 
 // Base URLs
-export const BASE_URL = `http://192.168.1.5:8000/api`;
-export const BASE_URL_MENU = `http://192.168.1.5:8000/api/menu`;
-export const BASE_URL_FEEDBACK = `http://192.168.1.5:8000`;
-const API_BASE = `http://192.168.1.5:8000/api/accounts`;
+export const BASE_URL = CONFIG_BASE_URL;
+export const BASE_URL_MENU = CONFIG_BASE_URL_MENU;
+export const BASE_URL_FEEDBACK = CONFIG_BASE_URL_FEEDBACK;
+const API_BASE = `${BASE_URL}/accounts`;
+
+const BASE_ORIGIN = BASE_URL_FEEDBACK;
+
+const normalizeMediaUrl = (value) => {
+  if (!value || typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:')
+  ) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('//')) {
+    return `http:${trimmed}`;
+  }
+  const origin = (BASE_ORIGIN || '').replace(/\/$/, '');
+  if (!origin) return trimmed;
+  return `${origin}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+};
+
+const unwrapList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.items)) return payload.items;
+  return [];
+};
+
+const normalizeMenuItems = (payload) =>
+  unwrapList(payload).map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const rawImage =
+      item.image ||
+      item.imageUrl ||
+      item.image_url ||
+      item.thumbnail ||
+      item?.image?.url ||
+      null;
+    const imageUrl = normalizeMediaUrl(rawImage);
+    const isSvg =
+      typeof imageUrl === 'string' && imageUrl.toLowerCase().includes('.svg');
+    return {
+      ...item,
+      image: isSvg ? null : imageUrl,
+    };
+  });
 
 // Helper to get token
 async function getTokenHeader() {
@@ -24,50 +90,25 @@ async function getTokenHeader() {
 // Refresh token function
 export async function refreshAccessToken() {
   const refresh = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
-  if (!refresh) throw new Error('No refresh token available');
+  if (!refresh) return null;
 
   try {
     const res = await axios.post(`${API_BASE}/token/refresh/`, { refresh });
     const newAccess = res.data.access;
+    if (!newAccess) return null;
     await AsyncStorage.setItem(ACCESS_TOKEN_KEY, newAccess);
     return newAccess;
   } catch (err) {
+    const status = err.response?.status;
+    const code = err.response?.data?.code;
+    if (status === 401 || code === 'token_not_valid') {
+      await clearStoredTokens();
+      return null;
+    }
     console.error('Failed to refresh token', err.response?.data || err.message);
     throw err;
   }
 }
-export const getGuestToken = async () => {
-  try {
-    // Clear old tokens
-    await AsyncStorage.removeItem('accessToken');
-    await AsyncStorage.removeItem('refreshToken');
-
-    const res = await fetch(`${API_BASE}/guest-login/`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    // Parse response
-    const data = await res.json();
-
-    console.log('Guest login response:', data, 'status:', res.status); // 🔍 Debug
-
-    if (!res.ok) {
-      throw new Error(data.detail || 'Guest login failed');
-    }
-
-    // Save tokens if they exist
-    if (data.access) await AsyncStorage.setItem('accessToken', data.access);
-    if (data.refresh) await AsyncStorage.setItem('refreshToken', data.refresh);
-    if (data.user)
-      await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(data.user));
-
-    return data; // always return full object for safety
-  } catch (err) {
-    console.error('Guest login error:', err.message);
-    throw err;
-  }
-};
 
 // --------------------
 // Axios instances
@@ -84,11 +125,16 @@ export async function getValidToken() {
       token = res.data.access;
       await AsyncStorage.setItem(ACCESS_TOKEN_KEY, token);
     } catch (err) {
+      const status = err.response?.status;
+      const code = err.response?.data?.code;
+      await clearStoredTokens(); // clean invalid tokens
+      if (status === 401 || code === 'token_not_valid') {
+        return null;
+      }
       console.error(
         'Refresh token invalid or expired',
         err.response?.data || err.message
       );
-      await clearStoredTokens(); // clean invalid tokens
       return null;
     }
   }
@@ -125,10 +171,12 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       try {
         const newToken = await refreshAccessToken();
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        }
       } catch (err) {
-        console.error('Token refresh failed', err);
+        return Promise.reject(err);
       }
     }
 
@@ -151,17 +199,14 @@ export async function clearStoredTokens() {
     ACCESS_TOKEN_KEY,
     REFRESH_TOKEN_KEY,
     USER_CACHE_KEY,
+    'accessToken',
+    'refreshToken',
+    'user',
   ]);
 }
 // api.js — improved createCateringEvent
 export const createCateringEvent = async (payload) => {
   try {
-    // Log payload for debugging
-    console.log(
-      '📤 Sending Catering Event payload:',
-      JSON.stringify(payload, null, 2)
-    );
-
     // Get valid token (refresh if expired)
     const token = await getValidToken();
     if (!token) throw new Error('No valid token. Please log in again.');
@@ -173,8 +218,6 @@ export const createCateringEvent = async (payload) => {
         'Content-Type': 'application/json',
       },
     });
-
-    console.log('✅ Catering event created:', response.data);
     return { success: true, data: response.data };
   } catch (err) {
     // Detailed logging
@@ -253,6 +296,35 @@ export const registerAccount = async (data) => {
   }
 };
 
+export const loginWithGoogle = async ({ credential }) => {
+  if (!credential) {
+    return { success: false, message: 'Missing Google credential.' };
+  }
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/accounts/google-login/`,
+      { credential },
+      { validateStatus: () => true }
+    );
+
+    if (response.status >= 200 && response.status < 300) {
+      return { success: true, data: response.data };
+    }
+
+    return {
+      success: false,
+      message:
+        response.data?.detail ||
+        response.data?.message ||
+        'Google login failed.',
+    };
+  } catch (error) {
+    console.error('Google login error:', error.message || error);
+    return { success: false, message: 'Network error or server unavailable.' };
+  }
+};
+
 // --------------------
 // Feedback API
 // --------------------
@@ -281,16 +353,21 @@ export const fetchMenuItems = async (category = '') => {
 
     let response;
     try {
-      response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
+      response = await axios.get(`${BASE_URL}/menu/items`, {
         headers,
         params,
       });
     } catch (err) {
       if (err.response?.data?.code === 'token_not_valid') {
         token = await refreshAccessToken();
-        const newHeaders = { Authorization: `Bearer ${token}` };
-        response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
+        const newHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+        response = await axios.get(`${BASE_URL}/menu/items`, {
           headers: newHeaders,
+          params,
+        });
+      } else if (err.response?.status === 404) {
+        response = await axios.get(`${BASE_URL_MENU}/menu-items/`, {
+          headers,
           params,
         });
       } else {
@@ -298,7 +375,7 @@ export const fetchMenuItems = async (category = '') => {
       }
     }
 
-    return response.data || [];
+    return normalizeMenuItems(response.data);
   } catch (error) {
     console.error(
       'fetchMenuItems error:',
@@ -311,18 +388,16 @@ export const fetchMenuItems = async (category = '') => {
 export const fetchMenuItemsByCategory = async (category) => {
   try {
     const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-    const res = await fetch(
-      `${BASE_URL_MENU}/menu-items/?category=${category}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      }
-    );
+    const res = await fetch(`${BASE_URL}/menu/items?category=${category}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+    return normalizeMenuItems(data);
   } catch (err) {
     console.error('fetchMenuItemsByCategory error:', err);
     return [];
@@ -332,9 +407,28 @@ export const fetchMenuItemsByCategory = async (category) => {
 // --------------------
 // Notifications
 // --------------------
+const normalizeNotificationsPayload = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.notifications)) return payload.notifications;
+  return [];
+};
+
+const normalizeNotifications = (payload) =>
+  normalizeNotificationsPayload(payload)
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const createdAt =
+        item.created_at || item.createdAt || item.created || null;
+      return { ...item, created_at: createdAt };
+    })
+    .filter(Boolean);
+
 export const fetchNotifications = async () => {
-  let token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!token) throw new Error('No access token found');
+  const token = await getValidToken();
+  if (!token) return [];
 
   const fetchWithToken = async (jwt) => {
     const res = await fetch(`${BASE_URL}/notifications/`, {
@@ -354,7 +448,7 @@ export const fetchNotifications = async () => {
         err.status = res.status;
         throw err;
       }
-      return data;
+      return normalizeNotifications(data);
     } else {
       const text = await res.text();
       const err = new Error(`Unexpected response: ${res.status}`);
@@ -370,14 +464,20 @@ export const fetchNotifications = async () => {
     if (err.status === 401) {
       try {
         const newToken = await refreshAccessToken();
+        if (!newToken) return [];
         return await fetchWithToken(newToken);
       } catch (refreshErr) {
+        const refreshStatus = refreshErr?.response?.status;
+        const refreshCode = refreshErr?.response?.data?.code;
+        if (refreshStatus === 401 || refreshCode === 'token_not_valid') {
+          return [];
+        }
         console.error('Token refresh failed:', refreshErr);
-        throw refreshErr;
+        return [];
       }
     } else {
       console.error('Fetch notifications failed:', err.data || err.message);
-      throw err;
+      return [];
     }
   }
 };
@@ -397,18 +497,14 @@ export const createOrder = async (payload) => {
     const token = await getValidToken();
     if (!token) throw new Error('No valid token found. Please log in again.');
 
-    const response = await axios.post(
-      `http://192.168.1.5:8000/api/create_order/`,
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const response = await axios.post(`${BASE_URL}/create_order/`, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-    return response.data; // { success: true, order_number: ..., total, credit_points_used }
+    return response.data; // { success: true, checkout_id: ..., order_number: ..., total, credit_points_used }
   } catch (err) {
     console.error('CreateOrder API error:', err.response?.data || err.message);
 
@@ -436,12 +532,12 @@ export const createOrder = async (payload) => {
 // --------------------
 // Fetch GCash QR
 // --------------------
-export const fetchGcashQR = async (orderNumber) => {
+export const fetchGcashQR = async (checkoutId) => {
   try {
     const token = await getValidToken(); // get valid token if needed
     if (!token) throw new Error('No valid token found. Please log in again.');
 
-    const res = await api.get(`/orders/${orderNumber}/gcash_qr/`, {
+    const res = await api.get(`/orders/${checkoutId}/gcash_qr/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -536,7 +632,7 @@ const pickImage = async () => {
 
     try {
       await axios.patch(
-        `http://your-ip:8000/api/accounts/update-avatar/`,
+        `${API_BASE}/update-avatar/`,
         { avatar: base64Image },
         {
           headers: {
@@ -559,14 +655,15 @@ const pickImage = async () => {
 // --------------------
 export const requestPasswordReset = async ({ email }) => {
   try {
-    const response = await axios.post(`${API_BASE}/password-reset/`, { email });
+    const response = await axios.post(
+      `${API_BASE}/password-reset/`,
+      { email },
+      { validateStatus: () => true }
+    );
     return response;
   } catch (error) {
-    console.error(
-      'requestPasswordReset error:',
-      error.response || error.message
-    );
-    return error.response || { data: { message: 'Network error' } };
+    console.error('requestPasswordReset error:', error.message || error);
+    return { status: null, data: { message: 'Network error' } };
   }
 };
 
@@ -579,18 +676,19 @@ export const confirmPasswordReset = async ({
   new_password,
 }) => {
   try {
-    const response = await axios.post(`${API_BASE}/password-reset/confirm/`, {
-      email,
-      reset_code,
-      new_password,
-    });
+    const response = await axios.post(
+      `${API_BASE}/password-reset/confirm/`,
+      {
+        email,
+        reset_code,
+        new_password,
+      },
+      { validateStatus: () => true }
+    );
     return response;
   } catch (error) {
-    console.error(
-      'confirmPasswordReset error:',
-      error.response || error.message
-    );
-    return error.response || { data: { message: 'Network error' } };
+    console.error('confirmPasswordReset error:', error.message || error);
+    return { status: null, data: { message: 'Network error' } };
   }
 };
 export async function fetchCategories() {
@@ -634,9 +732,10 @@ export const placeOrder = async (profile, cartItems, creditPointsToUse = 0) => {
     const result = await createOrder(payload);
 
     if (result.success) {
-      console.log('Order placed successfully:', result.order_number);
+      console.log('Checkout created successfully:', result.order_number);
       return {
         success: true,
+        checkoutId: result.checkout_id,
         orderNumber: result.order_number,
         total: result.total, // backend-calculated final total
         creditPointsUsed: result.credit_points_used,
@@ -654,9 +753,9 @@ export const placeOrder = async (profile, cartItems, creditPointsToUse = 0) => {
   }
 };
 // api.js
-export const confirmPayment = async (orderNumber, method) => {
+export const confirmPayment = async (checkoutId, method) => {
   try {
-    const response = await api.post(`/orders/${orderNumber}/confirm_payment/`, {
+    const response = await api.post(`/orders/${checkoutId}/confirm_payment/`, {
       method,
     });
     return response.data;
@@ -718,9 +817,9 @@ export const fetchFeedback = async () => {
     return [];
   }
 };
-export const getGcashLink = async (orderNumber) => {
+export const getGcashLink = async (checkoutId) => {
   try {
-    const res = await api.get(`/orders/${orderNumber}/gcash_link/`);
+    const res = await api.get(`/orders/${checkoutId}/gcash_link/`);
     return res.data; // expected: { success: true, payment_url: 'gcash://...' }
   } catch (err) {
     console.log('getGcashLink error:', err.response?.data || err.message);

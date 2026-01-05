@@ -31,7 +31,6 @@ PAYMENT_CASH_ALIASES = {
     "pay at counter",
     "cod",
 }
-LOYALTY_EARN_RATE = Decimal("0.01")
 LOYALTY_META_KEY = "loyaltyAwarded"
 
 
@@ -158,6 +157,14 @@ def _ensure_pending_cash_payment(order, *, customer_name=""):
     )
 
 
+def _credits_for_amount(total_amount):
+    dec_amount = _coerce_decimal(total_amount)
+    if dec_amount < Decimal("100"):
+        return Decimal("0.00")
+    credits = (dec_amount / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    return credits
+
+
 def _maybe_award_loyalty_points(order):
     if not order:
         return Decimal("0.00")
@@ -174,9 +181,7 @@ def _maybe_award_loyalty_points(order):
     meta = order.meta or {}
     if meta.get(LOYALTY_META_KEY):
         return Decimal("0.00")
-    earned_points = (Decimal(order.total_amount or 0) * LOYALTY_EARN_RATE).quantize(
-        Decimal("0.01"), rounding=ROUND_DOWN
-    )
+    earned_points = _credits_for_amount(order.total_amount)
     if earned_points <= 0:
         meta[LOYALTY_META_KEY] = True
         order.meta = meta
@@ -677,9 +682,7 @@ def get_available_points(user):
         return Decimal("0.00")
     all_orders = Order.objects.filter(placed_by=user)
     completed_orders = [
-        (Decimal(order.total_amount or 0) * Decimal("0.01")).quantize(
-            Decimal("0.01"), rounding=ROUND_DOWN
-        )
+        _credits_for_amount(order.total_amount)
         for order in all_orders
         if str(getattr(order, "status", "")).strip().lower() == "completed"
         and _is_order_fully_paid(order)

@@ -17,6 +17,7 @@ import secrets
 import requests as _requests
 
 logger = logging.getLogger(__name__)
+INVALID_AUTH_MESSAGE = "Invalid email and password"
 
 
 def _no_show_lock_response(locked_until):
@@ -238,7 +239,7 @@ def auth_login(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": False, "message": "Invalid email or password."}, status=401)
+        return JsonResponse({"success": False, "message": INVALID_AUTH_MESSAGE}, status=401)
 
     # Try DB first
     user_exists = False
@@ -474,7 +475,7 @@ def auth_login(request):
     except Exception:
         pass
     return JsonResponse(
-        {"success": False, "message": "Invalid email or password."},
+        {"success": False, "message": INVALID_AUTH_MESSAGE},
         status=401,
     )
 

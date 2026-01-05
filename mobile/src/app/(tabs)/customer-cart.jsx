@@ -19,7 +19,7 @@ import {
 } from '@expo-google-fonts/roboto';
 import { LinearGradient } from 'expo-linear-gradient';
 import api, { getValidToken, createOrder } from '../../api/api';
-import { resolveImageSource } from '../../utils/image';
+import { resolveImageSource, selectMenuImage } from '../../utils/image';
 
 const PICKUP_RANGE_MINUTES = 30;
 const PICKUP_START_HOUR = 8;
@@ -315,7 +315,7 @@ export default function CustomerCartScreen() {
           ]}
         >
           <Image
-            source={resolveImageSource(item.image)}
+            source={resolveImageSource(selectMenuImage(item))}
             style={styles.cartItemImage}
             resizeMode="cover"
           />

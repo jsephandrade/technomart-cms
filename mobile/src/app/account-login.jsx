@@ -62,6 +62,20 @@ export default function AccountLoginScreen() {
     if (typeof msg === 'object' && msg !== null) return JSON.stringify(msg);
     return String(msg);
   };
+  const AUTH_FAILURE_MESSAGE = 'Invalid email and password';
+
+  const normalizeLoginError = (rawMessage) => {
+    const formatted = formatMessage(rawMessage || '');
+    const normalized = formatted.toLowerCase();
+    if (
+      normalized.includes('invalid credentials') ||
+      normalized.includes('account not found') ||
+      normalized.includes('invalid email or password')
+    ) {
+      return AUTH_FAILURE_MESSAGE;
+    }
+    return formatted || AUTH_FAILURE_MESSAGE;
+  };
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return undefined;
@@ -125,9 +139,10 @@ export default function AccountLoginScreen() {
       const data = await response.json();
 
       if (!response.ok) {
+        const rawMessage = data.detail || data.message;
         return {
           success: false,
-          message: data.detail || data.message || 'Invalid credentials',
+          message: normalizeLoginError(rawMessage),
         };
       }
 
@@ -164,7 +179,7 @@ export default function AccountLoginScreen() {
           }
           return next;
         });
-        return Alert.alert('Login Failed', message || 'Incorrect credentials');
+        return Alert.alert('Login Failed', message || AUTH_FAILURE_MESSAGE);
       }
 
       // ✅ Save tokens

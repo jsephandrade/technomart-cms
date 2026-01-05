@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { selectMenuImage } from '../utils/image';
 
 const CartContext = createContext();
 const CART_STORAGE_KEY = 'cart';
@@ -35,6 +36,8 @@ export const CartProvider = ({ children }) => {
   }, [cart, hydrated]);
 
   const addToCart = (item) => {
+    const basePrice = Number(item.basePrice ?? item.price ?? 0);
+    const imageCandidate = selectMenuImage(item);
     setCart((prev) => {
       const exists = prev.find((i) => i.id === item.id);
       if (exists) {
@@ -42,11 +45,11 @@ export const CartProvider = ({ children }) => {
           i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
-      const basePrice = Number(item.basePrice ?? item.price ?? 0);
       return [
         ...prev,
         {
           ...item,
+          image: imageCandidate ?? item.image ?? null,
           basePrice,
           price: basePrice,
           quantity: 1,

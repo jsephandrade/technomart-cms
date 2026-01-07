@@ -142,19 +142,6 @@ const VerifyIdentityPage = () => {
             </Link>
           </div>
 
-          <div className="text-sm text-muted-foreground">
-            <p className="mb-2">
-              We will collect a photo of your face to verify your identity. This
-              is only used for manual approval by an administrator.
-            </p>
-            <ul className="list-disc space-y-1 pl-5">
-              <li>Purpose: account verification only</li>
-              <li>Access: authorized admin reviewers</li>
-              <li>Storage: securely in private storage</li>
-              <li>Retention: deleted after review per policy</li>
-            </ul>
-          </div>
-
           <div className="flex items-center space-x-2">
             <Checkbox
               id="consent"

@@ -11,6 +11,7 @@ import { useAuth } from '@/components/AuthContext';
 // Lazy load pages for better performance
 const Index = lazy(() => import('../../pages/Index'));
 const LoginPage = lazy(() => import('../../pages/LoginPage'));
+const StillPendingPage = lazy(() => import('../../pages/StillPendingPage'));
 const SignupPage = lazy(() => import('../../pages/SignupPage'));
 const ForgotPasswordPage = lazy(() => import('../../pages/ForgotPasswordPage'));
 const ResetCodePage = lazy(() => import('../../pages/ResetCodePage'));
@@ -113,6 +114,7 @@ const AppRoutes = () => {
       const map = {
         '/': 'Dashboard',
         '/login': 'Login',
+        '/still-pending': 'Approval Pending',
         '/signup': 'Sign Up',
         '/forgot-password': 'Forgot Password',
         '/reset-code': 'Reset Code',
@@ -157,6 +159,14 @@ const AppRoutes = () => {
             element={
               <PublicRoute>
                 <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/still-pending"
+            element={
+              <PublicRoute>
+                <StillPendingPage />
               </PublicRoute>
             }
           />

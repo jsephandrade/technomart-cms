@@ -209,8 +209,18 @@ const FaceScanPage = () => {
         setScanResult('success');
         setTimeout(() => navigate('/'), 1000);
       } else if (res?.pending) {
+        const verifyToken = res?.verifyToken || '';
+        sessionStorage.setItem('verify_token', verifyToken);
+        sessionStorage.setItem('pending_user', JSON.stringify(res.user || {}));
+        sessionStorage.setItem(
+          'login_pending_note',
+          'Your account is still pending for approval.'
+        );
         setScanResult('success');
-        setTimeout(() => navigate('/verify'), 1000);
+        setTimeout(
+          () => navigate(verifyToken ? '/verify' : '/still-pending'),
+          1000
+        );
       } else {
         const errorMsg = res?.message || 'Face not recognized';
         setError(errorMsg);

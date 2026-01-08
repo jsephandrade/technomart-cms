@@ -13,6 +13,7 @@ import {
   UserCog,
   FileText,
   Server,
+  Bell,
 } from 'lucide-react';
 import StatsCard from './dashboard/StatsCard';
 import SalesChart from './dashboard/SalesChart';
@@ -191,6 +192,8 @@ const Dashboard = () => {
     const deactivatedUsers = userCounts.deactivated || 0;
 
     const pendingVerifications = adminStats?.pendingVerifications || 0;
+    const notificationsTotal = adminStats?.notifications?.total || 0;
+    const notificationsUnread = adminStats?.notifications?.unread || 0;
     const rolePermissionChanges = adminStats?.rolePermissionChanges || 0;
     const securityAlerts = adminStats?.securityAlerts || 0;
     const adminActionsCount = adminStats?.adminActions?.count || 0;
@@ -207,6 +210,11 @@ const Dashboard = () => {
     const pendingDetail = pendingVerifications
       ? 'Awaiting review'
       : 'No pending requests';
+    const notificationsDetail = notificationsTotal
+      ? `Unread ${formatNumber(notificationsUnread)} of ${formatNumber(
+          notificationsTotal
+        )}`
+      : 'No notifications';
     const roleDetail = 'Last 7 days';
     const alertsDetail = securityAlerts ? 'Open alerts' : 'No open alerts';
     const actionsDetail = latestAction?.action
@@ -242,6 +250,14 @@ const Dashboard = () => {
             formatter={formatNumber}
             detail={pendingDetail}
             onClick={() => navigate('/users')}
+          />
+          <StatsCard
+            title="Notifications"
+            value={notificationsUnread}
+            icon={Bell}
+            formatter={formatNumber}
+            detail={notificationsDetail}
+            onClick={() => navigate('/notifications')}
           />
           <StatsCard
             title="Role & Permission Changes"

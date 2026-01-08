@@ -4,6 +4,7 @@ import apiClient from '@/api/client';
 import userService from '@/api/services/userService';
 import verificationService from '@/api/services/verificationService';
 import logsService from '@/api/services/logsService';
+import notificationsService from '@/api/services/notificationsService';
 
 const DEFAULT_STATS = {
   users: {
@@ -13,6 +14,10 @@ const DEFAULT_STATS = {
     deactivated: 0,
   },
   pendingVerifications: 0,
+  notifications: {
+    total: 0,
+    unread: 0,
+  },
   rolePermissionChanges: 0,
   securityAlerts: 0,
   adminActions: {
@@ -61,6 +66,7 @@ export const useAdminDashboard = ({ enabled = true } = {}) => {
         userService.getUsers({ status: 'pending', limit: 1 }),
         userService.getUsers({ status: 'deactivated', limit: 1 }),
         verificationService.list({ status: 'pending', limit: 1 }),
+        notificationsService.list(50),
         logsService.list({
           type: 'action',
           timeRange: '7d',
@@ -85,6 +91,7 @@ export const useAdminDashboard = ({ enabled = true } = {}) => {
         pendingUsersResult,
         deactivatedUsersResult,
         pendingVerificationsResult,
+        notificationsResult,
         roleLogsResult,
         permissionLogsResult,
         adminActionsResult,
@@ -103,6 +110,17 @@ export const useAdminDashboard = ({ enabled = true } = {}) => {
       const pendingVerifications = getTotalCount(
         resolveResult(pendingVerificationsResult)
       );
+
+      const notifications = resolveResult(notificationsResult);
+      const notificationItems = Array.isArray(notifications?.data)
+        ? notifications.data
+        : Array.isArray(notifications)
+          ? notifications
+          : [];
+      const totalNotifications = getTotalCount(notifications);
+      const unreadNotifications = notificationItems.filter(
+        (item) => !item?.read
+      ).length;
 
       const roleChanges = getTotalCount(resolveResult(roleLogsResult));
       const permissionChanges = getTotalCount(
@@ -154,6 +172,10 @@ export const useAdminDashboard = ({ enabled = true } = {}) => {
           deactivated: deactivatedUsers,
         },
         pendingVerifications,
+        notifications: {
+          total: totalNotifications,
+          unread: unreadNotifications,
+        },
         rolePermissionChanges,
         securityAlerts,
         adminActions: {

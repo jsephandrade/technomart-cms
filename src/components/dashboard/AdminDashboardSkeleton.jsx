@@ -7,7 +7,7 @@ const AdminDashboardSkeleton = () => {
     <div className="space-y-4 animate-fade-in">
       <Skeleton className="h-7 w-48" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 7 }).map((_, i) => (
           <Card key={i}>
             <CardHeader className="pb-2">
               <Skeleton className="h-4 w-32" />

@@ -101,6 +101,12 @@ def _headshot_upload_path(instance, filename):
     ext = ext if ext else ".bin"
     return f"access_requests/{instance.user_id}/{uuid4().hex}{ext}"
 
+def _headshot_multi_upload_path(instance, filename):
+    base, ext = os.path.splitext(filename or "")
+    ext = ext if ext else ".jpg"
+    user_id = getattr(instance.request, "user_id", "unknown")
+    return f"access_requests/{user_id}/shots/{uuid4().hex}{ext}"
+
 
 class AccessRequest(models.Model):
     STATUS_PENDING = "pending"
@@ -159,6 +165,29 @@ class AccessRequest(models.Model):
         if note:
             self.notes = (self.notes or "") + ("\n" if self.notes else "") + note
         self.save(update_fields=["status", "verified_at", "verified_by", "notes"]) 
+
+
+class AccessRequestHeadshot(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    request = models.ForeignKey(
+        AccessRequest,
+        on_delete=models.CASCADE,
+        related_name="headshots",
+    )
+    image = models.FileField(
+        upload_to=_headshot_multi_upload_path,
+        blank=True,
+        null=True,
+        storage=PrivateMediaStorage() if PrivateMediaStorage else None,
+    )
+    position = models.CharField(max_length=32, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "access_request_headshot"
+        indexes = [
+            models.Index(fields=["request", "created_at"]),
+        ]
 
 
 class RefreshToken(models.Model):

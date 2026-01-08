@@ -59,7 +59,9 @@ export const PendingVerifications = () => {
       search: debouncedSearch,
     });
   const [previewId, setPreviewId] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewShots, setPreviewShots] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const [approveId, setApproveId] = useState(null);
   const [role, setRole] = useState('staff');
 
@@ -92,19 +94,56 @@ export const PendingVerifications = () => {
       .toUpperCase();
 
   const openPreview = async (reqId) => {
-    setPreviewId(reqId);
-    try {
-      const blob = await verificationService.fetchHeadshotBlob(reqId);
-      const url = URL.createObjectURL(blob);
-      setPreviewUrl(url);
-    } catch (e) {
-      setPreviewUrl('');
+    if (previewShots.length) {
+      previewShots.forEach((shot) => {
+        if (shot.url) URL.revokeObjectURL(shot.url);
+      });
     }
+    setPreviewId(reqId);
+    setPreviewShots([]);
+    setPreviewError('');
+    setPreviewLoading(true);
+    try {
+      const list = await verificationService.listHeadshots(reqId);
+      if (Array.isArray(list) && list.length > 0) {
+        const results = await Promise.allSettled(
+          list.map(async (shot) => {
+            const blob = await verificationService.fetchHeadshotBlob(
+              reqId,
+              shot.id
+            );
+            return {
+              id: shot.id,
+              position: shot.position || '',
+              url: URL.createObjectURL(blob),
+            };
+          })
+        );
+        const shots = results
+          .filter((result) => result.status === 'fulfilled')
+          .map((result) => result.value);
+        if (!shots.length) {
+          throw new Error('No images available');
+        }
+        setPreviewShots(shots);
+      } else {
+        const blob = await verificationService.fetchHeadshotBlob(reqId);
+        const url = URL.createObjectURL(blob);
+        setPreviewShots([{ id: 'legacy', position: 'Headshot', url }]);
+      }
+    } catch (e) {
+      setPreviewError('Unable to load headshots.');
+    }
+    setPreviewLoading(false);
   };
   const closePreview = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl('');
+    previewShots.forEach((shot) => {
+      if (shot.url) URL.revokeObjectURL(shot.url);
+    });
+    setPreviewShots([]);
     setPreviewId(null);
+    setPreviewError('');
+    setPreviewLoading(false);
   };
 
   const onApprove = async () => {
@@ -295,12 +334,27 @@ export const PendingVerifications = () => {
             <DialogTitle>Headshot Preview</DialogTitle>
           </DialogHeader>
           <div className="flex items-center justify-center">
-            {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="Headshot"
-                className="max-h-[60vh] rounded-md border"
-              />
+            {previewLoading ? (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            ) : previewError ? (
+              <div className="text-sm text-destructive">{previewError}</div>
+            ) : previewShots.length ? (
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+                {previewShots.map((shot, index) => (
+                  <div key={shot.id || index} className="space-y-1">
+                    <img
+                      src={shot.url}
+                      alt={shot.position || 'Headshot'}
+                      className="max-h-[40vh] w-full rounded-md border object-cover"
+                    />
+                    {shot.position ? (
+                      <div className="text-center text-xs text-muted-foreground">
+                        {shot.position}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="text-sm text-muted-foreground">No image</div>
             )}

@@ -125,6 +125,10 @@ const VerifyIdentityPage = () => {
       const res = await verificationService.uploadHeadshot({
         verifyToken,
         imageData: primaryShot.data,
+        images: images.map((shot) => ({
+          data: shot.data,
+          position: shot.position || shot.name || '',
+        })),
         consent: true,
       });
       if (res?.success) {

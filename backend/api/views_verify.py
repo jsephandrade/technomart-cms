@@ -72,10 +72,14 @@ def verify_status(request):
         ar = getattr(u, "access_request", None)
         if not ar:
             return JsonResponse({"success": True, "status": "pending", "hasHeadshot": False})
+        try:
+            has_headshot = ar.headshots.exists() or bool(ar.headshot)
+        except Exception:
+            has_headshot = bool(ar.headshot)
         return JsonResponse({
             "success": True,
             "status": ar.status,
-            "hasHeadshot": bool(ar.headshot),
+            "hasHeadshot": has_headshot,
             "consented": bool(ar.consent_at),
         })
     except Exception:
@@ -91,45 +95,106 @@ def verify_upload(request):
     verify_token = data.get("verifyToken") or ""
     consent = bool(data.get("consent", False))
     image_data = data.get("imageData") or data.get("headshot") or ""
+    images = data.get("images") or data.get("headshots") or []
 
     payload = _decode_verify_token(verify_token)
     if not payload:
         return JsonResponse({"success": False, "message": "Invalid token"}, status=401)
 
-    mime, raw = _extract_dataurl_image(image_data)
-    if not raw:
+    def _normalize_images(items, fallback):
+        normalized = []
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, str):
+                    data_url = item
+                    position = ""
+                elif isinstance(item, dict):
+                    data_url = (
+                        item.get("data")
+                        or item.get("imageData")
+                        or item.get("headshot")
+                        or ""
+                    )
+                    position = item.get("position") or item.get("name") or ""
+                else:
+                    continue
+                if data_url:
+                    normalized.append({"data": data_url, "position": position})
+        if not normalized and fallback:
+            normalized.append({"data": fallback, "position": "Center"})
+        return normalized
+
+    def _ext_for_mime(mime):
+        if mime == "image/png":
+            return ".png"
+        if mime in ("image/jpeg", "image/jpg"):
+            return ".jpg"
+        if mime == "image/webp":
+            return ".webp"
+        return ".jpg"
+
+    normalized_images = _normalize_images(images, image_data)
+    if not normalized_images:
         return JsonResponse({"success": False, "message": "Invalid image data"}, status=400)
 
-    ext = ".jpg"
-    if mime == "image/png":
-        ext = ".png"
-    elif mime in ("image/jpeg", "image/jpg"):
-        ext = ".jpg"
-    elif mime == "image/webp":
-        ext = ".webp"
-
     try:
-        from .models import AppUser, AccessRequest
+        from .models import AppUser, AccessRequest, AccessRequestHeadshot
         from django.core.files.base import ContentFile
         email = (payload.get("email") or "").lower().strip()
         u = AppUser.objects.filter(email=email).first()
         if not u:
             return JsonResponse({"success": False, "message": "User not found"}, status=404)
         ar, _ = AccessRequest.objects.get_or_create(user=u)
-        filename = f"headshot{ext}"
-        ar.headshot.save(filename, ContentFile(raw), save=False)
-        if consent:
-            ar.consent_at = dj_timezone.now()
-        if (u.status or "").lower() != "active":
-            u.status = "pending"
-            u.save(update_fields=["status"]) 
-        ar.save()
+        with transaction.atomic():
+            try:
+                for shot in ar.headshots.all():
+                    try:
+                        if shot.image:
+                            shot.image.delete(save=False)
+                    except Exception:
+                        pass
+                ar.headshots.all().delete()
+            except Exception:
+                pass
+
+            if ar.headshot:
+                try:
+                    ar.headshot.delete(save=False)
+                except Exception:
+                    pass
+
+            primary_name = ""
+            for idx, item in enumerate(normalized_images):
+                mime, raw = _extract_dataurl_image(item.get("data") or "")
+                if not raw:
+                    raise ValueError("Invalid image data")
+                ext = _ext_for_mime(mime)
+                filename = f"headshot_{idx + 1}{ext}"
+                shot = AccessRequestHeadshot(
+                    request=ar,
+                    position=item.get("position") or "",
+                )
+                shot.image.save(filename, ContentFile(raw), save=False)
+                shot.save()
+                if idx == 0:
+                    primary_name = shot.image.name
+
+            if primary_name:
+                ar.headshot.name = primary_name
+            if consent:
+                ar.consent_at = dj_timezone.now()
+            if (u.status or "").lower() != "active":
+                u.status = "pending"
+                u.save(update_fields=["status"])
+            ar.save()
         try:
             email_user_verification_received(u)
             notify_admins_verification_submitted(u, ar)
         except Exception:
             pass
         return JsonResponse({"success": True, "status": ar.status})
+    except ValueError:
+        return JsonResponse({"success": False, "message": "Invalid image data"}, status=400)
     except Exception:
         return JsonResponse({"success": False, "message": "Upload failed"}, status=500)
 
@@ -204,6 +269,12 @@ def verify_requests(request):
         end = start + limit
         items = []
         for ar in qs.order_by("-created_at")[start:end]:
+            try:
+                headshot_count = ar.headshots.count()
+            except Exception:
+                headshot_count = 0
+            if not headshot_count and ar.headshot:
+                headshot_count = 1
             items.append({
                 "id": str(ar.id),
                 "status": ar.status,
@@ -211,7 +282,8 @@ def verify_requests(request):
                 "verifiedAt": ar.verified_at.isoformat() if ar.verified_at else None,
                 "verifiedBy": ar.verified_by,
                 "notes": ar.notes or "",
-                "hasHeadshot": bool(ar.headshot),
+                "hasHeadshot": headshot_count > 0,
+                "headshotCount": headshot_count,
                 "user": {
                     "id": str(ar.user.id),
                     "email": ar.user.email,
@@ -239,7 +311,7 @@ def verify_requests(request):
 
 
 @require_http_methods(["GET"]) 
-def verify_headshot(request, request_id):
+def verify_headshots(request, request_id):
     auth = request.META.get("HTTP_AUTHORIZATION", "")
     if not auth.startswith("Bearer "):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
@@ -250,17 +322,63 @@ def verify_headshot(request, request_id):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
 
     try:
-        from .models import AppUser, AccessRequest
+        from .models import AppUser, AccessRequest, AccessRequestHeadshot
         reviewer = AppUser.objects.filter(email=(payload.get("email") or "").lower()).first()
         # Require manager/admin role and explicit permission
         if not reviewer or not _require_admin_or_manager(reviewer) or not _has_permission(reviewer, "verify.review"):
             return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
         ar = AccessRequest.objects.filter(id=request_id).first()
-        if not ar or not ar.headshot:
+        if not ar:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
-        f = ar.headshot.open("rb")
-        name = getattr(ar.headshot, "name", "headshot.jpg")
+
+        headshots = []
+        for shot in AccessRequestHeadshot.objects.filter(request_id=request_id).order_by("created_at"):
+            headshots.append({
+                "id": str(shot.id),
+                "position": shot.position or "",
+            })
+        return JsonResponse({"success": True, "data": headshots})
+    except Exception:
+        return JsonResponse({"success": False, "message": "Error"}, status=500)
+
+
+@require_http_methods(["GET"]) 
+def verify_headshot(request, request_id):
+    auth = request.META.get("HTTP_AUTHORIZATION", "")
+    if not auth.startswith("Bearer "):
+        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+    token = auth.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except Exception:
+        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    shot_id = (request.GET.get("shotId") or request.GET.get("headshotId") or "").strip()
+
+    try:
+        from .models import AppUser, AccessRequest, AccessRequestHeadshot
+        reviewer = AppUser.objects.filter(email=(payload.get("email") or "").lower()).first()
+        # Require manager/admin role and explicit permission
+        if not reviewer or not _require_admin_or_manager(reviewer) or not _has_permission(reviewer, "verify.review"):
+            return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+        ar = AccessRequest.objects.filter(id=request_id).first()
+        if not ar:
+            return JsonResponse({"success": False, "message": "Not found"}, status=404)
+
+        if shot_id:
+            shot = AccessRequestHeadshot.objects.filter(id=shot_id, request_id=request_id).first()
+            if not shot or not shot.image:
+                return JsonResponse({"success": False, "message": "Not found"}, status=404)
+            f = shot.image.open("rb")
+            name = getattr(shot.image, "name", "headshot.jpg")
+        else:
+            if not ar.headshot:
+                return JsonResponse({"success": False, "message": "Not found"}, status=404)
+            f = ar.headshot.open("rb")
+            name = getattr(ar.headshot, "name", "headshot.jpg")
+
         if name.endswith(".png"):
             ctype = "image/png"
         elif name.endswith(".webp"):
@@ -270,7 +388,6 @@ def verify_headshot(request, request_id):
         return FileResponse(f, content_type=ctype)
     except Exception:
         return JsonResponse({"success": False, "message": "Error"}, status=500)
-
 
 @require_http_methods(["POST"]) 
 def verify_approve(request):
@@ -407,6 +524,7 @@ def verify_reject(request):
 __all__.extend([
     "verify_resend_token",
     "verify_requests",
+    "verify_headshots",
     "verify_headshot",
     "verify_approve",
     "verify_reject",

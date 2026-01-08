@@ -9,11 +9,12 @@ class VerificationService {
     return res?.data || res;
   }
 
-  async uploadHeadshot({ verifyToken, imageData, consent = true }) {
+  async uploadHeadshot({ verifyToken, imageData, images, consent = true }) {
     if (!verifyToken) throw new Error('Missing verify token');
     const res = await apiClient.post('/verify/upload', {
       verifyToken,
       imageData,
+      images: Array.isArray(images) ? images : undefined,
       consent: Boolean(consent),
     });
     return res?.data || res;
@@ -44,6 +45,12 @@ class VerificationService {
       },
       createdAt: r.createdAt,
       hasHeadshot: Boolean(r.hasHeadshot),
+      headshotCount:
+        r?.headshotCount !== undefined
+          ? Number(r.headshotCount) || 0
+          : r.hasHeadshot
+            ? 1
+            : 0,
     }));
 
     return {
@@ -78,9 +85,20 @@ class VerificationService {
     return res?.data || res;
   }
 
-  async fetchHeadshotBlob(requestId) {
+  async listHeadshots(requestId) {
+    if (!requestId) throw new Error('Missing requestId');
+    const res = await apiClient.get(`/verify/headshots/${requestId}`);
+    const data = res?.data || res;
+    return data?.data || data || [];
+  }
+
+  async fetchHeadshotBlob(requestId, shotId) {
+    if (!requestId) throw new Error('Missing requestId');
+    const suffix = shotId
+      ? `?shotId=${encodeURIComponent(String(shotId))}`
+      : '';
     const response = await fetch(
-      `${apiClient.baseURL}/verify/headshot/${requestId}`,
+      `${apiClient.baseURL}/verify/headshot/${requestId}${suffix}`,
       {
         headers: {
           ...(apiClient.defaultHeaders || {}),

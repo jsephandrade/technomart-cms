@@ -62,6 +62,7 @@ urlpatterns = [
     path("verify/requests", verify_views.verify_requests, name="verify_requests"),
     path("verify/approve", verify_views.verify_approve, name="verify_approve"),
     path("verify/reject", verify_views.verify_reject, name="verify_reject"),
+    path("verify/headshots/<uuid:request_id>", verify_views.verify_headshots, name="verify_headshots"),
     path("verify/headshot/<uuid:request_id>", verify_views.verify_headshot, name="verify_headshot"),
 
     # Menu endpoints

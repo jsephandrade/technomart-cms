@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import MenuSelection from '@/components/pos/MenuSelection';
 import CurrentOrder from '@/components/pos/CurrentOrder';
 import OrderQueue from '@/components/pos/OrderQueue';
@@ -19,7 +20,13 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { formatOrderNumber } from '@/lib/utils';
-import { ListOrdered, Monitor, ShoppingCart } from 'lucide-react';
+import {
+  ListOrdered,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  ShoppingCart,
+} from 'lucide-react';
 
 const POS = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,6 +38,8 @@ const POS = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('pos');
   const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
+  const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(false);
+  const displayContainerRef = useRef(null);
 
   // Get data and business logic from custom hooks
   const { categories, orderQueue, setOrderQueue } = usePOSData();
@@ -187,6 +196,34 @@ const POS = () => {
     };
   }, [refreshQueue]);
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsDisplayFullscreen(
+        document.fullscreenElement === displayContainerRef.current
+      );
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () =>
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleToggleDisplayFullscreen = useCallback(async () => {
+    const container = displayContainerRef.current;
+    if (!container) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (container.requestFullscreen) {
+        await container.requestFullscreen();
+      }
+    } catch (error) {
+      console.error('Unable to toggle fullscreen mode.', error);
+    }
+  }, []);
+
+  const hideTabsList = isDisplayFullscreen && activeTab === 'display';
+
   return (
     <div className="space-y-4">
       <Tabs
@@ -194,20 +231,22 @@ const POS = () => {
         onValueChange={(value) => setActiveTab(value)}
         className="w-full"
       >
-        <TabsList className="w-full grid grid-cols-3">
-          <TabsTrigger value="pos" className="gap-2">
-            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Point of Sale</span>
-          </TabsTrigger>
-          <TabsTrigger value="queue" className="gap-2">
-            <ListOrdered className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Order Queue</span>
-          </TabsTrigger>
-          <TabsTrigger value="display" className="gap-2">
-            <Monitor className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Claim Monitor</span>
-          </TabsTrigger>
-        </TabsList>
+        {!hideTabsList && (
+          <TabsList className="w-full grid grid-cols-3">
+            <TabsTrigger value="pos" className="gap-2">
+              <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Point of Sale</span>
+            </TabsTrigger>
+            <TabsTrigger value="queue" className="gap-2">
+              <ListOrdered className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Order Queue</span>
+            </TabsTrigger>
+            <TabsTrigger value="display" className="gap-2">
+              <Monitor className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Claim Monitor</span>
+            </TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="pos">
           <div
@@ -256,7 +295,36 @@ const POS = () => {
         </TabsContent>
 
         <TabsContent value="display">
-          <CustomerDisplay queue={orderQueue} />
+          <div
+            ref={displayContainerRef}
+            className={`relative flex flex-col gap-3 ${
+              isDisplayFullscreen ? 'min-h-[100dvh] bg-background p-4' : ''
+            }`}
+          >
+            <div className="flex items-center justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full border border-border/60 bg-background/80"
+                onClick={handleToggleDisplayFullscreen}
+                aria-label={
+                  isDisplayFullscreen
+                    ? 'Exit claim monitor fullscreen'
+                    : 'Enter claim monitor fullscreen'
+                }
+              >
+                {isDisplayFullscreen ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <div className="flex-1">
+              <CustomerDisplay queue={orderQueue} />
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

@@ -20,6 +20,14 @@ import CameraCapture from '@/components/face-registration/CameraCapture';
 import verificationService from '@/api/services/verificationService';
 import { ShieldCheck, ArrowLeft } from 'lucide-react';
 
+const CAPTURE_POSITIONS = [
+  { name: 'Center', instruction: 'Look straight at the camera' },
+  { name: 'Left', instruction: 'Turn your head slightly left' },
+  { name: 'Right', instruction: 'Turn your head slightly right' },
+  { name: 'Up', instruction: 'Tilt your head slightly up' },
+  { name: 'Down', instruction: 'Tilt your head slightly down' },
+];
+
 const VerifyIdentityPage = () => {
   const navigate = useNavigate();
   const cameraRef = useRef(null);
@@ -29,7 +37,8 @@ const VerifyIdentityPage = () => {
   const [consent, setConsent] = useState(false);
   const [step, setStep] = useState('initial'); // initial | scanning | processing | done | error
   const [error, setError] = useState('');
-  const [imageData, setImageData] = useState('');
+  const [capturedImages, setCapturedImages] = useState([]);
+  const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
   const [countdown, setCountdown] = useState(0);
 
   useEffect(() => {
@@ -44,11 +53,12 @@ const VerifyIdentityPage = () => {
   }, []);
 
   const startCapture = async () => {
-    if (step === 'processing' || step === 'done') {
+    if (step === 'processing' || step === 'done' || step === 'scanning') {
       return;
     }
     setError('');
-    setImageData('');
+    setCapturedImages([]);
+    setCurrentPositionIndex(0);
     if (!consent) {
       setError('Please provide consent to proceed.');
       return;
@@ -94,18 +104,27 @@ const VerifyIdentityPage = () => {
 
       // brief warm-up before countdown
       await new Promise((resolve) => setTimeout(resolve, 500));
-      await runCountdown();
 
-      const shot = cameraRef.current?.captureImage(0);
+      const images = [];
+      for (let i = 0; i < CAPTURE_POSITIONS.length; i += 1) {
+        setCurrentPositionIndex(i);
+        await runCountdown();
+        const shot = cameraRef.current?.captureImage(i);
+        if (!shot?.data) throw new Error('Failed to capture image');
+        images.push(shot);
+        setCapturedImages([...images]);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+
       stopStream();
-
-      if (!shot?.data) throw new Error('Failed to capture image');
-      setImageData(shot.data);
       setStep('processing');
 
+      // Use the center shot as the stored headshot.
+      const [primaryShot] = images;
+      if (!primaryShot?.data) throw new Error('No images captured');
       const res = await verificationService.uploadHeadshot({
         verifyToken,
-        imageData: shot.data,
+        imageData: primaryShot.data,
         consent: true,
       });
       if (res?.success) {
@@ -172,9 +191,9 @@ const VerifyIdentityPage = () => {
                       ? 'processing'
                       : 'initial'
               }
-              currentPosition={{ instruction: 'Look straight at the camera' }}
-              capturedImages={imageData ? [{ data: imageData }] : []}
-              capturePositions={[{ name: 'Center' }]}
+              currentPosition={CAPTURE_POSITIONS[currentPositionIndex]}
+              capturedImages={capturedImages}
+              capturePositions={CAPTURE_POSITIONS}
               countdown={countdown}
             />
           </div>
@@ -189,15 +208,20 @@ const VerifyIdentityPage = () => {
             <Button
               variant="outline"
               onClick={() => navigate('/login')}
-              disabled={step === 'processing'}
+              disabled={step === 'processing' || step === 'scanning'}
             >
               Cancel
             </Button>
             <Button
               onClick={startCapture}
-              disabled={!consent || step === 'processing' || step === 'done'}
+              disabled={
+                !consent ||
+                step === 'processing' ||
+                step === 'done' ||
+                step === 'scanning'
+              }
             >
-              {step === 'processing' ? 'Submitting...' : 'Capture & Submit'}
+              {step === 'processing' ? 'Submitting...' : 'Start Capture'}
             </Button>
           </div>
 

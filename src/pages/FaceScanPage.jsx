@@ -205,7 +205,11 @@ const FaceScanPage = () => {
       stopStream();
 
       const res = await loginWithFace(dataUrl, { remember: true });
-      if (res?.success && !res?.pending) {
+      if (res?.rejected) {
+        setError('Your account request was rejected.');
+        setScanResult('failed');
+        setTimeout(() => navigate('/verify/rejected'), 1000);
+      } else if (res?.success && !res?.pending) {
         setScanResult('success');
         setTimeout(() => navigate('/'), 1000);
       } else if (res?.pending) {

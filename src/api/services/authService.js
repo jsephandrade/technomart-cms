@@ -51,6 +51,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       pending: Boolean(data?.pending ?? false),
+      rejected: Boolean(data?.rejected ?? false),
       user,
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
@@ -97,6 +98,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       pending: Boolean(data?.pending ?? false),
+      rejected: Boolean(data?.rejected ?? false),
       user,
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
@@ -209,6 +211,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       pending: Boolean(data?.pending ?? false),
+      rejected: Boolean(data?.rejected ?? false),
       user,
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,

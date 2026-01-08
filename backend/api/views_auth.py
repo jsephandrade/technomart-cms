@@ -18,6 +18,34 @@ import requests as _requests
 
 logger = logging.getLogger(__name__)
 INVALID_AUTH_MESSAGE = "Invalid email and password"
+REJECTED_LOGIN_MESSAGE = (
+    "Your account request was rejected. Please contact the admin."
+)
+
+
+def _is_rejected_email(email: str) -> bool:
+    if not email:
+        return False
+    try:
+        from .models import AuditLog
+
+        return AuditLog.objects.filter(
+            meta__verificationStatus="rejected",
+            meta__targetEmail=email,
+        ).exists()
+    except Exception:
+        return False
+
+
+def _rejected_login_response():
+    return JsonResponse(
+        {
+            "success": False,
+            "rejected": True,
+            "status": "rejected",
+            "message": REJECTED_LOGIN_MESSAGE,
+        }
+    )
 
 
 def _no_show_lock_response(locked_until):
@@ -289,6 +317,12 @@ def auth_login(request):
             # Pending or other non-active states: return pending without issuing tokens
             if status_l != "active":
                 try:
+                    ar = getattr(db_user, "access_request", None)
+                    if ar and ar.status == "rejected":
+                        return _rejected_login_response()
+                except Exception:
+                    pass
+                try:
                     vtok = _issue_verify_token_from_db(db_user)
                 except Exception:
                     vtok = None
@@ -445,6 +479,8 @@ def auth_login(request):
         return resp
 
     # Record failed attempt and maybe lock
+    if _is_rejected_email(email):
+        return _rejected_login_response()
     locked, retry_after = _lockout_check_and_touch(email, ip, success=False)
     if locked:
         try:
@@ -865,6 +901,8 @@ def auth_google(request):
     # Community best-practice: require verified email claim for Google sign-in
     if idinfo.get("email_verified") is False:
         return JsonResponse({"success": False, "message": "Google email not verified"}, status=401)
+    if _is_rejected_email(email):
+        return _rejected_login_response()
 
     try:
         from .models import AppUser, AccessRequest

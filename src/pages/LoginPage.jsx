@@ -176,6 +176,14 @@ const LoginPage = () => {
     setPending(true);
     try {
       const res = await login(email, password, { remember });
+      if (res?.rejected) {
+        sessionStorage.removeItem('login_pending_note');
+        sessionStorage.removeItem('verify_token');
+        sessionStorage.removeItem('pending_user');
+        navigate('/verify/rejected');
+        return;
+      }
+
       if (!res?.success) {
         applyAuthFailure(res);
         return;
@@ -233,6 +241,13 @@ const LoginPage = () => {
         const credential =
           provider === 'google-credential' ? payload : await signInWithGoogle();
         const res = await loginWithGoogle(credential, { remember });
+        if (res?.rejected) {
+          sessionStorage.removeItem('login_pending_note');
+          sessionStorage.removeItem('verify_token');
+          sessionStorage.removeItem('pending_user');
+          navigate('/verify/rejected');
+          return;
+        }
         if (!res?.success) throw new Error('Google login failed');
         if (
           res?.pending ||

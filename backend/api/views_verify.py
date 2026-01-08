@@ -4,6 +4,7 @@ import json
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
+from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils import timezone as dj_timezone
 import jwt
@@ -336,16 +337,32 @@ def verify_reject(request):
         ar = AccessRequest.objects.filter(id=request_id).select_related("user").first()
         if not ar:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
+        u = ar.user
+        status_l = (u.status or "").lower()
+        if status_l == "pending":
+            ar_id = str(ar.id)
+            user_id = str(u.id)
+            try:
+                email_user_rejected(u, note)
+            except Exception:
+                pass
+            with transaction.atomic():
+                u.delete()
+            return JsonResponse({
+                "success": True,
+                "data": {
+                    "id": ar_id,
+                    "status": AccessRequest.STATUS_REJECTED,
+                    "userDeleted": True,
+                    "userId": user_id,
+                },
+            })
         ar.status = AccessRequest.STATUS_REJECTED
         ar.verified_at = dj_timezone.now()
         ar.verified_by = reviewer.email
         if note:
             ar.notes = (ar.notes or "") + ("\n" if ar.notes else "") + note
         ar.save()
-        u = ar.user
-        if (u.status or "").lower() != "active":
-            u.status = "pending"
-            u.save(update_fields=["status"])
         try:
             email_user_rejected(u, note)
         except Exception:

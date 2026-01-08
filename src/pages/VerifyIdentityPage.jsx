@@ -26,7 +26,6 @@ const VerifyIdentityPage = () => {
 
   const [pendingUser, setPendingUser] = useState(null);
   const [verifyToken, setVerifyToken] = useState('');
-  const [pendingNote, setPendingNote] = useState('');
   const [consent, setConsent] = useState(false);
   const [step, setStep] = useState('initial'); // initial | scanning | processing | done | error
   const [error, setError] = useState('');
@@ -40,10 +39,7 @@ const VerifyIdentityPage = () => {
       const note = sessionStorage.getItem('login_pending_note') || '';
       setVerifyToken(vt);
       setPendingUser(pu ? JSON.parse(pu) : null);
-      if (note) {
-        setPendingNote(note);
-        sessionStorage.removeItem('login_pending_note');
-      }
+      if (note) sessionStorage.removeItem('login_pending_note');
     } catch {}
   }, []);
 
@@ -148,11 +144,6 @@ const VerifyIdentityPage = () => {
               to="/login"
               className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              {pendingNote ? (
-                <Alert>
-                  <AlertDescription>{pendingNote}</AlertDescription>
-                </Alert>
-              ) : null}
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Login
             </Link>
           </div>

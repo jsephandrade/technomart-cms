@@ -44,14 +44,19 @@ import {
 import UserManagementCard, {
   UserManagementCardDecor,
 } from './UserManagementCard';
+import { UsersSearch } from './UsersSearch';
+import { useDebouncedValue } from '@/hooks/useDebounce';
 
 const AUTO_REFRESH_INTERVAL = 20_000;
 
 export const PendingVerifications = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebouncedValue(searchTerm, 350);
   const { requests, pagination, loading, error, refetch, approve, reject } =
     useVerificationQueue({
       status: 'pending',
       limit: 10,
+      search: debouncedSearch,
     });
   const [previewId, setPreviewId] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -127,9 +132,18 @@ export const PendingVerifications = () => {
       }
       contentClassName="space-y-4"
     >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="w-full sm:max-w-xs">
+          <UsersSearch
+            searchTerm={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search pending..."
+          />
+        </div>
+      </div>
       {loading ? (
         <TableSkeleton
-          headers={['User', 'Contact', 'Submitted', 'Headshot', 'Actions']}
+          headers={['User', 'Submitted', 'Headshot', 'Actions']}
           rows={5}
         />
       ) : error ? (
@@ -147,7 +161,6 @@ export const PendingVerifications = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead>Contact</TableHead>
                 <TableHead>Submitted</TableHead>
                 <TableHead>Headshot</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -172,9 +185,6 @@ export const PendingVerifications = () => {
                         </div>
                       </div>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">{req.user?.phone || 'N/A'}</div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">

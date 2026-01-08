@@ -28,6 +28,9 @@ const VerifyIdentityPage = lazy(() => import('../../pages/VerifyIdentityPage'));
 const VerifyIdentityPendingPage = lazy(
   () => import('../../pages/VerifyIdentityPendingPage')
 );
+const VerifyIdentityRejectedPage = lazy(
+  () => import('../../pages/VerifyIdentityRejectedPage')
+);
 const VerifyEmailPage = lazy(() => import('../../pages/VerifyEmailPage'));
 const NotFound = lazy(() => import('../../pages/NotFound'));
 import HelpPage from '../../pages/HelpPage';
@@ -128,6 +131,7 @@ const AppRoutes = () => {
         '/face-registration': 'Face Registration',
         '/verify': 'Verify Identity',
         '/verify/pending-confirmation': 'Verification Pending',
+        '/verify/rejected': 'Verification Rejected',
         '/verify-email': 'Verify Email',
         '/menu': 'Menu Management',
         '/analytics': 'Analytics',
@@ -251,6 +255,14 @@ const AppRoutes = () => {
             element={
               <PublicRoute>
                 <VerifyIdentityPendingPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/verify/rejected"
+            element={
+              <PublicRoute>
+                <VerifyIdentityRejectedPage />
               </PublicRoute>
             }
           />

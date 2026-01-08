@@ -28,6 +28,7 @@ from .emails import (
     email_user_approved,
     email_user_rejected,
 )
+from .utils_audit import record_audit
 
 
 @require_http_methods(["GET"]) 
@@ -46,12 +47,27 @@ def verify_status(request):
             token = ""
     payload = _decode_verify_token(token)
     if not payload:
+        payload = _decode_verify_token_ignore_exp(token)
+    if not payload:
         return JsonResponse({"success": False, "message": "Invalid token"}, status=401)
     email = (payload.get("email") or "").lower().strip()
     try:
-        from .models import AppUser, AccessRequest
+        from .models import AppUser, AccessRequest, AuditLog
         u = AppUser.objects.filter(email=email).first()
         if not u:
+            try:
+                rejected = (
+                    AuditLog.objects.filter(
+                        meta__verificationStatus="rejected",
+                        meta__targetEmail=email,
+                    )
+                    .order_by("-created_at")
+                    .first()
+                )
+                if rejected:
+                    return JsonResponse({"success": True, "status": "rejected"})
+            except Exception:
+                pass
             return JsonResponse({"success": False, "message": "Invalid token"}, status=401)
         ar = getattr(u, "access_request", None)
         if not ar:
@@ -344,6 +360,22 @@ def verify_reject(request):
             user_id = str(u.id)
             try:
                 email_user_rejected(u, note)
+            except Exception:
+                pass
+            try:
+                record_audit(
+                    request,
+                    actor_email=reviewer.email,
+                    type="action",
+                    action="Verification rejected",
+                    details=note or "",
+                    severity="info",
+                    meta={
+                        "requestId": ar_id,
+                        "targetEmail": (u.email or "").lower().strip(),
+                        "verificationStatus": "rejected",
+                    },
+                )
             except Exception:
                 pass
             with transaction.atomic():

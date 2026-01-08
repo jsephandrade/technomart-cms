@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import PageTransition from '@/components/PageTransition';
 import AuthCard from '@/components/auth/AuthCard';
 import AuthPageShell, {
@@ -6,8 +7,32 @@ import AuthPageShell, {
 } from '@/components/auth/AuthPageShell';
 import AuthBrandIntro from '@/components/auth/AuthBrandIntro';
 import { Button } from '@/components/ui/button';
+import verificationService from '@/api/services/verificationService';
 
 const VerifyIdentityPendingPage = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const verifyToken = sessionStorage.getItem('verify_token') || '';
+    if (!verifyToken) return;
+    let active = true;
+
+    const checkStatus = async () => {
+      try {
+        const res = await verificationService.getStatus(verifyToken);
+        if (!active) return;
+        if (res?.status === 'rejected') {
+          navigate('/verify/rejected', { replace: true });
+        }
+      } catch {}
+    };
+
+    checkStatus();
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+
   const formContent = (
     <AuthCard
       title="Verification Pending"

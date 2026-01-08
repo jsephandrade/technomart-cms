@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import PageTransition from '@/components/PageTransition';
 import AuthCard from '@/components/auth/AuthCard';
 import AuthPageShell, {
@@ -7,41 +6,18 @@ import AuthPageShell, {
 } from '@/components/auth/AuthPageShell';
 import AuthBrandIntro from '@/components/auth/AuthBrandIntro';
 import { Button } from '@/components/ui/button';
-import verificationService from '@/api/services/verificationService';
 
-const StillPendingPage = () => {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const verifyToken = sessionStorage.getItem('verify_token') || '';
-    if (!verifyToken) return;
-    let active = true;
-
-    const checkStatus = async () => {
-      try {
-        const res = await verificationService.getStatus(verifyToken);
-        if (!active) return;
-        if (res?.status === 'rejected') {
-          navigate('/verify/rejected', { replace: true });
-        }
-      } catch {}
-    };
-
-    checkStatus();
-    return () => {
-      active = false;
-    };
-  }, [navigate]);
-
+const VerifyIdentityRejectedPage = () => {
   const formContent = (
     <AuthCard
-      title="Approval Pending"
+      title="Verification Rejected"
       compact
       className="!max-w-full sm:!max-w-md lg:!max-w-lg"
       cardClassName="shadow-2xl lg:p-8"
     >
-      <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-        Your account is still pending for approval. Please check back soon.
+      <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+        Your verification request was not approved. If you believe this is a
+        mistake, please contact your administrator before trying again.
       </p>
       <Button asChild className="w-full">
         <Link to="/login">Go back to Login</Link>
@@ -51,8 +27,8 @@ const StillPendingPage = () => {
 
   const introContent = (
     <AuthBrandIntro
-      title="Approval in progress"
-      description="Thanks for your patience. Our team is reviewing your account."
+      title="Request not approved"
+      description="We were unable to verify your account at this time."
       className="w-full max-w-xl px-3 sm:px-6 lg:px-8"
       contentClassName="space-y-1 sm:space-y-3 text-center sm:text-left"
       titleClassName="text-[20px] sm:text-4xl"
@@ -73,4 +49,4 @@ const StillPendingPage = () => {
   );
 };
 
-export default StillPendingPage;
+export default VerifyIdentityRejectedPage;

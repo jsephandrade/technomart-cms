@@ -10,9 +10,11 @@ const StatsCard = ({
   comparisonPeriod, // 'yesterday' | 'last month' | etc
   icon: Icon,
   formatter = (v) => v,
+  detail,
   onClick,
 }) => {
   const clickable = typeof onClick === 'function';
+  const hasDetail = detail !== undefined && detail !== null && detail !== '';
 
   return (
     <Card
@@ -80,6 +82,10 @@ const StatsCard = ({
               </span>
             )}
           </div>
+        )}
+
+        {hasDetail && (
+          <div className="mt-2 text-xs text-muted-foreground">{detail}</div>
         )}
       </CardContent>
     </Card>

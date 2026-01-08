@@ -22,30 +22,19 @@ import {
   TableBody,
   TableCell,
 } from '@/components/ui/table';
-import {
-  Check,
-  X,
-  Image as ImageIcon,
-  MoreVertical,
-  ClipboardList,
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
+import { Check, X, Image as ImageIcon, ClipboardList } from 'lucide-react';
 import UserManagementCard, {
   UserManagementCardDecor,
 } from './UserManagementCard';
 import { UsersSearch } from './UsersSearch';
 import { useDebouncedValue } from '@/hooks/useDebounce';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 
 const AUTO_REFRESH_INTERVAL = 20_000;
 
@@ -62,7 +51,9 @@ export const PendingVerifications = () => {
   const [previewShots, setPreviewShots] = useState([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
-  const [approveId, setApproveId] = useState(null);
+  const [approveTarget, setApproveTarget] = useState(null);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState(null);
   const [role, setRole] = useState('staff');
 
   useEffect(() => {
@@ -146,14 +137,43 @@ export const PendingVerifications = () => {
     setPreviewLoading(false);
   };
 
+  const openApproveConfirm = (req) => {
+    setRole('staff');
+    setApproveTarget(req);
+    setShowRoleModal(false);
+  };
+
+  const closeApproveFlow = () => {
+    setApproveTarget(null);
+    setShowRoleModal(false);
+  };
+
+  const confirmApprove = () => {
+    if (!approveTarget) return;
+    setShowRoleModal(true);
+  };
+
   const onApprove = async () => {
-    if (!approveId) return;
-    await approve.mutateAsync({ requestId: approveId, role });
-    setApproveId(null);
+    if (!approveTarget) return;
+    await approve.mutateAsync({ requestId: approveTarget.id, role });
+    closeApproveFlow();
   };
-  const onRejectRow = async (id) => {
-    await reject.mutateAsync({ requestId: id, note: '' });
+
+  const onRejectRow = (req) => {
+    setRejectTarget(req);
   };
+
+  const confirmReject = async () => {
+    if (!rejectTarget) return;
+    await reject.mutateAsync({ requestId: rejectTarget.id, note: '' });
+    setRejectTarget(null);
+  };
+
+  const approveTargetName =
+    approveTarget?.user?.name || approveTarget?.user?.email || 'this user';
+
+  const rejectTargetName =
+    rejectTarget?.user?.name || rejectTarget?.user?.email || 'this user';
 
   return (
     <UserManagementCard
@@ -245,54 +265,24 @@ export const PendingVerifications = () => {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 p-0"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            Assign Role
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent>
-                            <DropdownMenuRadioGroup
-                              value={role}
-                              onValueChange={setRole}
-                            >
-                              <DropdownMenuRadioItem value="staff">
-                                Staff
-                              </DropdownMenuRadioItem>
-                              <DropdownMenuRadioItem value="faculty">
-                                Faculty
-                              </DropdownMenuRadioItem>
-                              <DropdownMenuRadioItem value="customer">
-                                Customer
-                              </DropdownMenuRadioItem>
-                              <DropdownMenuRadioItem value="manager">
-                                Manager
-                              </DropdownMenuRadioItem>
-                              <DropdownMenuRadioItem value="admin">
-                                Admin
-                              </DropdownMenuRadioItem>
-                            </DropdownMenuRadioGroup>
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setApproveId(req.id)}>
-                          <Check className="h-4 w-4 mr-2" /> Approve
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onRejectRow(req.id)}>
-                          <X className="h-4 w-4 mr-2" /> Reject
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                        onClick={() => openApproveConfirm(req)}
+                      >
+                        <Check className="h-4 w-4" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => onRejectRow(req)}
+                      >
+                        <X className="h-4 w-4" />
+                        Reject
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -303,22 +293,88 @@ export const PendingVerifications = () => {
 
       {/* Approve confirmation dialog */}
       <Dialog
-        open={Boolean(approveId)}
-        onOpenChange={(v) => !v && setApproveId(null)}
+        open={Boolean(approveTarget) && !showRoleModal}
+        onOpenChange={(v) => !v && closeApproveFlow()}
       >
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>Approve Account</DialogTitle>
             <DialogDescription>
-              Are you sure you want to approve this account?
+              Are you sure you want to approve {approveTargetName}?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setApproveId(null)}>
+            <Button variant="outline" onClick={closeApproveFlow}>
+              Cancel
+            </Button>
+            <Button onClick={confirmApprove} disabled={approve.isPending}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Role selection dialog */}
+      <Dialog
+        open={Boolean(approveTarget) && showRoleModal}
+        onOpenChange={(v) => !v && closeApproveFlow()}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>
+              Select a role for this {approveTargetName}
+            </DialogTitle>
+            <DialogDescription>
+              Choose the role to assign before approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="staff">Staff</SelectItem>
+                <SelectItem value="faculty">Faculty</SelectItem>
+                <SelectItem value="customer">Customer</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={closeApproveFlow}>
               Cancel
             </Button>
             <Button onClick={onApprove} disabled={approve.isPending}>
               Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject confirmation dialog */}
+      <Dialog
+        open={Boolean(rejectTarget)}
+        onOpenChange={(v) => !v && setRejectTarget(null)}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Reject Account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to reject {rejectTargetName}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmReject}
+              disabled={reject.isPending}
+            >
+              Reject
             </Button>
           </DialogFooter>
         </DialogContent>

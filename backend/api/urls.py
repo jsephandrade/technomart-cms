@@ -169,8 +169,15 @@ urlpatterns = [
     path("inventory/ledger", inv_views.inventory_ledger, name="inventory_ledger"),
 
     # Catering events
+    path("catering/packages", catering_views.catering_packages, name="catering_packages"),
+    path("catering/packages/<uuid:package_id>", catering_views.catering_package_detail, name="catering_package_detail"),
     path("catering/events", catering_views.catering_events, name="catering_events"),
     path("catering/events/<uuid:event_id>", catering_views.catering_event_detail, name="catering_event_detail"),
+    path(
+        "catering/events/<uuid:event_id>/package",
+        catering_views.catering_event_package,
+        name="catering_event_package",
+    ),
     path(
         "catering/events/<uuid:event_id>/menu-items",
         catering_views.catering_event_menu_items,

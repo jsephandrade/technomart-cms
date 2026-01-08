@@ -405,6 +405,28 @@ export const fetchMenuItemsByCategory = async (category) => {
 };
 
 // --------------------
+// Catering Packages
+// --------------------
+export const fetchCateringPackages = async () => {
+  try {
+    const token = await getValidToken();
+    if (!token) throw new Error('No valid token. Please log in again.');
+    const res = await api.get('/catering/packages', {
+      params: { includeItems: true, active: true },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = res?.data?.data ?? res?.data;
+    return Array.isArray(payload) ? payload : [];
+  } catch (err) {
+    console.error(
+      'fetchCateringPackages error:',
+      err.response?.data || err.message
+    );
+    return [];
+  }
+};
+
+// --------------------
 // Notifications
 // --------------------
 const normalizeNotificationsPayload = (payload) => {
@@ -1009,16 +1031,26 @@ export const fetchCateringEvents = async (clientName) => {
     else return [];
 
     // 🔥 Compute total price per event
-    const updatedEvents = events.map((event) => ({
-      ...event,
-      total_price: Array.isArray(event.items)
+    const updatedEvents = events.map((event) => {
+      const estimatedTotal = Number(
+        event.estimated_total ??
+          event.estimatedTotal ??
+          event.total ??
+          event.total_price ??
+          0
+      );
+      const fallbackTotal = Array.isArray(event.items)
         ? event.items.reduce(
             (sum, item) =>
               sum + (item.unit_price || item.price || 0) * (item.quantity || 0),
             0
           )
-        : 0,
-    }));
+        : 0;
+      return {
+        ...event,
+        total_price: estimatedTotal || fallbackTotal,
+      };
+    });
 
     return updatedEvents;
   } catch (err) {

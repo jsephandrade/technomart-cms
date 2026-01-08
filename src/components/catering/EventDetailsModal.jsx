@@ -960,7 +960,8 @@ export const EventDetailsModal = ({
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
                       {remainingDue <= 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Payment is complete. Add menu items to reopen payment.
+                          Payment is complete. Update the package to reopen
+                          payment.
                         </p>
                       ) : null}
                       <Button

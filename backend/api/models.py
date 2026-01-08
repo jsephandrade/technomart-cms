@@ -995,6 +995,66 @@ class MenuItem(models.Model):
 
 
 # -----------------------------
+# Catering Packages
+# -----------------------------
+
+
+class CateringPackage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    price_per_pax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    min_pax = models.PositiveIntegerField(default=1)
+    max_pax = models.PositiveIntegerField(blank=True, null=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "catering_package"
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["active"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CateringPackageItem(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    package = models.ForeignKey(
+        CateringPackage,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    menu_item = models.ForeignKey(
+        MenuItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="catering_package_items",
+    )
+    name = models.CharField(max_length=255)
+    quantity_per_pax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    notes = models.CharField(max_length=255, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "catering_package_item"
+        indexes = [
+            models.Index(fields=["package"]),
+            models.Index(fields=["menu_item"]),
+        ]
+        ordering = ["sort_order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.package.name}: {self.name}"
+
+
+# -----------------------------
 # Catering Events
 # -----------------------------
 
@@ -1023,6 +1083,16 @@ class CateringEvent(models.Model):
     end_time = models.TimeField(blank=True, null=True)
     location = models.CharField(max_length=255, blank=True)
     guest_count = models.PositiveIntegerField(default=0)
+    package = models.ForeignKey(
+        CateringPackage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    package_name = models.CharField(max_length=255, blank=True)
+    package_price_per_pax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    package_snapshot = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_SCHEDULED)
     notes = models.TextField(blank=True)
     estimated_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)

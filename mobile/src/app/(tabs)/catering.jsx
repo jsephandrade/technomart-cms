@@ -23,6 +23,7 @@ import { resolveImageSource } from '../../utils/image';
 import {
   USER_CACHE_KEY,
   fetchMenuItems,
+  fetchCateringPackages,
   createCateringEvent,
   fetchCateringEvents,
   updateCateringEventPayment,
@@ -236,6 +237,7 @@ export default function CateringTab() {
   const router = useRouter();
   const [cateringEvents, setCateringEvents] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [allowed, setAllowed] = useState(null);
@@ -263,7 +265,7 @@ export default function CateringTab() {
     contactName: '',
     contactPhone: '',
     notes: '',
-    selectedItems: [],
+    selectedPackageId: '',
   });
   const menuImageById = useMemo(() => {
     const map = new Map();
@@ -277,6 +279,13 @@ export default function CateringTab() {
     });
     return map;
   }, [menuItems]);
+  const selectedPackage = useMemo(() => {
+    const selectedId = scheduleForm.selectedPackageId;
+    if (!selectedId) return null;
+    return (packages || []).find(
+      (pkg) => String(pkg.id) === String(selectedId)
+    );
+  }, [packages, scheduleForm.selectedPackageId]);
 
   /* ------------------ Load Data ------------------ */
   const loadData = useCallback(async () => {
@@ -297,12 +306,10 @@ export default function CateringTab() {
       setScheduleForm((prev) => ({ ...prev, client: clientName }));
 
       const items = await fetchMenuItems();
-      setMenuItems(
-        (items && Array.isArray(items) ? items : []).map((i) => ({
-          ...i,
-          selectedQuantity: 1,
-        }))
-      );
+      setMenuItems(items && Array.isArray(items) ? items : []);
+
+      const packageList = await fetchCateringPackages();
+      setPackages(packageList && Array.isArray(packageList) ? packageList : []);
 
       const events = await fetchCateringEvents(clientName);
 
@@ -313,7 +320,13 @@ export default function CateringTab() {
         client_name: ev.client_name?.trim() || '',
         items: Array.isArray(ev.items) ? ev.items : [],
         total_price:
-          ev.total_price ??
+          Number(
+            ev.estimated_total ??
+              ev.estimatedTotal ??
+              ev.total ??
+              ev.total_price ??
+              0
+          ) ||
           (Array.isArray(ev.items)
             ? ev.items.reduce(
                 (sum, item) =>
@@ -354,25 +367,11 @@ export default function CateringTab() {
     setScheduleForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const toggleMenuItem = (itemId) => {
-    setScheduleForm((prev) => {
-      const exists = prev.selectedItems.includes(itemId);
-      return {
-        ...prev,
-        selectedItems: exists
-          ? prev.selectedItems.filter((id) => id !== itemId)
-          : [...prev.selectedItems, itemId],
-      };
-    });
-  };
-
-  const handleQuantityChange = (itemId, qty) => {
-    const nextQty = sanitizeNonNegativeInt(qty, 0);
-    setMenuItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId ? { ...i, selectedQuantity: nextQty } : i
-      )
-    );
+  const handleSelectPackage = (packageId) => {
+    setScheduleForm((prev) => ({
+      ...prev,
+      selectedPackageId: packageId,
+    }));
   };
 
   const closeScheduleModal = () => {
@@ -450,8 +449,13 @@ export default function CateringTab() {
       return;
     }
 
-    if (scheduleForm.selectedItems.length === 0) {
-      Alert.alert('Error', 'Please select at least one menu item.');
+    if (!scheduleForm.selectedPackageId) {
+      Alert.alert('Error', 'Please select a catering package.');
+      return;
+    }
+
+    if (!selectedPackage) {
+      Alert.alert('Error', 'Selected package not found.');
       return;
     }
 
@@ -465,28 +469,13 @@ export default function CateringTab() {
       return;
     }
 
-    const selectedItemsData = scheduleForm.selectedItems
-      .map((itemId) => menuItems.find((i) => i.id === itemId))
-      .filter(Boolean)
-      .map((item) => ({
-        menu_item: item.id,
-        name: item.name,
-        quantity: sanitizeNonNegativeInt(item.selectedQuantity, 0),
-        unit_price: item.price || 0,
-        notes: item.notes || '',
-        image: item.image || null,
-      }))
-      .filter((item) => item.quantity > 0);
-
-    if (selectedItemsData.length === 0) {
-      Alert.alert('Error', 'Please set a quantity for at least one item.');
+    const attendeeCount = sanitizeNonNegativeInt(scheduleForm.attendees, 0);
+    if (!attendeeCount) {
+      Alert.alert('Error', 'Please enter the number of attendees.');
       return;
     }
 
-    const totalPrice = selectedItemsData.reduce(
-      (sum, item) => sum + item.unit_price * item.quantity,
-      0
-    );
+    const totalPrice = Number(selectedPackage.pricePerPax || 0) * attendeeCount;
 
     const startTime = to24Hour(scheduleForm.startTime);
     const endTime = to24Hour(scheduleForm.endTime);
@@ -510,9 +499,9 @@ export default function CateringTab() {
         start_time: startTime,
         end_time: endTime,
         location: scheduleForm.location,
-        guest_count: Number(scheduleForm.attendees),
+        guest_count: attendeeCount,
         notes: scheduleForm.notes,
-        items: selectedItemsData,
+        package: scheduleForm.selectedPackageId,
         estimated_total: totalPrice,
         deposit_amount: paidAmount,
         deposit_paid: true,
@@ -529,6 +518,8 @@ export default function CateringTab() {
       const localEvent = {
         id: Date.now(),
         ...payload,
+        package_name: selectedPackage.name,
+        package_price_per_pax: selectedPackage.pricePerPax || 0,
         total_price: totalPrice,
         paid_amount: paidAmount,
       };
@@ -557,7 +548,7 @@ export default function CateringTab() {
         contactName: '',
         contactPhone: '',
         notes: '',
-        selectedItems: [],
+        selectedPackageId: '',
       }));
     } catch (err) {
       console.error(err);
@@ -656,14 +647,9 @@ export default function CateringTab() {
     eventTab === 'upcoming'
       ? 'Schedule a new catering event to get started.'
       : 'Your completed events will appear here.';
-  const selectedMenuItems = scheduleForm.selectedItems
-    .map((itemId) => menuItems.find((item) => item.id === itemId))
-    .filter(Boolean);
-  const currentTotal = selectedMenuItems.reduce((sum, item) => {
-    const price = Number(item.price || 0);
-    const qty = sanitizeNonNegativeInt(item.selectedQuantity, 0);
-    return sum + price * qty;
-  }, 0);
+  const guestCount = sanitizeNonNegativeInt(scheduleForm.attendees, 0);
+  const packagePrice = Number(selectedPackage?.pricePerPax || 0);
+  const currentTotal = selectedPackage ? packagePrice * guestCount : 0;
   const downPaymentAmount = currentTotal * 0.5;
   const paymentDue =
     paymentType === 'full'
@@ -722,7 +708,7 @@ export default function CateringTab() {
               Schedule New Catering Event
             </Text>
             <Text style={styles.primaryActionSubtitle}>
-              Reserve a date, menu, and guest count.
+              Reserve a date, package, and guest count.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -843,7 +829,7 @@ export default function CateringTab() {
                     color="#9A3412"
                   />
                   <Text style={styles.eventMetaText}>
-                    {itemCount} menu item{itemCount === 1 ? '' : 's'}
+                    {itemCount} package item{itemCount === 1 ? '' : 's'}
                   </Text>
                 </View>
 
@@ -899,9 +885,21 @@ export default function CateringTab() {
                         {paymentStatus || (paidAmount ? 'partial' : 'unpaid')}
                       </Text>
                     </View>
+                    <View style={styles.detailsRow}>
+                      <Text style={styles.detailsLabel}>Package</Text>
+                      <Text style={styles.detailsValue}>
+                        {event.package_name ||
+                          event.packageName ||
+                          event.package_id ||
+                          event.packageId ||
+                          '—'}
+                      </Text>
+                    </View>
 
                     <View style={styles.detailsDivider} />
-                    <Text style={styles.detailsSectionTitle}>Menu Items</Text>
+                    <Text style={styles.detailsSectionTitle}>
+                      Package Items
+                    </Text>
                     {Array.isArray(event.items) && event.items.length ? (
                       event.items.map((item, idx) => {
                         const matchedMenu = resolveMenuItemMatch(item);
@@ -917,6 +915,14 @@ export default function CateringTab() {
                         const imageSource = resolveImageSource(
                           resolveItemImage(baseItem)
                         );
+                        const lineTotal =
+                          Number(item.unit_price || 0) *
+                          Number(item.quantity || 0);
+                        const hasPackage =
+                          event.package_name ||
+                          event.packageName ||
+                          event.package_id ||
+                          event.packageId;
                         return (
                           <View
                             key={`${item.id || idx}`}
@@ -961,25 +967,23 @@ export default function CateringTab() {
                                 style={styles.detailsMenuName}
                                 numberOfLines={1}
                               >
-                                {item.name || baseItem.name || 'Menu item'}
+                                {item.name || baseItem.name || 'Package item'}
                               </Text>
                               <Text style={styles.detailsMenuMeta}>
                                 Qty: {item.quantity || 0}
                               </Text>
                             </View>
                             <Text style={styles.detailsMenuPrice}>
-                              ₱
-                              {(
-                                Number(item.unit_price || 0) *
-                                Number(item.quantity || 0)
-                              ).toLocaleString()}
+                              {lineTotal > 0 || !hasPackage
+                                ? formatPeso(lineTotal)
+                                : 'Included'}
                             </Text>
                           </View>
                         );
                       })
                     ) : (
                       <Text style={styles.detailsEmptyText}>
-                        No menu items added.
+                        No package items added.
                       </Text>
                     )}
                   </View>
@@ -1134,130 +1138,86 @@ export default function CateringTab() {
                   onChange={(v) => handleInputChange('notes', v)}
                 />
 
-                <Text style={styles.menuTitle}>Select Menu Items</Text>
-                <View style={styles.menuGrid}>
-                  {menuItems?.map((item) => {
-                    const selected = scheduleForm.selectedItems.includes(
-                      item.id
-                    );
-                    const combo = isComboItem(item);
-                    const collageImages = combo
-                      ? resolveComboImages(item, menuImageById).slice(0, 3)
-                      : [];
-                    const showCollage = collageImages.length === 3;
-                    const imageSource = resolveImageSource(
-                      resolveItemImage(item)
-                    );
-                    return (
-                      <View
-                        key={item.id}
-                        style={[
-                          styles.menuCard,
-                          selected && styles.menuCardSelected,
-                        ]}
-                      >
+                <Text style={styles.menuTitle}>Select Package</Text>
+                <View style={styles.packageList}>
+                  {packages?.length ? (
+                    packages.map((pkg) => {
+                      const selected =
+                        String(scheduleForm.selectedPackageId) ===
+                        String(pkg.id);
+                      const items = Array.isArray(pkg.items) ? pkg.items : [];
+                      const visibleItems = items.slice(0, 4);
+                      const extraCount = Math.max(
+                        0,
+                        items.length - visibleItems.length
+                      );
+                      return (
                         <TouchableOpacity
-                          onPress={() => toggleMenuItem(item.id)}
+                          key={pkg.id}
+                          style={[
+                            styles.packageCard,
+                            selected && styles.packageCardSelected,
+                          ]}
+                          onPress={() => handleSelectPackage(pkg.id)}
                         >
-                          {showCollage ? (
-                            <View style={styles.menuCollage}>
-                              <View style={styles.menuCollageMain}>
-                                <Image
-                                  source={{ uri: collageImages[0] }}
-                                  style={styles.menuCollageImage}
-                                />
-                              </View>
-                              <View style={styles.menuCollageSide}>
+                          <View style={styles.packageCardHeader}>
+                            <Text style={styles.packageName}>{pkg.name}</Text>
+                            <Text style={styles.packagePrice}>
+                              {formatPeso(pkg.pricePerPax)} / pax
+                            </Text>
+                          </View>
+                          {pkg.description ? (
+                            <Text style={styles.packageDescription}>
+                              {pkg.description}
+                            </Text>
+                          ) : null}
+                          <View style={styles.packageMetaRow}>
+                            <Text style={styles.packageMetaText}>
+                              Min {pkg.minPax || 1} pax
+                            </Text>
+                            {pkg.maxPax ? (
+                              <Text style={styles.packageMetaText}>
+                                Max {pkg.maxPax} pax
+                              </Text>
+                            ) : null}
+                          </View>
+                          {items.length ? (
+                            <View style={styles.packageItemsList}>
+                              {visibleItems.map((item) => (
                                 <View
-                                  style={[
-                                    styles.menuCollageTile,
-                                    styles.menuCollageTileTop,
-                                  ]}
+                                  key={item.id || item.name}
+                                  style={styles.packageItemRow}
                                 >
-                                  <Image
-                                    source={{ uri: collageImages[1] }}
-                                    style={styles.menuCollageImage}
-                                  />
+                                  <Text
+                                    style={styles.packageItemName}
+                                    numberOfLines={1}
+                                  >
+                                    {item.name}
+                                  </Text>
+                                  <Text style={styles.packageItemQty}>
+                                    {item.quantityPerPax} / pax
+                                  </Text>
                                 </View>
-                                <View style={styles.menuCollageTile}>
-                                  <Image
-                                    source={{ uri: collageImages[2] }}
-                                    style={styles.menuCollageImage}
-                                  />
-                                </View>
-                              </View>
+                              ))}
+                              {extraCount > 0 ? (
+                                <Text style={styles.packageExtraText}>
+                                  +{extraCount} more items
+                                </Text>
+                              ) : null}
                             </View>
                           ) : (
-                            <Image
-                              source={imageSource}
-                              style={styles.menuImage}
-                            />
+                            <Text style={styles.packageEmptyText}>
+                              No items listed yet.
+                            </Text>
                           )}
-                          <Text
-                            style={[
-                              styles.menuCardText,
-                              selected && styles.menuCardTextSelected,
-                            ]}
-                          >
-                            {item.name}
-                          </Text>
                         </TouchableOpacity>
-                        {selected && (
-                          <View style={styles.qtyRow}>
-                            <Text style={styles.qtyLabel}>Qty</Text>
-                            <View style={styles.qtyControls}>
-                              <TouchableOpacity
-                                style={[
-                                  styles.qtyButton,
-                                  sanitizeNonNegativeInt(
-                                    item.selectedQuantity,
-                                    0
-                                  ) === 0 && styles.qtyButtonDisabled,
-                                ]}
-                                onPress={() =>
-                                  handleQuantityChange(
-                                    item.id,
-                                    sanitizeNonNegativeInt(
-                                      item.selectedQuantity,
-                                      0
-                                    ) - 1
-                                  )
-                                }
-                                disabled={
-                                  sanitizeNonNegativeInt(
-                                    item.selectedQuantity,
-                                    0
-                                  ) === 0
-                                }
-                              >
-                                <Text style={styles.qtyButtonText}>-</Text>
-                              </TouchableOpacity>
-                              <Text style={styles.qtyValue}>
-                                {sanitizeNonNegativeInt(
-                                  item.selectedQuantity,
-                                  0
-                                )}
-                              </Text>
-                              <TouchableOpacity
-                                style={styles.qtyButton}
-                                onPress={() =>
-                                  handleQuantityChange(
-                                    item.id,
-                                    sanitizeNonNegativeInt(
-                                      item.selectedQuantity,
-                                      0
-                                    ) + 1
-                                  )
-                                }
-                              >
-                                <Text style={styles.qtyButtonText}>+</Text>
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    <Text style={styles.packageEmptyText}>
+                      No packages available.
+                    </Text>
+                  )}
                 </View>
 
                 <View style={styles.paymentSummary}>
@@ -1758,6 +1718,79 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginTop: 14,
     marginBottom: 8,
+  },
+  packageList: {
+    gap: 12,
+  },
+  packageCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+  },
+  packageCardSelected: {
+    borderColor: '#F97316',
+    backgroundColor: '#FFFCF7',
+  },
+  packageCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  packageName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+    marginRight: 8,
+  },
+  packagePrice: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  packageDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 6,
+  },
+  packageMetaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  packageMetaText: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  packageItemsList: {
+    marginTop: 10,
+    gap: 6,
+  },
+  packageItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  packageItemName: {
+    fontSize: 12,
+    color: '#111827',
+    flex: 1,
+    marginRight: 8,
+  },
+  packageItemQty: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  packageExtraText: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  packageEmptyText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   menuGrid: {
     flexDirection: 'row',

@@ -280,7 +280,6 @@ export const PendingVerifications = () => {
                         onClick={() => onRejectRow(req)}
                       >
                         <X className="h-4 w-4" />
-                        Reject
                       </Button>
                     </div>
                   </TableCell>

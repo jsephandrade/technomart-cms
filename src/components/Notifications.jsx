@@ -9,7 +9,11 @@ import { Separator } from '@/components/ui/separator';
 import { createRealtime } from '@/lib/realtime';
 import { notificationsService } from '@/api/services/notificationsService';
 import { subscribePush, unsubscribePush } from '@/lib/push';
+import { useAuth } from '@/components/AuthContext';
 const Notifications = () => {
+  const { hasAnyRole } = useAuth();
+  const isAdmin = hasAnyRole(['admin']);
+  const scope = isAdmin ? 'admin' : undefined;
   const [notifications, setNotifications] = useState([]);
   const [settings, setSettings] = useState({
     emailEnabled: true,
@@ -36,7 +40,10 @@ const Notifications = () => {
 
   const refreshList = async () => {
     try {
-      const res = await notificationsService.getRecent(100);
+      const res = await notificationsService.getRecent({
+        limit: 100,
+        scope,
+      });
       const list = (res?.data || []).map((n) => ({
         id: n.id,
         title: n.title,
@@ -226,42 +233,50 @@ const Notifications = () => {
       </div>
       <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <Label>Low Stock Alerts</Label>
-          <p className="text-xs text-muted-foreground">When inventory is low</p>
-        </div>
-        <Switch
-          checked={settings.lowStock}
-          onCheckedChange={() => handleSettingChange('lowStock')}
-        />
-      </div>
-      <Separator />
+      {!isAdmin && (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Low Stock Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                When inventory is low
+              </p>
+            </div>
+            <Switch
+              checked={settings.lowStock}
+              onCheckedChange={() => handleSettingChange('lowStock')}
+            />
+          </div>
+          <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <Label>Order Alerts</Label>
-          <p className="text-xs text-muted-foreground">
-            New and updated orders
-          </p>
-        </div>
-        <Switch
-          checked={settings.order}
-          onCheckedChange={() => handleSettingChange('order')}
-        />
-      </div>
-      <Separator />
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Order Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                New and updated orders
+              </p>
+            </div>
+            <Switch
+              checked={settings.order}
+              onCheckedChange={() => handleSettingChange('order')}
+            />
+          </div>
+          <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <Label>Payment Alerts</Label>
-          <p className="text-xs text-muted-foreground">Payment confirmations</p>
-        </div>
-        <Switch
-          checked={settings.payment}
-          onCheckedChange={() => handleSettingChange('payment')}
-        />
-      </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Payment Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                Payment confirmations
+              </p>
+            </div>
+            <Switch
+              checked={settings.payment}
+              onCheckedChange={() => handleSettingChange('payment')}
+            />
+          </div>
+        </>
+      )}
     </>
   );
 

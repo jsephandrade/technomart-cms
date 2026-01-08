@@ -1,6 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { notificationsService } from '@/api/services/notificationsService';
 import { createRealtime } from '@/lib/realtime';
+import { useAuth } from '@/components/AuthContext';
+
+const ADMIN_NOTIFICATION_EVENT_TYPES = new Set([
+  'new_user_registration',
+  'role_changed',
+  'verification_submitted',
+  'verification_approved',
+  'verification_rejected',
+  'system_maintenance',
+  'backup_completed',
+  'backup_failed',
+  'test_notification',
+]);
 
 /**
  * Custom hook for managing notifications with real-time updates
@@ -11,6 +24,9 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { hasAnyRole } = useAuth();
+  const isAdmin = hasAnyRole(['admin']);
+  const scope = isAdmin ? 'admin' : undefined;
 
   // Polling fallback ref
   const pollRef = useRef(null);
@@ -21,44 +37,56 @@ export function useNotifications() {
    */
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const response = await notificationsService.getUnreadCount();
-      const count = response?.count ?? response?.data?.count ?? 0;
+      const response = await notificationsService.getUnreadCount({
+        scope,
+      });
+      const count =
+        response?.count ??
+        response?.data?.count ??
+        response?.data?.unreadCount ??
+        0;
       setUnreadCount(count);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch unread count:', err);
       setError(err.message || 'Failed to load notifications');
     }
-  }, []);
+  }, [scope]);
 
   /**
    * Fetch recent notifications list
    */
-  const fetchNotifications = useCallback(async (limit = 10) => {
-    try {
-      setLoading(true);
-      const response = await notificationsService.getRecent(limit);
-      const list = response?.data || [];
+  const fetchNotifications = useCallback(
+    async (limit = 10) => {
+      try {
+        setLoading(true);
+        const response = await notificationsService.getRecent({
+          limit,
+          scope,
+        });
+        const list = response?.data || [];
 
-      // Format notifications
-      const formatted = list.map((n) => ({
-        id: n.id,
-        title: n.title,
-        message: n.message,
-        createdAt: n.createdAt,
-        read: Boolean(n.read || n.isRead),
-        type: n.type || 'info',
-      }));
+        // Format notifications
+        const formatted = list.map((n) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          createdAt: n.createdAt,
+          read: Boolean(n.read || n.isRead),
+          type: n.type || 'info',
+        }));
 
-      setNotifications(formatted);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to fetch notifications:', err);
-      setError(err.message || 'Failed to load notifications');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        setNotifications(formatted);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch notifications:', err);
+        setError(err.message || 'Failed to load notifications');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope]
+  );
 
   /**
    * Mark a notification as read
@@ -149,48 +177,65 @@ export function useNotifications() {
   /**
    * Handle incoming WebSocket notification
    */
-  const handleRealtimeNotification = useCallback((message) => {
-    if (message?.type === 'notification' && message?.data) {
-      const notification = message.data;
+  const handleRealtimeNotification = useCallback(
+    (message) => {
+      if (message?.type === 'notification' && message?.data) {
+        const notification = message.data;
+        const eventType = String(
+          notification?.meta?.event_type ||
+            notification?.event_type ||
+            notification?.eventType ||
+            ''
+        ).toLowerCase();
+        if (
+          isAdmin &&
+          (!eventType || !ADMIN_NOTIFICATION_EVENT_TYPES.has(eventType))
+        ) {
+          return;
+        }
 
-      // Format notification
-      const formatted = {
-        id: notification.id || `${Date.now()}`,
-        title: notification.title || 'Notification',
-        message: notification.message || '',
-        createdAt: notification.createdAt || new Date().toISOString(),
-        read: false,
-        type: notification.type || 'info',
-      };
+        // Format notification
+        const formatted = {
+          id: notification.id || `${Date.now()}`,
+          title: notification.title || 'Notification',
+          message: notification.message || '',
+          createdAt: notification.createdAt || new Date().toISOString(),
+          read: false,
+          type: notification.type || 'info',
+        };
 
-      // Add to list
-      setNotifications((prev) => [formatted, ...prev].slice(0, 100));
+        // Add to list
+        setNotifications((prev) => [formatted, ...prev].slice(0, 100));
 
-      // Increment unread count
-      setUnreadCount((prev) => prev + 1);
-    } else if (message?.type === 'notification_read') {
-      // Handle notification marked as read from another tab/device
-      const { notificationId } = message.data || {};
-      if (notificationId) {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-        );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
+        // Increment unread count
+        setUnreadCount((prev) => prev + 1);
+      } else if (message?.type === 'notification_read') {
+        // Handle notification marked as read from another tab/device
+        const { notificationId } = message.data || {};
+        if (notificationId) {
+          setNotifications((prev) =>
+            prev.map((n) =>
+              n.id === notificationId ? { ...n, read: true } : n
+            )
+          );
+          setUnreadCount((prev) => Math.max(0, prev - 1));
+        }
+      } else if (message?.type === 'notification_deleted') {
+        // Handle notification deleted from another tab/device
+        const { notificationId } = message.data || {};
+        if (notificationId) {
+          setNotifications((prev) => {
+            const notification = prev.find((n) => n.id === notificationId);
+            if (notification && !notification.read) {
+              setUnreadCount((count) => Math.max(0, count - 1));
+            }
+            return prev.filter((n) => n.id !== notificationId);
+          });
+        }
       }
-    } else if (message?.type === 'notification_deleted') {
-      // Handle notification deleted from another tab/device
-      const { notificationId } = message.data || {};
-      if (notificationId) {
-        setNotifications((prev) => {
-          const notification = prev.find((n) => n.id === notificationId);
-          if (notification && !notification.read) {
-            setUnreadCount((count) => Math.max(0, count - 1));
-          }
-          return prev.filter((n) => n.id !== notificationId);
-        });
-      }
-    }
-  }, []);
+    },
+    [isAdmin]
+  );
 
   /**
    * Setup real-time WebSocket connection

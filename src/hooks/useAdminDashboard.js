@@ -66,7 +66,7 @@ export const useAdminDashboard = ({ enabled = true } = {}) => {
         userService.getUsers({ status: 'pending', limit: 1 }),
         userService.getUsers({ status: 'deactivated', limit: 1 }),
         verificationService.list({ status: 'pending', limit: 1 }),
-        notificationsService.list(50),
+        notificationsService.list({ limit: 50, scope: 'admin' }),
         logsService.list({
           type: 'action',
           timeRange: '7d',

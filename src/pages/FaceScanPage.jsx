@@ -217,10 +217,7 @@ const FaceScanPage = () => {
           'Your account is still pending for approval.'
         );
         setScanResult('success');
-        setTimeout(
-          () => navigate(verifyToken ? '/verify' : '/still-pending'),
-          1000
-        );
+        setTimeout(() => navigate('/still-pending'), 1000);
       } else {
         const errorMsg = res?.message || 'Face not recognized';
         setError(errorMsg);

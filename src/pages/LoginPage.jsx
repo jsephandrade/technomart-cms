@@ -206,7 +206,7 @@ const LoginPage = () => {
         sessionStorage.setItem('login_pending_note', PENDING_APPROVAL_MESSAGE);
         sessionStorage.setItem('pending_user', JSON.stringify(res.user || {}));
         sessionStorage.setItem('verify_token', verifyToken);
-        navigate(verifyToken ? '/verify' : '/still-pending');
+        navigate('/still-pending');
         return;
       }
 
@@ -234,16 +234,6 @@ const LoginPage = () => {
           provider === 'google-credential' ? payload : await signInWithGoogle();
         const res = await loginWithGoogle(credential, { remember });
         if (!res?.success) throw new Error('Google login failed');
-        const verifyToken = res?.verifyToken || '';
-        if (verifyToken) {
-          sessionStorage.setItem('verify_token', verifyToken);
-          sessionStorage.setItem(
-            'pending_user',
-            JSON.stringify(res.user || {})
-          );
-          navigate('/verify');
-          return;
-        }
         if (
           res?.pending ||
           (res?.user?.status || '').toLowerCase() !== 'active'
@@ -256,7 +246,7 @@ const LoginPage = () => {
             'pending_user',
             JSON.stringify(res.user || {})
           );
-          sessionStorage.setItem('verify_token', '');
+          sessionStorage.setItem('verify_token', res?.verifyToken || '');
           navigate('/still-pending');
           return;
         }

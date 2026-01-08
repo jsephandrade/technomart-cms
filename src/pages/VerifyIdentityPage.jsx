@@ -26,6 +26,7 @@ const VerifyIdentityPage = () => {
 
   const [pendingUser, setPendingUser] = useState(null);
   const [verifyToken, setVerifyToken] = useState('');
+  const [pendingNote, setPendingNote] = useState('');
   const [consent, setConsent] = useState(false);
   const [step, setStep] = useState('initial'); // initial | scanning | processing | done | error
   const [error, setError] = useState('');
@@ -36,12 +37,20 @@ const VerifyIdentityPage = () => {
     try {
       const vt = sessionStorage.getItem('verify_token') || '';
       const pu = sessionStorage.getItem('pending_user');
+      const note = sessionStorage.getItem('login_pending_note') || '';
       setVerifyToken(vt);
       setPendingUser(pu ? JSON.parse(pu) : null);
+      if (note) {
+        setPendingNote(note);
+        sessionStorage.removeItem('login_pending_note');
+      }
     } catch {}
   }, []);
 
   const startCapture = async () => {
+    if (step === 'processing' || step === 'done') {
+      return;
+    }
     setError('');
     setImageData('');
     if (!consent) {
@@ -105,6 +114,7 @@ const VerifyIdentityPage = () => {
       });
       if (res?.success) {
         setStep('done');
+        navigate('/verify/pending-confirmation');
         toast.success('Verification submitted', {
           description: 'Your request is pending admin review.',
         });
@@ -138,6 +148,11 @@ const VerifyIdentityPage = () => {
               to="/login"
               className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
+              {pendingNote ? (
+                <Alert>
+                  <AlertDescription>{pendingNote}</AlertDescription>
+                </Alert>
+              ) : null}
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Login
             </Link>
           </div>
@@ -189,7 +204,7 @@ const VerifyIdentityPage = () => {
             </Button>
             <Button
               onClick={startCapture}
-              disabled={!consent || step === 'processing'}
+              disabled={!consent || step === 'processing' || step === 'done'}
             >
               {step === 'processing' ? 'Submitting...' : 'Capture & Submit'}
             </Button>

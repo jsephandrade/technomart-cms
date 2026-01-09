@@ -22,8 +22,10 @@ import {
 import {
   AlertTriangle,
   ClipboardCheck,
+  Copy,
   Plus,
   Trash2,
+  Edit,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,6 +34,7 @@ import {
   mergeRoleOptions,
   resolveRoleLabel,
 } from '@/lib/canteenRoles';
+import { toast } from 'sonner';
 
 const STATUS_STYLES = {
   ok: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
@@ -92,6 +95,10 @@ const TeamCompositionCard = ({
     () => mergeRoleOptions(CANTEEN_ROLE_OPTIONS, roleOptions),
     [roleOptions]
   );
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copySourceDay, setCopySourceDay] = useState('');
+  const [copyTargetDays, setCopyTargetDays] = useState([]);
+  const [copyBusy, setCopyBusy] = useState(false);
 
   const activeDays = useMemo(
     () =>
@@ -158,6 +165,58 @@ const TeamCompositionCard = ({
     closeEditor();
   };
 
+  const openCopyDialog = () => {
+    const defaultDay = activeDays[0] || '';
+    setCopySourceDay(defaultDay);
+    setCopyTargetDays([]);
+    setCopyDialogOpen(true);
+  };
+
+  const handleToggleCopyTarget = (day) => {
+    setCopyTargetDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(day)) {
+        next.delete(day);
+      } else {
+        next.add(day);
+      }
+      return Array.from(next);
+    });
+  };
+
+  const handleCopyComposition = async () => {
+    if (!copySourceDay) return;
+    if (!copyTargetDays.length) {
+      toast.error('Pick at least one day to copy composition');
+      return;
+    }
+    const sourceTargets = Array.isArray(targetsByDay?.[copySourceDay])
+      ? targetsByDay[copySourceDay]
+      : [];
+    if (!sourceTargets.length) {
+      toast.error('No composition to copy from the selected day');
+      return;
+    }
+    setCopyBusy(true);
+    try {
+      await Promise.all(
+        copyTargetDays.map((day) =>
+          onUpdateTargets?.(
+            day,
+            sourceTargets.map((entry) => ({ ...entry }))
+          )
+        )
+      );
+      toast.success('Team composition copied');
+      setCopyDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to copy composition');
+    } finally {
+      setCopyBusy(false);
+    }
+  };
+
   return (
     <>
       <UserManagementCard
@@ -167,15 +226,27 @@ const TeamCompositionCard = ({
         description="Define daily role caps so the system prevents duplicate roles per day."
         headerActions={
           canManage ? (
-            <Button
-              size="sm"
-              className="gap-2"
-              onClick={onAutoBuildRoster}
-              disabled={autoBuildBusy}
-            >
-              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-              Auto-build roster
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                className="gap-2"
+                onClick={onAutoBuildRoster}
+                disabled={autoBuildBusy}
+              >
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                Auto-build roster
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={openCopyDialog}
+              >
+                <Copy className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Copy composition</span>
+              </Button>
+            </div>
           ) : null
         }
       >
@@ -214,7 +285,7 @@ const TeamCompositionCard = ({
                       variant="outline"
                       onClick={() => openEditor(day)}
                     >
-                      Edit targets
+                      <Edit className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   ) : null}
                 </div>
@@ -430,6 +501,94 @@ const TeamCompositionCard = ({
               Cancel
             </Button>
             <Button onClick={handleSaveTargets}>Save targets</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={copyDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCopyTargetDays([]);
+            setCopyBusy(false);
+          }
+          setCopyDialogOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Copy composition</DialogTitle>
+            <DialogDescription>
+              Duplicate the targets of one day to other days in your roster.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="copy-source" className="text-right">
+                Source day
+              </Label>
+              <Select
+                id="copy-source"
+                value={copySourceDay}
+                onValueChange={(value) => {
+                  setCopySourceDay(value);
+                  setCopyTargetDays((prev) =>
+                    prev.filter((day) => day !== value)
+                  );
+                }}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select day" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeDays.map((day) => (
+                    <SelectItem key={day} value={day}>
+                      {day}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Target days
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {activeDays
+                  .filter((day) => day !== copySourceDay)
+                  .map((day) => {
+                    const selected = copyTargetDays.includes(day);
+                    return (
+                      <Button
+                        key={`target-${day}`}
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          'rounded-full text-[11px] uppercase tracking-wide',
+                          selected
+                            ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                            : 'border-border/60 bg-background text-foreground hover:bg-muted/40'
+                        )}
+                        onClick={() => handleToggleCopyTarget(day)}
+                      >
+                        {day}
+                      </Button>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setCopyDialogOpen(false)}
+              disabled={copyBusy}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCopyComposition} disabled={copyBusy}>
+              Copy to selected days
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

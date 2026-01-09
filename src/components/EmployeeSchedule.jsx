@@ -1128,8 +1128,11 @@ const EmployeeSchedule = () => {
     }
   };
 
-  const handleDeleteSchedule = async (id) => {
+  const handleDeleteSchedule = async (entryOrId) => {
     if (!canManage) return;
+
+    const entry = entryOrId && typeof entryOrId === 'object' ? entryOrId : null;
+    const scheduleId = entry ? entry.id : entryOrId;
 
     const confirmDelete =
       typeof window !== 'undefined'
@@ -1139,9 +1142,50 @@ const EmployeeSchedule = () => {
     if (!confirmDelete) return;
 
     try {
-      await deleteScheduleEntry(id);
-      toast.success('Deleted schedule');
+      if (scheduleId) {
+        await deleteScheduleEntry(scheduleId);
+        return;
+      }
+
+      if (entry?.employeeId && entry?.day) {
+        const candidate = (schedule || []).find(
+          (item) =>
+            String(item.employeeId) === String(entry.employeeId) &&
+            item.day === entry.day &&
+            (!entry.startTime || item.startTime === entry.startTime) &&
+            (!entry.endTime || item.endTime === entry.endTime)
+        );
+        if (candidate?.id) {
+          await deleteScheduleEntry(candidate.id);
+          return;
+        }
+      }
+
+      toast.error('Unable to identify the schedule entry to delete.');
     } catch (error) {
+      const status = error?.status || error?.response?.status;
+      if (status === 404 && entry?.employeeId && entry?.day) {
+        try {
+          const refreshed = await employeeService.getSchedule({
+            employeeId: entry.employeeId,
+            day: entry.day,
+          });
+          const match = (refreshed || []).find(
+            (item) =>
+              (!entry.startTime || item.startTime === entry.startTime) &&
+              (!entry.endTime || item.endTime === entry.endTime)
+          );
+          if (match?.id) {
+            await deleteScheduleEntry(match.id);
+            return;
+          }
+        } catch (fallbackError) {
+          console.error(fallbackError);
+        }
+        await refetchSchedule();
+        toast.error('Schedule entry was not found. Refreshed the list.');
+        return;
+      }
       console.error(error);
       toast.error('Failed to delete schedule');
     }

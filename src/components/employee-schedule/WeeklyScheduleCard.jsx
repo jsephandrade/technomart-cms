@@ -250,7 +250,7 @@ const WeeklyScheduleCard = ({
       entry?.employee || employeeMap.get(String(entry?.employeeId));
     const initials = getInitials(employee?.name || entry?.employeeName);
     const canDelete =
-      canManage && typeof onDeleteSchedule === 'function' && entry?.id;
+      canManage && typeof onDeleteSchedule === 'function' && entry;
 
     return (
       <div
@@ -290,7 +290,7 @@ const WeeklyScheduleCard = ({
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => onDeleteSchedule(entry.id)}
+                  onClick={() => onDeleteSchedule(entry)}
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                   <span className="sr-only">Remove shift</span>

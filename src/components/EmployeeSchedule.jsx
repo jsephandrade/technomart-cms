@@ -657,33 +657,10 @@ const EmployeeSchedule = () => {
     }
   };
 
-  const hasShiftToday = useMemo(() => {
-    // Check if user has a linked Employee record
-    const userEmployeeId = resolvedEmployeeId || user?.employeeId || user?.id;
-    if (!userEmployeeId || !Array.isArray(schedule) || schedule.length === 0) {
-      return false;
-    }
-
-    const todayIndex = new Date().getDay();
-    const todayName = DAYS_OF_WEEK[todayIndex] || '';
-    if (!todayName) return false;
-    const normalize = (value) =>
-      typeof value === 'string' ? value.trim().toLowerCase() : '';
-    const todayKey = normalize(todayName);
-
-    return schedule.some((entry) => {
-      if (!entry) return false;
-      const entryEmployeeId =
-        entry.employeeId ??
-        entry.employee?.id ??
-        entry.employee?.employeeId ??
-        null;
-      if (entryEmployeeId == null) return false;
-      // Compare with user's employeeId (preferred) or fall back to user.id for backwards compat
-      if (String(entryEmployeeId) !== String(userEmployeeId)) return false;
-      return normalize(entry.day) === todayKey;
-    });
-  }, [schedule, resolvedEmployeeId, user?.employeeId, user?.id]);
+  const hasShiftToday = useMemo(
+    () => Boolean(attendanceScheduleEntry),
+    [attendanceScheduleEntry]
+  );
 
   const autoBuildPlan = useMemo(() => {
     const plan = { entries: [], shortfalls: [] };
@@ -933,7 +910,7 @@ const EmployeeSchedule = () => {
 
     if (scheduleLoading) return;
 
-    if (!hasShiftToday && !allowAttendanceWithoutShift) {
+    if (!attendanceScheduleEntry) {
       clearAttendanceIndicators();
       return;
     }
@@ -950,6 +927,7 @@ const EmployeeSchedule = () => {
     isStaffOnly,
     location,
     scheduleLoading,
+    attendanceScheduleEntry,
     navigate,
   ]);
 
@@ -976,7 +954,7 @@ const EmployeeSchedule = () => {
       );
     };
 
-    if (!hasShiftToday && !allowAttendanceWithoutShift) {
+    if (!attendanceScheduleEntry) {
       clearPopupState();
       return;
     }
@@ -994,6 +972,7 @@ const EmployeeSchedule = () => {
     location.search,
     location.state,
     scheduleLoading,
+    attendanceScheduleEntry,
     navigate,
   ]);
 
@@ -1017,7 +996,7 @@ const EmployeeSchedule = () => {
     }
 
     if (scheduleLoading) return;
-    if (!hasShiftToday && !allowAttendanceWithoutShift) return;
+    if (!attendanceScheduleEntry) return;
     if (attendanceDialogOpen || attendanceAutoOpenDismissed.current) return;
 
     attendanceAutoOpenDismissed.current = true;
@@ -1029,7 +1008,14 @@ const EmployeeSchedule = () => {
     isStaffOnly,
     location.pathname,
     scheduleLoading,
+    attendanceScheduleEntry,
   ]);
+
+  useEffect(() => {
+    if (!attendanceScheduleEntry && attendanceDialogOpen) {
+      setAttendanceDialogOpen(false);
+    }
+  }, [attendanceDialogOpen, attendanceScheduleEntry]);
 
   const lookupEmployeeName = (employeeId) =>
     displayEmployees.find((e) => e?.id === employeeId)?.name || 'Unknown';
@@ -2026,25 +2012,38 @@ const EmployeeSchedule = () => {
         </DialogContent>
       </Dialog>
 
-      {attendanceUser && (
-        <Dialog
-          open={attendanceDialogOpen}
-          onOpenChange={handleAttendanceDialogChange}
-        >
-          <DialogContent className="sm:max-w-[420px]">
-            <DialogHeader>
-              <DialogTitle>Record Your Attendance</DialogTitle>
-              <DialogDescription>
-                Track today's time in and time out.
-              </DialogDescription>
-            </DialogHeader>
-            <AttendanceTimeCard
-              user={attendanceUser}
-              dailySchedule={attendanceScheduleEntry}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      {attendanceUser ? (
+        attendanceScheduleEntry ? (
+          <Dialog
+            open={attendanceDialogOpen}
+            onOpenChange={handleAttendanceDialogChange}
+          >
+            <DialogContent className="sm:max-w-[420px]">
+              <DialogHeader>
+                <DialogTitle>Record Your Attendance</DialogTitle>
+                <DialogDescription>
+                  Track today's time in and time out.
+                </DialogDescription>
+              </DialogHeader>
+              <AttendanceTimeCard
+                user={attendanceUser}
+                dailySchedule={attendanceScheduleEntry}
+              />
+            </DialogContent>
+          </Dialog>
+        ) : (
+          <div className="rounded-2xl border border-destructive/50 bg-destructive/5 p-4 text-sm text-muted-foreground shadow-sm">
+            <p className="font-semibold text-destructive">
+              No assigned shift today
+            </p>
+            <p>
+              You currently have no team composition or schedule entry for today
+              — the Daily Time Record controls are locked. Please wait for your
+              manager to assign a shift before you can clock in.
+            </p>
+          </div>
+        )
+      ) : null}
     </div>
   );
 };

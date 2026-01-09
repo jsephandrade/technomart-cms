@@ -74,6 +74,30 @@ const resolveIngredientImages = (item, imageById) =>
     })
     .filter(Boolean);
 
+const isComboMeal = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients =
+    item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
 const ItemCard = ({
   item,
   allItems = [],
@@ -153,6 +177,7 @@ const ItemCard = ({
   const staticPaxValue = Number.isFinite(Number(rawStaticPax))
     ? Math.max(0, Math.floor(Number(rawStaticPax)))
     : 0;
+  const comboMeal = isComboMeal(item);
 
   const badge = isArchived
     ? {
@@ -238,7 +263,12 @@ const ItemCard = ({
             </div>
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-l font-semibold leading-tight text-foreground line-clamp-2">
+            <CardTitle
+              className={`font-semibold leading-tight text-foreground ${
+                comboMeal ? 'text-sm line-clamp-1' : 'text-l line-clamp-2'
+              }`}
+              title={item.name}
+            >
               {item.name}
             </CardTitle>
             {hasEstimatedPax && (

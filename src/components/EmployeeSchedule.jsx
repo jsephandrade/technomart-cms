@@ -222,6 +222,7 @@ const EmployeeSchedule = () => {
     addScheduleEntry,
     updateScheduleEntry,
     deleteScheduleEntry,
+    clearScheduleEntries,
     loading: scheduleLoading,
     refetch: refetchSchedule,
   } = useSchedule({}, { autoFetch: true });
@@ -1131,6 +1132,7 @@ const EmployeeSchedule = () => {
   const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState(null);
   const [scheduleDeleteDialogOpen, setScheduleDeleteDialogOpen] =
     useState(false);
+  const [scheduleClearDialogOpen, setScheduleClearDialogOpen] = useState(false);
 
   const handleDeleteSchedule = (entryOrId) => {
     if (!canManage) return;
@@ -1147,6 +1149,21 @@ const EmployeeSchedule = () => {
     } finally {
       setScheduleDeleteDialogOpen(false);
       setScheduleDeleteTarget(null);
+    }
+  };
+
+  const handleClearAllSchedules = () => {
+    if (!canManage) return;
+    setScheduleClearDialogOpen(true);
+  };
+
+  const performClearAllSchedules = async () => {
+    try {
+      await clearScheduleEntries();
+    } catch {
+      // toast from hook
+    } finally {
+      setScheduleClearDialogOpen(false);
     }
   };
 
@@ -1302,6 +1319,7 @@ const EmployeeSchedule = () => {
           setNewScheduleEntry({ ...DEFAULT_SCHEDULE_ENTRY });
           handleScheduleDialogOpenChange(true);
         }}
+        onClearAllSchedules={handleClearAllSchedules}
       />
     </div>
   );
@@ -1569,6 +1587,39 @@ const EmployeeSchedule = () => {
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               Delete shift
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={scheduleClearDialogOpen}
+        onOpenChange={(open) => {
+          setScheduleClearDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Delete all shifts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove every schedule entry for the week. Confirm only
+              if you are sure you want to start over.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                performClearAllSchedules();
+              }}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Delete all shifts
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

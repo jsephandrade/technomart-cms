@@ -261,6 +261,11 @@ class EmployeeService {
     await apiClient.delete(`/schedule${query}`, { retry: { retries: 1 } });
     return true;
   }
+
+  async clearSchedule() {
+    await apiClient.delete('/schedule?clear=all', { retry: { retries: 1 } });
+    return true;
+  }
 }
 
 export const employeeService = new EmployeeService();

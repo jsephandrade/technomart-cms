@@ -460,10 +460,27 @@ def schedule(request):
             return JsonResponse({"success": True, "data": items})
 
         if request.method == "DELETE":
-            employee_id_param = request.GET.get("employeeId") or request.GET.get("employee_id")
+            clear_all = (request.GET.get("clear") or "").lower() in {
+                "1",
+                "true",
+                "all",
+            }
+            if clear_all:
+                deleted_count, _ = ScheduleEntry.objects.all().delete()
+                return JsonResponse(
+                    {"success": True, "deleted": deleted_count}
+                )
+
+            employee_id_param = request.GET.get("employeeId") or request.GET.get(
+                "employee_id"
+            )
             day = request.GET.get("day")
-            st = _parse_time(request.GET.get("startTime") or request.GET.get("start_time"))
-            et = _parse_time(request.GET.get("endTime") or request.GET.get("end_time"))
+            st = _parse_time(
+                request.GET.get("startTime") or request.GET.get("start_time")
+            )
+            et = _parse_time(
+                request.GET.get("endTime") or request.GET.get("end_time")
+            )
 
             if not employee_id_param:
                 return JsonResponse(
@@ -471,9 +488,15 @@ def schedule(request):
                     status=400,
                 )
             if day not in DAYS:
-                return JsonResponse({"success": False, "message": "Invalid day"}, status=400)
+                return JsonResponse(
+                    {"success": False, "message": "Invalid day"},
+                    status=400,
+                )
             if not st or not et or st >= et:
-                return JsonResponse({"success": False, "message": "Invalid start/end time"}, status=400)
+                return JsonResponse(
+                    {"success": False, "message": "Invalid start/end time"},
+                    status=400,
+                )
 
             qs = ScheduleEntry.objects.filter(day=day, start_time=st, end_time=et)
             variants = _identifier_variants(employee_id_param)
@@ -486,7 +509,9 @@ def schedule(request):
 
             deleted_count, _ = qs.delete()
             if deleted_count == 0:
-                return JsonResponse({"success": False, "message": "Not found"}, status=404)
+                return JsonResponse(
+                    {"success": False, "message": "Not found"}, status=404
+                )
             return JsonResponse({"success": True, "deleted": deleted_count})
 
         # POST create

@@ -104,6 +104,7 @@ const WeeklyScheduleCard = ({
   onOpenAddSchedule,
   onOpenManageEmployees,
   onDeleteSchedule,
+  onClearAllSchedules,
   canManage = false,
 }) => {
   const filteredDays = daysOfWeek.length ? daysOfWeek : DEFAULT_DAY_OPTIONS;
@@ -329,6 +330,17 @@ const WeeklyScheduleCard = ({
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Add schedule
               </Button>
+              {typeof onClearAllSchedules === 'function' ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 text-destructive hover:text-destructive"
+                  onClick={onClearAllSchedules}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  Clear roster
+                </Button>
+              ) : null}
             </>
           ) : null
         }

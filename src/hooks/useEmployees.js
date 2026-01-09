@@ -199,6 +199,19 @@ export const useSchedule = (initialParams = {}, options = {}) => {
     }
   };
 
+  const clearScheduleEntries = async () => {
+    try {
+      await employeeService.clearSchedule();
+      setSchedule([]);
+      toast.success('All schedule entries deleted');
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to clear schedule';
+      toast.error(errorMessage);
+      throw err;
+    }
+  };
+
   useEffect(() => {
     if (autoFetch) fetchSchedule();
   }, [autoFetch, fetchSchedule]);
@@ -210,6 +223,7 @@ export const useSchedule = (initialParams = {}, options = {}) => {
     updateScheduleEntry,
     addScheduleEntry,
     deleteScheduleEntry,
+    clearScheduleEntries,
     params,
     setParams,
     refetch: fetchSchedule,

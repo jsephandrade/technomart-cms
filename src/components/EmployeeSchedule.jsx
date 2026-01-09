@@ -32,6 +32,7 @@ import {
   ClipboardList,
   Plane,
   RotateCcw,
+  ShieldOff,
   ShieldPlus,
   Trash2,
   Users,
@@ -173,6 +174,10 @@ const EmployeeSchedule = () => {
     : 'grid-cols-5';
   const location = useLocation();
   const navigate = useNavigate();
+  const isPendingAccount =
+    String(user?.status || '')
+      .trim()
+      .toLowerCase() === 'pending';
 
   const {
     employees = [],
@@ -1399,6 +1404,24 @@ const EmployeeSchedule = () => {
   const leaveRequestPanel =
     attendanceUser && !isAdmin ? <LeaveManagement /> : null;
 
+  if (isPendingAccount) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 rounded-2xl border border-border/70 bg-card/80 p-6 text-center shadow-sm">
+        <ShieldOff className="h-10 w-10 text-destructive" />
+        <div className="space-y-1">
+          <p className="text-lg font-semibold">Approval pending</p>
+          <p className="text-sm text-muted-foreground">
+            Your account is still awaiting admin approval, so Employee
+            Management is temporarily unavailable. Please check back once
+            approved or reach out to your administrator.
+          </p>
+        </div>
+        <Button onClick={() => navigate('/still-pending')} variant="outline">
+          View pending status
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       {canManage ? (

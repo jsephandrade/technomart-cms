@@ -1050,6 +1050,10 @@ class MenuItem(models.Model):
     image = models.ImageField(upload_to="menu_items/", blank=True, null=True)
     ingredients = models.JSONField(default=list, blank=True)
     preparation_time = models.PositiveIntegerField(default=0, help_text="Minutes")
+    pax_per_preparation = models.PositiveIntegerField(
+        default=0,
+        help_text="Estimated number of pax available per batch",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -121,6 +121,8 @@ def _safe_menu_item(mi, category_map=None):
             "image": image_url,
             "ingredients": getattr(mi, "ingredients", []) or [],
             "preparationTime": getattr(mi, "preparation_time", 0) or 0,
+            "paxPerPreparation": getattr(mi, "pax_per_preparation", 0) or 0,
+            "estimatedPax": getattr(mi, "pax_per_preparation", 0) or 0,
             "createdAt": mi.created_at.isoformat() if getattr(mi, "created_at", None) else None,
             "updatedAt": mi.updated_at.isoformat() if getattr(mi, "updated_at", None) else None,
         }
@@ -141,6 +143,8 @@ def _safe_menu_item(mi, category_map=None):
             "image": image_url,
             "ingredients": getattr(mi, "ingredients", []) or [],
             "preparationTime": getattr(mi, "preparationTime", 0) or 0,
+            "paxPerPreparation": getattr(mi, "paxPerPreparation", 0) or 0,
+            "estimatedPax": getattr(mi, "paxPerPreparation", 0) or 0,
         }
 
 
@@ -497,6 +501,16 @@ def menu_items(request):
             return JsonResponse({"success": False, "message": "preparationTime must be an integer"}, status=400)
         if prep < 0:
             return JsonResponse({"success": False, "message": "preparationTime cannot be negative"}, status=400)
+        # pax per preparation
+        try:
+            pax_val = int(payload.get("paxPerPreparation") or payload.get("estimatedPax") or 0)
+        except Exception:
+            return JsonResponse({"success": False, "message": "paxPerPreparation must be an integer"}, status=400)
+        if pax_val < 0:
+            return JsonResponse(
+                {"success": False, "message": "paxPerPreparation cannot be negative"},
+                status=400,
+            )
         available = bool(payload.get("available", True))
         image_url = None
         with transaction.atomic():
@@ -509,6 +523,7 @@ def menu_items(request):
                 available=available,
                 ingredients=ingredients,
                 preparation_time=prep,
+                pax_per_preparation=pax_val,
             )
             if img:
                 try:
@@ -551,6 +566,8 @@ def menu_items(request):
             "image": payload.get("image"),
             "ingredients": payload.get("ingredients") or [],
             "preparationTime": payload.get("preparationTime"),
+            "paxPerPreparation": payload.get("paxPerPreparation") or payload.get("estimatedPax") or 0,
+            "estimatedPax": payload.get("paxPerPreparation") or payload.get("estimatedPax") or 0,
         }
         MENU_ITEMS.append(item)
     try:
@@ -662,6 +679,17 @@ def menu_item_detail(request, item_id):
                     fields["preparation_time"] = prep
                 except Exception:
                     pass
+            if "paxPerPreparation" in payload or "estimatedPax" in payload:
+                try:
+                    pax_input = payload.get("paxPerPreparation")
+                    if pax_input is None:
+                        pax_input = payload.get("estimatedPax")
+                    pax_amount = int(pax_input or 0)
+                    if pax_amount < 0:
+                        pax_amount = 0
+                    fields["pax_per_preparation"] = pax_amount
+                except Exception:
+                    pass
             try:
                 model_fields = {f.name for f in MenuItem._meta.get_fields()}
             except Exception:
@@ -675,6 +703,7 @@ def menu_item_detail(request, item_id):
                 "ingredients",
                 "preparation_time",
                 "is_special",
+                "pax_per_preparation",
             }
             if model_fields:
                 allowed_fields |= model_fields
@@ -684,7 +713,11 @@ def menu_item_detail(request, item_id):
                 "orderedQuantity",
                 "orderQuantity",
             }  # guard against accidental extra fields (e.g., inventory/cart data)
-            allowed_input_keys = allowed_fields | {"preparationTime"}
+            allowed_input_keys = allowed_fields | {
+                "preparationTime",
+                "paxPerPreparation",
+                "estimatedPax",
+            }
             # Silently ignore unsupported/accidental fields (e.g., quantity from carts)
             safe_payload = {
                 k: v for k, v in payload.items() if k in allowed_input_keys and k not in disallowed
@@ -725,6 +758,10 @@ def menu_item_detail(request, item_id):
             for k in ["name", "description", "category", "image", "ingredients", "preparationTime"]:
                 if k in payload:
                     item[k] = payload[k]
+            if "paxPerPreparation" in payload:
+                item["paxPerPreparation"] = payload["paxPerPreparation"]
+            if "estimatedPax" in payload:
+                item["estimatedPax"] = payload["estimatedPax"]
             if "available" in payload:
                 if item.get("archived") and payload.get("available"):
                     return JsonResponse({"success": False, "message": "Archived items cannot be made available"}, status=400)

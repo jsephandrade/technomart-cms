@@ -1,5 +1,37 @@
 import apiClient from '../client';
 
+const parsePaxValue = (raw) => {
+  if (raw === undefined || raw === null) return undefined;
+  const candidate = typeof raw === 'string' ? raw.trim() : raw;
+  if (candidate === '') return undefined;
+  const parsed = Number(candidate);
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return Math.floor(parsed);
+};
+
+const attachPaxFields = (target, rawValue) => {
+  if (!target) return target;
+  const normalized = parsePaxValue(rawValue);
+  if (normalized === undefined) return target;
+  target.paxPerPreparation = normalized;
+  target.estimatedPax = normalized;
+  return target;
+};
+
+const resolvePaxFromItem = (item) => {
+  if (!item) return 0;
+  const candidate =
+    item?.paxPerPreparation ??
+    item?.pax_per_preparation ??
+    item?.estimatedPax ??
+    item?.estimated_pax ??
+    item?.estimated ??
+    item?.paxEstimate ??
+    item?.pax;
+  const normalized = parsePaxValue(candidate);
+  return normalized !== undefined ? normalized : 0;
+};
+
 const unwrap = (value) => value?.data ?? value;
 
 const getBackendOrigin = () => {
@@ -76,11 +108,15 @@ const normalizeMenuItem = (item) => {
       : typeof cat === 'object'
         ? cat?.name || cat?.label || cat?.title || cat?.slug || cat?.id || ''
         : String(cat || '');
+  const normalizedPax = resolvePaxFromItem(item);
   return {
     ...item,
     category: category || item.category || '',
     image: normalizedImage || item.image || item.imageUrl || '',
     imageUrl: normalizedImage || item.imageUrl || item.image || '',
+    estimatedPax: normalizedPax,
+    paxPerPreparation: normalizedPax,
+    pax_per_preparation: normalizedPax,
   };
 };
 
@@ -176,6 +212,11 @@ class MenuService {
       itemData &&
       itemData.imageFile instanceof Blob;
 
+    const paxSource =
+      itemData?.estimatedPax ??
+      itemData?.paxPerPreparation ??
+      itemData?.pax_per_preparation;
+
     if (hasFile) {
       const formData = new FormData();
       const entries = {
@@ -187,6 +228,7 @@ class MenuService {
         ingredients: itemData.ingredients,
         preparationTime: itemData.preparationTime,
       };
+      attachPaxFields(entries, paxSource);
       Object.entries(entries).forEach(([key, value]) => {
         if (value === undefined || value === null) return;
         if (key === 'ingredients' && Array.isArray(value)) {
@@ -204,14 +246,22 @@ class MenuService {
       return { success: true, data: normalizeMenuItem(unwrap(res)) };
     }
 
-    const res = await apiClient.post('/menu/items', itemData, {
+    const payload = { ...itemData };
+    attachPaxFields(payload, paxSource);
+    const res = await apiClient.post('/menu/items', payload, {
       retry: { retries: 1 },
     });
     return { success: true, data: normalizeMenuItem(unwrap(res)) };
   }
 
   async updateMenuItem(itemId, updates) {
-    const res = await apiClient.put(`/menu/items/${itemId}`, updates, {
+    const payload = { ...updates };
+    const paxSource =
+      payload.estimatedPax ??
+      payload.paxPerPreparation ??
+      payload.pax_per_preparation;
+    attachPaxFields(payload, paxSource);
+    const res = await apiClient.put(`/menu/items/${itemId}`, payload, {
       retry: { retries: 1 },
     });
     return { success: true, data: normalizeMenuItem(unwrap(res)) };

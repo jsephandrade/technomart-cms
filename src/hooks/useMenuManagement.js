@@ -73,6 +73,25 @@ export const useMenuManagement = (params = {}) => {
         safe.preparationTime = prep;
       }
     }
+    const parsePaxInput = (raw) => {
+      if (raw === undefined || raw === null) return undefined;
+      const cleaned = typeof raw === 'string' ? raw.trim() : raw;
+      if (cleaned === '') return undefined;
+      const parsed = Number(cleaned);
+      if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+      return Math.floor(parsed);
+    };
+    const paxRaw =
+      updates.estimatedPax ??
+      updates.paxPerPreparation ??
+      updates.pax_per_preparation ??
+      updates.estimated ??
+      undefined;
+    const paxValue = parsePaxInput(paxRaw);
+    if (paxValue !== undefined) {
+      safe.paxPerPreparation = paxValue;
+      safe.estimatedPax = paxValue;
+    }
     return safe;
   }, []);
 

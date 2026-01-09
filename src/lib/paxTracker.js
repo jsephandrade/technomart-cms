@@ -11,6 +11,11 @@ const notify = () => {
   }
 };
 
+const parseEstimatedPaxValue = (raw) => {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
 export const initPaxState = (state = {}) => {
   paxState = typeof state === 'object' && state ? { ...state } : {};
   notify();
@@ -49,4 +54,18 @@ export const subscribePax = (callback) => {
   return () => {
     listeners.delete(callback);
   };
+};
+
+export const parseEstimatedPax = (item = {}) => {
+  if (!item) return 0;
+  const raw =
+    item?.estimatedPax ??
+    item?.paxPerPreparation ??
+    item?.pax_per_preparation ??
+    item?.estimated_pax ??
+    item?.estimated ??
+    item?.paxEstimate ??
+    item?.pax ??
+    0;
+  return parseEstimatedPaxValue(raw);
 };

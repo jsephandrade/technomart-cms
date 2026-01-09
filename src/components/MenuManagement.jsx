@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Menu as MenuIcon, Package, PlusCircle } from 'lucide-react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
+import { initPaxState, parseEstimatedPax } from '@/lib/paxTracker';
 
 const stripUnsupportedFields = (item = {}) => {
   if (!item) return item;
@@ -85,6 +86,7 @@ const MenuManagement = () => {
     available: true,
     imageUrl: '',
     imageFile: null,
+    estimatedPax: '',
   });
   const [adding, setAdding] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -128,6 +130,7 @@ const MenuManagement = () => {
       available: Boolean(newItem.available),
       ingredients: [],
       preparationTime: 0,
+      estimatedPax: newItem.estimatedPax,
     };
     const previewUrl = newItem.imageUrl;
     const imageFile = newItem.imageFile;
@@ -140,6 +143,7 @@ const MenuManagement = () => {
       available: true,
       imageUrl: '',
       imageFile: null,
+      estimatedPax: '',
     });
     setDialogOpen(false);
     setAdding(false);
@@ -336,6 +340,24 @@ const MenuManagement = () => {
     setPackageStatus(nextStatus === 'inactive' ? 'inactive' : 'active');
   }, []);
 
+  useEffect(() => {
+    const buildMap = () => {
+      if (!Array.isArray(menuItems) || menuItems.length === 0) {
+        initPaxState({});
+        return;
+      }
+      const map = {};
+      menuItems.forEach((item) => {
+        if (!item?.id) return;
+        const key = String(item.id);
+        const estimated = parseEstimatedPax(item);
+        map[key] = { estimated, remaining: estimated };
+      });
+      initPaxState(map);
+    };
+    buildMap();
+  }, [menuItems]);
+
   const handleEditItem = async (overrideItem) => {
     try {
       const source = stripUnsupportedFields(overrideItem || editingItem);
@@ -360,6 +382,21 @@ const MenuManagement = () => {
       const priceNum = Number(source.price);
       if (!Number.isNaN(priceNum) && priceNum >= 0) {
         updates.price = priceNum;
+      }
+      const rawPax =
+        source.estimatedPax ??
+        source.paxPerPreparation ??
+        source.pax_per_preparation ??
+        source.estimated ??
+        source.pax;
+      if (rawPax !== undefined && rawPax !== null) {
+        const parsedRaw = typeof rawPax === 'string' ? rawPax.trim() : rawPax;
+        if (parsedRaw !== '') {
+          const paxNum = Number(parsedRaw);
+          if (Number.isFinite(paxNum) && paxNum >= 0) {
+            updates.estimatedPax = Math.floor(paxNum);
+          }
+        }
       }
       // Backend rejects making archived items available; guard early.
       if (source.archived && updates.available) {

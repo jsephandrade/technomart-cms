@@ -146,6 +146,13 @@ const ItemCard = ({
       ? Math.max(0, Math.floor(paxInfo.remaining))
       : null;
   const paxRemainingValue = remainingPax !== null ? remainingPax : estimatedPax;
+  const rawStaticPax =
+    item?.estimatedPax ?? item?.paxPerPreparation ?? item?.pax_per_preparation;
+  const hasStaticPax =
+    rawStaticPax !== undefined && rawStaticPax !== null && rawStaticPax !== '';
+  const staticPaxValue = Number.isFinite(Number(rawStaticPax))
+    ? Math.max(0, Math.floor(Number(rawStaticPax)))
+    : 0;
 
   const badge = isArchived
     ? {
@@ -259,14 +266,24 @@ const ItemCard = ({
                 ₱{Number(item.price).toFixed(2)}
               </p>
             </div>
-            {item.category && (
-              <Badge
-                variant="outline"
-                className="rounded-full px-3 py-1 text-[11px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent"
-              >
-                {item.category}
-              </Badge>
-            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {item.category && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full px-3 py-1 text-[11px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent"
+                >
+                  {item.category}
+                </Badge>
+              )}
+              {hasStaticPax && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full px-3 py-1 text-[11px] font-medium bg-[#E0F2FF] text-[#1F5E99] border-transparent"
+                >
+                  {`${staticPaxValue} pax`}
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button

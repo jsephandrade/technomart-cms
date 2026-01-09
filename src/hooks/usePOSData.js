@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import menuService from '@/api/services/menuService';
 import { toast } from 'sonner';
-import { initPaxState } from '@/lib/paxTracker';
+import { initPaxState, parseEstimatedPax } from '@/lib/paxTracker';
 
 const resolveMenuPollIntervalMs = () => {
   try {
@@ -13,18 +13,6 @@ const resolveMenuPollIntervalMs = () => {
   } catch {
     return 0;
   }
-};
-
-const parseEstimatedPax = (item = {}) => {
-  const raw =
-    item?.estimatedPax ??
-    item?.estimated_pax ??
-    item?.estimated ??
-    item?.paxEstimate ??
-    item?.pax ??
-    0;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
 const EMPTY_QUEUE = {

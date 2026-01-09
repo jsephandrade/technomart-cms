@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Users } from 'lucide-react';
+import {
+  CANTEEN_ROLE_OPTIONS,
+  mergeRoleOptions,
+  resolveRoleLabel,
+} from '@/lib/canteenRoles';
 
 const ManageEmployeesDialog = ({
   open,
@@ -30,6 +35,15 @@ const ManageEmployeesDialog = ({
   showTrigger = true,
 }) => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+
+  const roleOptions = useMemo(
+    () =>
+      mergeRoleOptions(
+        CANTEEN_ROLE_OPTIONS,
+        employeeList.map((employee) => employee.position)
+      ),
+    [employeeList]
+  );
 
   const normalizedEmployee = managedEmployee || {
     id: '',
@@ -190,14 +204,26 @@ const ManageEmployeesDialog = ({
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="position" className="text-right">
-                Position
+                Position / Role
               </Label>
-              <Input
-                id="position"
-                value={normalizedEmployee.position}
-                onChange={(e) => handleFieldChange('position', e.target.value)}
-                className="col-span-3"
-              />
+              <Select
+                value={resolveRoleLabel(
+                  normalizedEmployee.position,
+                  roleOptions
+                )}
+                onValueChange={(value) => handleFieldChange('position', value)}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="hourlyRate" className="text-right">

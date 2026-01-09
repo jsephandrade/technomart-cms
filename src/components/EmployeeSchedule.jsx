@@ -1399,6 +1399,18 @@ const EmployeeSchedule = () => {
 
   const schedulePane = (
     <div className="space-y-6">
+      {!attendanceScheduleEntry && attendanceUser ? (
+        <div className="rounded-2xl border border-destructive/60 bg-destructive/5 p-4 text-sm text-destructive shadow-sm">
+          <p className="font-semibold text-destructive">
+            No assigned shift detected
+          </p>
+          <p className="text-destructive/80">
+            Managers must assign you to a team composition or schedule entry
+            before Daily Time Record controls become available. Please check
+            with your manager for updates.
+          </p>
+        </div>
+      ) : null}
       <ScheduleTab
         daysOfWeek={DAYS_OF_WEEK}
         displayEmployees={displayEmployees}

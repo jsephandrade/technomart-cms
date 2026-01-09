@@ -141,7 +141,15 @@ const AddEmployeeTab = ({
   onOpenManageEmployees,
   onOpenArchivedEmployees,
 }) => {
-  const { users = [] } = useUsers();
+  const userQuery = useMemo(
+    () => ({
+      context: 'employee-schedule',
+    }),
+    []
+  );
+  const { users = [] } = useUsers(userQuery, {
+    autoFetch: canManage,
+  });
   const { user: currentUser } = useAuth();
   const [copyFromOpen, setCopyFromOpen] = useState(false);
   const [copyFromSelection, setCopyFromSelection] = useState('');

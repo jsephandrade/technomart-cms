@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { userService } from '@/api/services/userService';
 import { toast } from 'sonner';
 
-export const useUsers = () => {
+export const useUsers = (params = {}, options = {}) => {
+  const { autoFetch = true, suppressErrorToast = false } = options || {};
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,21 +16,33 @@ export const useUsers = () => {
     return [];
   };
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await userService.getUsers();
-      setUsers(normalizeUserList(response));
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to fetch users';
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const paramsKey = JSON.stringify(params || {});
+  const paramsRef = useRef(params || {});
+
+  useEffect(() => {
+    paramsRef.current = params || {};
+  }, [paramsKey, params]);
+
+  const fetchUsers = useCallback(
+    async (override = null) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await userService.getUsers(
+          override || paramsRef.current
+        );
+        setUsers(normalizeUserList(response));
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to fetch users';
+        setError(errorMessage);
+        if (!suppressErrorToast) toast.error(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [paramsKey, suppressErrorToast]
+  );
 
   const addUser = async (user) => {
     try {
@@ -77,8 +90,8 @@ export const useUsers = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    if (autoFetch) fetchUsers();
+  }, [autoFetch, fetchUsers]);
 
   return {
     users,

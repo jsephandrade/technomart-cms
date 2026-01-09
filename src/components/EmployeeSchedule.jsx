@@ -360,6 +360,8 @@ const EmployeeSchedule = () => {
   const [autoBuildDialogOpen, setAutoBuildDialogOpen] = useState(false);
   const [autoBuildBusy, setAutoBuildBusy] = useState(false);
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
+  const [attendanceManagerTab, setAttendanceManagerTab] =
+    useState('attendance');
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [archivingEmployee, setArchivingEmployee] = useState(false);
@@ -1522,10 +1524,36 @@ const EmployeeSchedule = () => {
           <TabsContent value={attendanceTabValue} className="space-y-6">
             {activeTab === attendanceTabValue ? (
               showCombinedAttendanceLeave ? (
-                <div className="space-y-6">
-                  <AttendanceAdmin />
-                  {leaveRequestPanel}
-                </div>
+                <Tabs
+                  value={attendanceManagerTab}
+                  onValueChange={setAttendanceManagerTab}
+                  className="space-y-4"
+                >
+                  <TabsList className="w-full grid grid-cols-2 gap-2 bg-muted/40 p-1 rounded-lg">
+                    <TabsTrigger
+                      value="attendance"
+                      aria-label="Attendance Records"
+                      className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
+                    >
+                      <ClipboardList className="h-4 w-4" aria-hidden="true" />
+                      <span className="hidden lg:inline">
+                        Attendance Records
+                      </span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="leave"
+                      aria-label="Leave Management"
+                      className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
+                    >
+                      <Plane className="h-4 w-4" aria-hidden="true" />
+                      <span className="hidden lg:inline">Leave Management</span>
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="attendance">
+                    <AttendanceAdmin />
+                  </TabsContent>
+                  <TabsContent value="leave">{leaveRequestPanel}</TabsContent>
+                </Tabs>
               ) : (
                 <AttendanceAdmin />
               )

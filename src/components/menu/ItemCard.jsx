@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
+import { usePaxForItem } from '@/hooks/usePaxTracker';
 
 const resolveImageSrc = (item) => {
   if (!item) return null;
@@ -134,6 +135,18 @@ const ItemCard = ({
   const heroImage = collageSources[0] || baseImage;
   const showHero = Boolean(heroImage);
 
+  const paxInfo = usePaxForItem(item.id);
+  const hasEstimatedPax =
+    paxInfo && typeof paxInfo.estimated === 'number' && paxInfo.estimated > 0;
+  const estimatedPax = hasEstimatedPax
+    ? Math.max(0, Math.floor(paxInfo.estimated))
+    : null;
+  const remainingPax =
+    hasEstimatedPax && typeof paxInfo.remaining === 'number'
+      ? Math.max(0, Math.floor(paxInfo.remaining))
+      : null;
+  const paxRemainingValue = remainingPax !== null ? remainingPax : estimatedPax;
+
   const badge = isArchived
     ? {
         label: 'Archived',
@@ -221,6 +234,18 @@ const ItemCard = ({
             <CardTitle className="text-l font-semibold leading-tight text-foreground line-clamp-2">
               {item.name}
             </CardTitle>
+            {hasEstimatedPax && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Badge
+                  variant={paxRemainingValue === 0 ? 'destructive' : 'outline'}
+                  className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide"
+                >
+                  {paxRemainingValue === 0
+                    ? 'Sold out'
+                    : `${paxRemainingValue} / ${estimatedPax} pax left`}
+                </Badge>
+              </div>
+            )}
           </div>
         </CardHeader>
 

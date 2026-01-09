@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   ShoppingCart,
 } from 'lucide-react';
+import { usePaxForItem } from '@/hooks/usePaxTracker';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 
 const resolveImageSrc = (item) => {
@@ -86,7 +87,6 @@ const MenuSelection = ({
   searchTerm,
   setSearchTerm,
   onAddToOrder,
-  getPaxInfo = () => null,
   occupyFullWidth = false,
   mobileOrderCount = 0,
   onOpenMobileOrder = null,
@@ -136,8 +136,7 @@ const MenuSelection = ({
     const [brokenImages, setBrokenImages] = useState({});
     const categoryLabel = item.categoryName || item.category || '';
     const isUnavailable = item.available === false;
-    const paxInfo =
-      typeof getPaxInfo === 'function' ? getPaxInfo(item.id) : null;
+    const paxInfo = usePaxForItem(item.id);
     const hasEstimatedPax =
       paxInfo && typeof paxInfo.estimated === 'number' && paxInfo.estimated > 0;
     const estimatedPax = hasEstimatedPax

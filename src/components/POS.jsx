@@ -12,6 +12,7 @@ import { usePOSData, EMPTY_QUEUE_STATE } from '@/hooks/usePOSData';
 import { usePOSLogic } from '@/hooks/usePOSLogic';
 import { useOrderHistory } from '@/hooks/useOrderManagement';
 import { orderService } from '@/api/services/orderService';
+import { deductPax } from '@/lib/paxTracker';
 import {
   Sheet,
   SheetContent,
@@ -42,13 +43,7 @@ const POS = () => {
   const displayContainerRef = useRef(null);
 
   // Get data and business logic from custom hooks
-  const {
-    categories,
-    orderQueue,
-    setOrderQueue,
-    getPaxInfoForItem,
-    deductEstimatedPax,
-  } = usePOSData();
+  const { categories, orderQueue, setOrderQueue } = usePOSData();
   const {
     orderHistory,
     loading: historyLoading,
@@ -138,7 +133,7 @@ const POS = () => {
       });
     }
 
-    deductEstimatedPax(orderSnapshot);
+    deductPax(orderSnapshot);
     return true;
   };
 
@@ -271,7 +266,6 @@ const POS = () => {
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onAddToOrder={addToOrder}
-              getPaxInfo={getPaxInfoForItem}
               mobileOrderCount={orderCount}
               onOpenMobileOrder={() => setIsMobileOrderSheetOpen(true)}
             />

@@ -1128,20 +1128,25 @@ const EmployeeSchedule = () => {
     }
   };
 
-  const handleDeleteSchedule = async (entryOrId) => {
+  const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState(null);
+  const [scheduleDeleteDialogOpen, setScheduleDeleteDialogOpen] =
+    useState(false);
+
+  const handleDeleteSchedule = (entryOrId) => {
     if (!canManage) return;
+    setScheduleDeleteTarget(entryOrId);
+    setScheduleDeleteDialogOpen(true);
+  };
 
-    const confirmDelete =
-      typeof window !== 'undefined'
-        ? window.confirm('Delete this schedule entry?')
-        : true;
-
-    if (!confirmDelete) return;
-
+  const performDeleteSchedule = async () => {
+    if (!canManage || !scheduleDeleteTarget) return;
     try {
-      await deleteScheduleEntry(entryOrId);
+      await deleteScheduleEntry(scheduleDeleteTarget);
     } catch {
-      // Errors are surfaced via toast in the hook.
+      // Errors shown by hook.
+    } finally {
+      setScheduleDeleteDialogOpen(false);
+      setScheduleDeleteTarget(null);
     }
   };
 
@@ -1528,6 +1533,42 @@ const EmployeeSchedule = () => {
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
               Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={scheduleDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setScheduleDeleteDialogOpen(open);
+          if (!open) {
+            setScheduleDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Delete schedule entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removing this shift will delete it from the roster. Confirm to
+              remove the assignment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                performDeleteSchedule();
+              }}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Delete shift
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

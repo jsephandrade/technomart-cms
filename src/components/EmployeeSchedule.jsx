@@ -2024,37 +2024,24 @@ const EmployeeSchedule = () => {
         </DialogContent>
       </Dialog>
 
-      {attendanceUser ? (
-        attendanceScheduleEntry ? (
-          <Dialog
-            open={attendanceDialogOpen}
-            onOpenChange={handleAttendanceDialogChange}
-          >
-            <DialogContent className="sm:max-w-[420px]">
-              <DialogHeader>
-                <DialogTitle>Record Your Attendance</DialogTitle>
-                <DialogDescription>
-                  Track today's time in and time out.
-                </DialogDescription>
-              </DialogHeader>
-              <AttendanceTimeCard
-                user={attendanceUser}
-                dailySchedule={attendanceScheduleEntry}
-              />
-            </DialogContent>
-          </Dialog>
-        ) : (
-          <div className="rounded-2xl border border-destructive/50 bg-destructive/5 p-4 text-sm text-muted-foreground shadow-sm">
-            <p className="font-semibold text-destructive">
-              No assigned shift today
-            </p>
-            <p>
-              You currently have no team composition or schedule entry for today
-              — the Daily Time Record controls are locked. Please wait for your
-              manager to assign a shift before you can clock in.
-            </p>
-          </div>
-        )
+      {attendanceUser && attendanceScheduleEntry ? (
+        <Dialog
+          open={attendanceDialogOpen}
+          onOpenChange={handleAttendanceDialogChange}
+        >
+          <DialogContent className="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>Record Your Attendance</DialogTitle>
+              <DialogDescription>
+                Track today's time in and time out.
+              </DialogDescription>
+            </DialogHeader>
+            <AttendanceTimeCard
+              user={attendanceUser}
+              dailySchedule={attendanceScheduleEntry}
+            />
+          </DialogContent>
+        </Dialog>
       ) : null}
     </div>
   );

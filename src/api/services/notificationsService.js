@@ -90,6 +90,26 @@ class NotificationsService {
     }
   }
 
+  async create(payload = {}) {
+    try {
+      const res = await apiClient.post('/notifications', payload);
+      if (res && res.success) return res;
+      return res || { success: true, data: payload };
+    } catch {
+      await mockDelay(150);
+      const created = {
+        id: Date.now().toString(),
+        title: payload?.title || 'Notification',
+        message: payload?.message || '',
+        type: payload?.type || 'info',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      mockNotifications.unshift(created);
+      return { success: true, data: created };
+    }
+  }
+
   async getSettings() {
     try {
       const res = await apiClient.get('/notifications/settings');

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Pencil, Power } from 'lucide-react';
+import { Search, Plus, Edit, Power } from 'lucide-react';
 
 const formatNumber = (value) => {
   const numeric = Number(value);
@@ -183,15 +183,15 @@ const PackageManagementPanel = ({
                         size="sm"
                         onClick={() => onEdit(pkg)}
                       >
-                        <Pencil className="mr-2 h-4 w-4" /> Edit
+                        <Edit className="mr-2 h-4 w-4" /> Edit
                       </Button>
                       <Button
                         variant={pkg.active ? 'destructive' : 'default'}
                         size="sm"
                         onClick={() => handleRequestToggle(pkg)}
                       >
-                        <Power className="mr-2 h-4 w-4" />
-                        {pkg.active ? 'Deactivate' : 'Activate'}
+                        <Power className="h-4 w-4" />
+                        {pkg.active ? '' : ''}
                       </Button>
                     </div>
                   ) : null}

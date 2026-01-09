@@ -14,6 +14,7 @@ import {
   FileText,
   Server,
   Bell,
+  AlertTriangle,
 } from 'lucide-react';
 import StatsCard from './dashboard/StatsCard';
 import SalesChart from './dashboard/SalesChart';
@@ -25,15 +26,18 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
 import AdminDashboardSkeleton from '@/components/dashboard/AdminDashboardSkeleton';
 import ErrorState from '@/components/shared/ErrorState';
-import { useVerificationQueue } from '@/hooks/useVerificationQueue';
 import { useAuth } from '@/components/AuthContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { inventoryService } from '@/api/services/inventoryService';
+import { calculateExpiringItems } from '@/components/analytics/utils/analyticsHelpers';
+
+const EXPIRY_WARNING_DAYS = 5;
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState('today');
-  const { hasAnyRole, user } = useAuth();
+  const { hasAnyRole, user, can } = useAuth();
   const isAdmin = hasAnyRole(['admin']);
   const { stats, loading, error, refetch } = useDashboard(timeRange, {
     enabled: !isAdmin,
@@ -44,13 +48,52 @@ const Dashboard = () => {
     error: adminError,
     refetch: adminRefetch,
   } = useAdminDashboard({ enabled: isAdmin });
-  const isVerifier = hasAnyRole(['admin', 'manager']);
-  const { requests: pendingRequests, pagination: verifyPagination } =
-    useVerificationQueue({
-      status: 'pending',
-      limit: 1,
-      enabled: !isAdmin && isVerifier && Boolean(user),
-    });
+  const canViewInventory = can('inventory.view') && Boolean(user);
+  const [expiringCount, setExpiringCount] = useState(0);
+  const [expiringLoading, setExpiringLoading] = useState(false);
+  const [expiringError, setExpiringError] = useState(null);
+
+  React.useEffect(() => {
+    let active = true;
+    if (isAdmin || !canViewInventory) {
+      setExpiringCount(0);
+      setExpiringError(null);
+      return undefined;
+    }
+
+    const loadExpiring = async () => {
+      setExpiringLoading(true);
+      setExpiringError(null);
+      try {
+        const res = await inventoryService.getInventoryItems({ limit: 250 });
+        if (!res?.success) {
+          throw new Error('Failed to load inventory items');
+        }
+        const list = res?.data || [];
+        const normalized = list.map((item) => ({
+          ...item,
+          expiryDate: item.expiryDate || item.expiry_date || null,
+        }));
+        const expiring = calculateExpiringItems(
+          normalized,
+          EXPIRY_WARNING_DAYS
+        ).filter((item) => item.daysToExpiry >= 0);
+        if (!active) return;
+        setExpiringCount(expiring.length);
+      } catch (err) {
+        if (!active) return;
+        setExpiringError(err?.message || 'Unable to load inventory alerts');
+        setExpiringCount(0);
+      } finally {
+        if (active) setExpiringLoading(false);
+      }
+    };
+
+    loadExpiring();
+    return () => {
+      active = false;
+    };
+  }, [canViewInventory, isAdmin]);
 
   // Merge today and yesterday category sales data for comparison
   const categorySalesData = React.useMemo(() => {
@@ -436,11 +479,19 @@ const Dashboard = () => {
           comparisonPeriod="yesterday"
           icon={ShoppingBag}
         />
-        {isVerifier ? (
+        {canViewInventory ? (
           <StatsCard
-            title="Pending Accounts"
-            value={verifyPagination?.total ?? (pendingRequests?.length || 0)}
-            icon={ShieldCheck}
+            title="Expiring Inventory"
+            value={expiringCount}
+            icon={AlertTriangle}
+            detail={
+              expiringLoading
+                ? 'Checking expiry dates...'
+                : expiringError
+                  ? expiringError
+                  : `Next ${EXPIRY_WARNING_DAYS} days`
+            }
+            onClick={() => navigate('/inventory')}
           />
         ) : null}
       </div>

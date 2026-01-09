@@ -1,5 +1,12 @@
-import React, { startTransition, useCallback, useMemo, useState } from 'react';
-import InventoryRecentActivity from '@/components/inventory/InventoryRecentActivity';
+import React, {
+  startTransition,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+} from 'react';
+import InventoryExpiringProducts from '@/components/inventory/InventoryExpiringProducts';
 import { toast } from 'sonner';
 import InventoryHeader from '@/components/inventory/InventoryHeader';
 import InventoryFilters from '@/components/inventory/InventoryFilters';
@@ -8,12 +15,71 @@ import InventoryFooter from '@/components/inventory/InventoryFooter';
 import InventoryModals from '@/components/inventory/InventoryModals';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import { Boxes } from 'lucide-react';
-import {
-  useInventoryManagement,
-  useInventoryActivities,
-} from '@/hooks/useInventoryManagement';
+import { notificationsService } from '@/api/services/notificationsService';
+import { useAuth } from '@/components/AuthContext';
+import { useInventoryManagement } from '@/hooks/useInventoryManagement';
+import { calculateExpiringItems } from '@/components/analytics/utils/analyticsHelpers';
+
+const EXPIRY_WARNING_DAYS = 5;
+const EXPIRY_WARNING_STORAGE_KEY = 'inventory.expiryWarnings.v1';
+
+const loadExpiryWarnings = () => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(EXPIRY_WARNING_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveExpiryWarnings = (warnings) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      EXPIRY_WARNING_STORAGE_KEY,
+      JSON.stringify(warnings || {})
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const buildExpiryKey = (itemId, expiryDate) => {
+  if (!itemId || !expiryDate) return '';
+  let dateKey = '';
+  try {
+    const parsed = new Date(expiryDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      dateKey = parsed.toISOString().split('T')[0];
+    }
+  } catch {
+    dateKey = '';
+  }
+  if (!dateKey) {
+    dateKey = String(expiryDate).split('T')[0];
+  }
+  return `${itemId}:${dateKey}`;
+};
+
+const getDaysToExpiry = (expiryDate) => {
+  if (!expiryDate) return null;
+  const parsed = new Date(expiryDate);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiryDay = new Date(
+    parsed.getFullYear(),
+    parsed.getMonth(),
+    parsed.getDate()
+  );
+  return Math.ceil((expiryDay - today) / (1000 * 60 * 60 * 24));
+};
 
 const Inventory = () => {
+  const { can } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -30,6 +96,7 @@ const Inventory = () => {
   );
   const {
     items,
+    loading: inventoryLoading,
     createInventoryItem,
     updateInventoryItem,
     deleteInventoryItem,
@@ -37,30 +104,14 @@ const Inventory = () => {
     refetch: refetchInventory,
   } = useInventoryManagement(listParams);
   const [disabledMap, setDisabledMap] = useState({});
-
-  // Recent activity (DB)
-  const activityParams = useMemo(() => ({ limit: 8 }), []);
-  const {
-    activities: recentActivities,
-    loading: recentLoading,
-    refetch: refetchActivities,
-  } = useInventoryActivities(activityParams, {
-    auto: true,
-    debounceMs: 400,
-    cacheTtlMs: 30000,
-  });
-
-  const forceRefreshActivities = useCallback(
-    () => refetchActivities({ force: true }),
-    [refetchActivities]
-  );
+  const notifyInFlightRef = useRef(false);
+  const canSendNotifications = can('notification.send');
 
   const schedulePostMutationSync = useCallback(() => {
     startTransition(() => {
-      forceRefreshActivities();
       refetchInventory();
     });
-  }, [forceRefreshActivities, refetchInventory]);
+  }, [refetchInventory]);
 
   const categories = [
     'Grains',
@@ -107,6 +158,76 @@ const Inventory = () => {
     });
   }, [items, disabledMap, searchTerm, selectedCategory]);
 
+  const expiringItems = useMemo(() => {
+    const normalized = (items || []).map((item) => ({
+      ...item,
+      expiryDate: item.expiryDate || item.expiry_date || null,
+    }));
+    return calculateExpiringItems(normalized, EXPIRY_WARNING_DAYS).filter(
+      (item) => item.daysToExpiry >= 0
+    );
+  }, [items]);
+
+  const notifyExpiryWarning = useCallback(
+    async (item, { showToast = false } = {}) => {
+      const expiryDate = item?.expiryDate || item?.expiry_date || null;
+      if (!expiryDate) return;
+      const daysToExpiry = getDaysToExpiry(expiryDate);
+      if (
+        daysToExpiry === null ||
+        daysToExpiry > EXPIRY_WARNING_DAYS ||
+        daysToExpiry < 0
+      )
+        return;
+
+      const expiresLabel =
+        daysToExpiry === 0
+          ? 'expires today'
+          : `expires in ${daysToExpiry} day${daysToExpiry === 1 ? '' : 's'}`;
+      const title = 'Inventory expiry warning';
+      const itemName = item.name || 'Inventory item';
+      const message = `${itemName} ${expiresLabel}.`;
+
+      if (showToast) {
+        toast.warning(message);
+      }
+
+      if (!canSendNotifications) return;
+      const key = buildExpiryKey(item.id, expiryDate);
+      if (!key) return;
+      const warnings = loadExpiryWarnings();
+      if (warnings[key]) return;
+
+      warnings[key] = Date.now();
+      saveExpiryWarnings(warnings);
+      try {
+        await notificationsService.create({
+          title,
+          message,
+          type: 'warning',
+        });
+      } catch {
+        // Ignore notification failures.
+      }
+    },
+    [canSendNotifications]
+  );
+
+  useEffect(() => {
+    if (!canSendNotifications) return;
+    if (!expiringItems.length) return;
+    if (notifyInFlightRef.current) return;
+    notifyInFlightRef.current = true;
+    const run = async () => {
+      for (const item of expiringItems) {
+        await notifyExpiryWarning(item);
+      }
+    };
+    run().finally(() => {
+      notifyInFlightRef.current = false;
+    });
+  }, [canSendNotifications, expiringItems, notifyExpiryWarning]);
+
   const getStockPercentage = (current, threshold) =>
     Math.min(100, Math.round((current / (threshold * 2)) * 100));
   const getStockBadgeVariant = (current, threshold) =>
@@ -138,11 +259,12 @@ const Inventory = () => {
         expiryDate: newItem.expiryDate ? newItem.expiryDate : null,
       };
       const created = await createInventoryItem(payload);
+      await notifyExpiryWarning(created, { showToast: true });
       schedulePostMutationSync();
       // No extra call needed since backend mirrors initial quantity into ledger and response includes authoritative quantity
       return created;
     },
-    [createInventoryItem, schedulePostMutationSync]
+    [createInventoryItem, notifyExpiryWarning, schedulePostMutationSync]
   );
 
   const handleEditItem = useCallback((item) => {
@@ -151,7 +273,7 @@ const Inventory = () => {
   }, []);
 
   const handleUpdateItem = useCallback(
-    (updatedItem) => {
+    async (updatedItem) => {
       const newQty = Number(updatedItem.currentStock ?? 0);
       const prevQty = Number(
         (editingItem && editingItem.currentStock) ?? newQty
@@ -171,15 +293,25 @@ const Inventory = () => {
           ? updateStock(updatedItem.id, newQty, 'set')
           : Promise.resolve();
 
-      Promise.all([metaPromise, stockPromise])
-        .catch(() => {
-          // Errors are handled in the hooks; keep UI responsive.
-        })
-        .finally(() => {
-          schedulePostMutationSync();
-        });
+      try {
+        await Promise.all([metaPromise, stockPromise]);
+        await notifyExpiryWarning(
+          { ...updatedItem, expiryDate: metaPayload.expiryDate },
+          { showToast: true }
+        );
+      } catch {
+        // Errors are handled in the hooks; keep UI responsive.
+      } finally {
+        schedulePostMutationSync();
+      }
     },
-    [updateInventoryItem, editingItem, schedulePostMutationSync, updateStock]
+    [
+      updateInventoryItem,
+      editingItem,
+      schedulePostMutationSync,
+      updateStock,
+      notifyExpiryWarning,
+    ]
   );
 
   const handleDeleteItem = useCallback(
@@ -247,11 +379,12 @@ const Inventory = () => {
         </FeaturePanelCard>
       </div>
 
-      {/* Right: Recent Inventory Activity (beside) */}
+      {/* Right: Upcoming Expired Products (beside) */}
       <div className="space-y-4">
-        <InventoryRecentActivity
-          recentActivities={recentActivities}
-          loading={recentLoading}
+        <InventoryExpiringProducts
+          items={expiringItems}
+          loading={inventoryLoading}
+          thresholdDays={EXPIRY_WARNING_DAYS}
         />
       </div>
 

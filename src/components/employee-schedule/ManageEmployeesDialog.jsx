@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -9,14 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +44,12 @@ const ManageEmployeesDialog = ({
       ),
     [employeeList]
   );
+  const [roleQuery, setRoleQuery] = useState('');
+  const filteredRoleOptions = useMemo(() => {
+    const query = (roleQuery || '').trim().toLowerCase();
+    if (!query) return roleOptions;
+    return roleOptions.filter((role) => role.toLowerCase().includes(query));
+  }, [roleOptions, roleQuery]);
 
   const normalizedEmployee = managedEmployee || {
     id: '',
@@ -225,25 +223,26 @@ const ManageEmployeesDialog = ({
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <Command>
-                    <CommandInput placeholder="Search roles..." />
-                    <CommandList className="max-h-56 overflow-y-auto">
-                      <CommandEmpty>No roles found.</CommandEmpty>
-                      <CommandGroup>
-                        {roleOptions.map((role) => (
-                          <CommandItem
-                            key={role}
-                            value={role}
-                            onSelect={(value) =>
-                              handleFieldChange('position', value)
-                            }
-                          >
-                            {role}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
+                  <div className="p-3">
+                    <Input
+                      value={roleQuery}
+                      onChange={(event) => setRoleQuery(event.target.value)}
+                      placeholder="Search roles..."
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {(filteredRoleOptions || []).map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                    {!filteredRoleOptions.length ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        No roles match.
+                      </div>
+                    ) : null}
+                  </div>
                 </SelectContent>
               </Select>
             </div>

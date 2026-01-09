@@ -19,7 +19,8 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
-from django.db.models import Avg, Count, F, Q, Sum
+from django.db.models import Avg, Count, F, Q, Sum, Value
+from django.db.models.functions import Greatest
 from django.utils import timezone as dj_tz
 from django.utils.crypto import get_random_string
 
@@ -905,6 +906,23 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
 
     try:
         from .models import Order, OrderItem, MenuItem
+        def apply_pax_deductions(blueprints):
+            totals = defaultdict(int)
+            for blueprint in blueprints:
+                menu_item = blueprint.get("menu_item")
+                qty = int(blueprint.get("quantity") or 0)
+                if not menu_item or qty <= 0:
+                    continue
+                totals[str(menu_item.id)] += qty
+            if not totals:
+                return
+            for menu_item_id, qty in totals.items():
+                MenuItem.objects.filter(id=menu_item_id).update(
+                    pax_per_preparation=Greatest(
+                        Value(0),
+                        F("pax_per_preparation") - qty,
+                    )
+                )
 
         station_lookup, station_list = _load_station_lookup()
         active_item_states = list(ITEM_ACTIVE_STATES)
@@ -1096,6 +1114,10 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
             created_items.append(item)
 
         recalc_order_counters(o, created_items)
+        try:
+            apply_pax_deductions(line_blueprints)
+        except Exception:
+            logger.exception("Failed to deduct pax per preparation")
 
         if _should_create_pending_cash_payment(payment_method, requested_channel):
             _ensure_pending_cash_payment(

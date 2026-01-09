@@ -7,11 +7,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   CalendarRange,
   ChevronDown,
-  Plus,
-  Settings,
+  MoreHorizontal,
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const DEFAULT_DAY_OPTIONS = [
   'Monday',
@@ -316,32 +322,34 @@ const WeeklyScheduleCard = ({
         description="Plan coverage, assign teammates, and publish this week's roster from a single view."
         headerActions={
           canManage ? (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                onClick={onOpenManageEmployees}
-              >
-                <Settings className="h-4 w-4" aria-hidden="true" />
-                Manage team
-              </Button>
-              <Button size="sm" className="gap-2" onClick={onOpenAddSchedule}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Add schedule
-              </Button>
-              {typeof onClearAllSchedules === 'function' ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="gap-2 text-destructive hover:text-destructive"
-                  onClick={onClearAllSchedules}
+                  className="h-9 w-9 rounded-full p-0"
                 >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  Clear roster
+                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Show roster actions</span>
                 </Button>
-              ) : null}
-            </>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onOpenManageEmployees}>
+                  Manage team
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenAddSchedule}>
+                  Add schedule
+                </DropdownMenuItem>
+                {typeof onClearAllSchedules === 'function' ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onClearAllSchedules}>
+                      Clear roster
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null
         }
         decor={

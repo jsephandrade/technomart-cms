@@ -449,6 +449,78 @@ class ScheduleEntry(models.Model):
 
 
 # -----------------------------
+# Team Composition Targets
+# -----------------------------
+
+
+class TeamCompositionTarget(models.Model):
+    """Daily role caps for scheduling."""
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    day = models.CharField(max_length=16)
+    role = models.CharField(max_length=64)
+    target_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_composition_targets_created",
+    )
+    updated_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_composition_targets_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "team_composition_target"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["day", "role"], name="team_composition_target_day_role_uniq"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["day", "role"], name="team_comp_target_day_role_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.day}: {self.role} ({self.target_count})"
+
+
+class TeamCompositionException(models.Model):
+    """Exception request when daily role caps are exceeded."""
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    day = models.CharField(max_length=16)
+    role = models.CharField(max_length=64)
+    message = models.TextField(blank=True)
+    requested_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_composition_exceptions",
+    )
+    requested_by_label = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "team_composition_exception"
+        indexes = [
+            models.Index(fields=["day", "role"], name="team_comp_exc_day_role_idx"),
+            models.Index(fields=["created_at"], name="team_comp_exc_created_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.day}: {self.role}"
+
+
+# -----------------------------
 # Activity / Audit Logging
 # -----------------------------
 

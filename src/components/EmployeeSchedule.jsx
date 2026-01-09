@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/AuthContext';
 import { useEmployees, useSchedule } from '@/hooks/useEmployees';
+import { employeeService } from '@/api/services/employeeService';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import ManageEmployeesDialog from '@/components/employee-schedule/ManageEmployeesDialog';
@@ -31,6 +32,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -72,9 +74,6 @@ const DEFAULT_EMPLOYEE_FORM = {
   status: 'active',
 };
 
-const ROLE_TARGET_STORAGE_KEY = 'schedule.roleTargets.v1';
-const ROLE_EXCEPTION_STORAGE_KEY = 'schedule.roleTargetExceptions.v1';
-
 const buildEmptyRoleTargets = (days = []) => {
   const targets = {};
   (days || []).forEach((day) => {
@@ -84,66 +83,67 @@ const buildEmptyRoleTargets = (days = []) => {
   return targets;
 };
 
-const loadRoleTargets = (days = []) => {
-  const base = buildEmptyRoleTargets(days);
-  if (typeof window === 'undefined') return base;
-  try {
-    const raw = window.localStorage.getItem(ROLE_TARGET_STORAGE_KEY);
-    if (!raw) return base;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return base;
-    const next = { ...base };
-    Object.keys(base).forEach((day) => {
-      if (Array.isArray(parsed[day])) {
-        next[day] = parsed[day];
-      }
-    });
-    return next;
-  } catch {
-    return base;
-  }
-};
-
-const saveRoleTargets = (targets) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      ROLE_TARGET_STORAGE_KEY,
-      JSON.stringify(targets || {})
-    );
-  } catch {
-    // Ignore storage failures.
-  }
-};
-
-const loadRoleExceptions = () => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(ROLE_EXCEPTION_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveRoleExceptions = (exceptions) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      ROLE_EXCEPTION_STORAGE_KEY,
-      JSON.stringify(exceptions || [])
-    );
-  } catch {
-    // Ignore storage failures.
-  }
-};
-
 const normalizeRole = (value) =>
   String(value || '')
     .trim()
     .toLowerCase();
+
+const normalizeTargetsByDay = (targetsByDay = {}, days = []) => {
+  const base = buildEmptyRoleTargets(days);
+  const source =
+    targetsByDay && typeof targetsByDay === 'object' ? targetsByDay : {};
+  Object.keys(base).forEach((day) => {
+    const entries = Array.isArray(source[day]) ? source[day] : [];
+    base[day] = entries
+      .map((entry) => ({
+        id: entry?.id,
+        role: String(entry?.role || '').trim(),
+        target: Number(entry?.target || 0),
+      }))
+      .filter((entry) => entry.role);
+  });
+  return base;
+};
+
+const normalizeExceptionEntry = (entry) => {
+  if (!entry) return null;
+  const requestedAt = entry.requestedAt || entry.requested_at;
+  const parsed =
+    typeof requestedAt === 'number'
+      ? requestedAt
+      : Date.parse(requestedAt || '');
+  return {
+    id: entry.id,
+    day: entry.day,
+    role: entry.role,
+    message: entry.message || '',
+    requestedBy: entry.requestedBy || entry.requested_by || '',
+    requestedAt: Number.isFinite(parsed) ? parsed : Date.now(),
+  };
+};
+
+const extractTargetsByDay = (payload, days) => {
+  if (payload?.targetsByDay && typeof payload.targetsByDay === 'object') {
+    return payload.targetsByDay;
+  }
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : [];
+  if (!items.length) return {};
+  const base = buildEmptyRoleTargets(days);
+  items.forEach((entry) => {
+    const day = entry?.day;
+    if (!day || !base[day]) return;
+    base[day].push({
+      id: entry?.id,
+      role: entry?.role,
+      target: entry?.target,
+    });
+  });
+  return base;
+};
 
 const EmployeeSchedule = () => {
   const { hasAnyRole, user } = useAuth();
@@ -226,14 +226,26 @@ const EmployeeSchedule = () => {
     refetch: refetchSchedule,
   } = useSchedule({}, { autoFetch: true });
 
+  const [roleTargetsByDay, setRoleTargetsByDay] = useState(() =>
+    buildEmptyRoleTargets(DAYS_OF_WEEK)
+  );
+  const [roleTargetsLoading, setRoleTargetsLoading] = useState(false);
+  const [roleExceptions, setRoleExceptions] = useState([]);
+
   const roleOptions = useMemo(() => {
     const unique = new Set();
     displayEmployees.forEach((employee) => {
       const role = String(employee?.position || '').trim();
       if (role) unique.add(role);
     });
+    Object.values(roleTargetsByDay || {}).forEach((entries) => {
+      (entries || []).forEach((entry) => {
+        const role = String(entry?.role || '').trim();
+        if (role) unique.add(role);
+      });
+    });
     return Array.from(unique).sort((a, b) => a.localeCompare(b));
-  }, [displayEmployees]);
+  }, [displayEmployees, roleTargetsByDay]);
 
   const employeeRoleMap = useMemo(() => {
     const map = new Map();
@@ -293,12 +305,6 @@ const EmployeeSchedule = () => {
     endTime: '16:00',
   });
   const [activeTab, setActiveTab] = useState('schedule');
-  const [roleTargetsByDay, setRoleTargetsByDay] = useState(() =>
-    loadRoleTargets(DAYS_OF_WEEK)
-  );
-  const [roleExceptions, setRoleExceptions] = useState(() =>
-    loadRoleExceptions()
-  );
   const [roleExceptionDialog, setRoleExceptionDialog] = useState(null);
   const [roleExceptionReason, setRoleExceptionReason] = useState('');
   const [autoBuildDialogOpen, setAutoBuildDialogOpen] = useState(false);
@@ -380,32 +386,83 @@ const EmployeeSchedule = () => {
     };
   };
 
-  const handleUpdateRoleTargets = (day, targets) => {
-    if (!day) return;
-    setRoleTargetsByDay((prev) => ({
-      ...prev,
-      [day]: Array.isArray(targets) ? targets : [],
-    }));
+  const handleUpdateRoleTargets = async (day, targets) => {
+    if (!canManage || !day) return;
+    setRoleTargetsLoading(true);
+    try {
+      const res = await employeeService.updateRoleTargets({
+        day,
+        targets: Array.isArray(targets) ? targets : [],
+      });
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to update role targets');
+      }
+      const payload = res?.data || res || {};
+      const normalized = normalizeTargetsByDay(
+        extractTargetsByDay(payload, DAYS_OF_WEEK),
+        DAYS_OF_WEEK
+      );
+      setRoleTargetsByDay(normalized);
+      toast.success('Team composition updated');
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to update team composition targets');
+    } finally {
+      setRoleTargetsLoading(false);
+    }
   };
 
-  const handleAddRoleException = (payload) => {
-    const request = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      day: payload?.day || '',
-      role: payload?.roleLabel || 'Role',
-      message: payload?.message || '',
-      requestedBy: payload?.requestedBy || '',
-      requestedAt: Date.now(),
-    };
-    setRoleExceptions((prev) => [request, ...(prev || [])]);
+  const handleAddRoleException = async (payload) => {
+    if (!canManage) return;
+    try {
+      const res = await employeeService.createRoleException({
+        day: payload?.day || '',
+        role: payload?.roleLabel || 'Role',
+        message: payload?.message || '',
+        requestedBy: payload?.requestedBy || '',
+      });
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to create exception');
+      }
+      const entry = normalizeExceptionEntry(res?.data || res);
+      if (entry) {
+        setRoleExceptions((prev) => [entry, ...(prev || [])]);
+      }
+      toast.success('Exception request submitted');
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to submit exception request');
+    }
   };
 
-  const handleClearRoleException = (id) => {
-    setRoleExceptions((prev) => (prev || []).filter((item) => item.id !== id));
+  const handleClearRoleException = async (id) => {
+    if (!canManage || !id) return;
+    try {
+      const res = await employeeService.deleteRoleException(id);
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to clear exception');
+      }
+      setRoleExceptions((prev) =>
+        (prev || []).filter((item) => String(item.id) !== String(id))
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to clear exception request');
+    }
   };
 
-  const handleClearAllRoleExceptions = () => {
-    setRoleExceptions([]);
+  const handleClearAllRoleExceptions = async () => {
+    if (!canManage) return;
+    try {
+      const res = await employeeService.clearRoleExceptions();
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to clear exceptions');
+      }
+      setRoleExceptions([]);
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to clear exception requests');
+    }
   };
 
   const openRoleExceptionDialog = (payload) => {
@@ -418,18 +475,17 @@ const EmployeeSchedule = () => {
     setRoleExceptionReason('');
   };
 
-  const submitRoleException = () => {
+  const submitRoleException = async () => {
     if (!roleExceptionDialog) return;
     const reason = roleExceptionReason.trim();
     const baseMessage = roleExceptionDialog.message || '';
     const message = reason ? `${baseMessage} Reason: ${reason}` : baseMessage;
-    handleAddRoleException({
+    await handleAddRoleException({
       day: roleExceptionDialog.day,
       roleLabel: roleExceptionDialog.roleLabel,
       message,
       requestedBy: user?.name || user?.email || 'Manager',
     });
-    toast.success('Exception request submitted');
     closeRoleExceptionDialog();
   };
 
@@ -437,6 +493,10 @@ const EmployeeSchedule = () => {
     if (!canManage) return;
     if (!quickAdd.name.trim()) {
       toast.error('Name is required');
+      return;
+    }
+    if (roleTargetsLoading) {
+      toast.info('Loading team composition targets. Please try again.');
       return;
     }
     const roleLabel = String(quickAdd.position || '').trim();
@@ -708,12 +768,69 @@ const EmployeeSchedule = () => {
   ]);
 
   useEffect(() => {
-    saveRoleTargets(roleTargetsByDay);
-  }, [roleTargetsByDay]);
+    if (!canManage) return;
+    let active = true;
+
+    const loadTargets = async () => {
+      setRoleTargetsLoading(true);
+      try {
+        const res = await employeeService.getRoleTargets();
+        if (!active) return;
+        if (res?.success === false) {
+          throw new Error(res?.message || 'Failed to load role targets');
+        }
+        const payload = res?.data || res || {};
+        const normalized = normalizeTargetsByDay(
+          extractTargetsByDay(payload, DAYS_OF_WEEK),
+          DAYS_OF_WEEK
+        );
+        setRoleTargetsByDay(normalized);
+      } catch (error) {
+        if (!active) return;
+        console.error(error);
+        toast.error('Unable to load team composition targets');
+      } finally {
+        if (active) setRoleTargetsLoading(false);
+      }
+    };
+
+    loadTargets();
+    return () => {
+      active = false;
+    };
+  }, [canManage]);
 
   useEffect(() => {
-    saveRoleExceptions(roleExceptions);
-  }, [roleExceptions]);
+    if (!canManage) return;
+    let active = true;
+
+    const loadExceptions = async () => {
+      try {
+        const res = await employeeService.getRoleExceptions();
+        if (!active) return;
+        if (res?.success === false) {
+          throw new Error(res?.message || 'Failed to load exceptions');
+        }
+        const items = res?.data || res || [];
+        const list = Array.isArray(items) ? items : items.items || [];
+        const normalized = list
+          .map((entry) => normalizeExceptionEntry(entry))
+          .filter(Boolean);
+        setRoleExceptions(normalized);
+      } catch (error) {
+        if (!active) return;
+        console.error(error);
+        toast.error('Unable to load exception requests');
+      } finally {
+        // no-op
+      }
+    };
+
+    loadExceptions();
+    return () => {
+      active = false;
+    };
+  }, [canManage]);
 
   useEffect(() => {
     if (!isStaffOnly) return;
@@ -907,6 +1024,11 @@ const EmployeeSchedule = () => {
       return;
     }
 
+    if (roleTargetsLoading) {
+      toast.info('Loading team composition targets. Please try again.');
+      return;
+    }
+
     const start = toMinutes(startTime);
     const end = toMinutes(endTime);
 
@@ -964,6 +1086,11 @@ const EmployeeSchedule = () => {
 
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
       toast.error('Invalid time range');
+      return;
+    }
+
+    if (roleTargetsLoading) {
+      toast.info('Loading team composition targets. Please try again.');
       return;
     }
 
@@ -1135,20 +1262,22 @@ const EmployeeSchedule = () => {
 
   const schedulePane = (
     <div className="space-y-6">
-      <TeamCompositionCard
-        daysOfWeek={DAYS_OF_WEEK}
-        targetsByDay={roleTargetsByDay}
-        countsByDay={roleCountsByDay}
-        roleLabelMap={roleLabelMap}
-        roleOptions={roleOptions}
-        canManage={canManage}
-        onUpdateTargets={handleUpdateRoleTargets}
-        onAutoBuildRoster={() => setAutoBuildDialogOpen(true)}
-        autoBuildBusy={autoBuildBusy}
-        exceptionRequests={roleExceptions}
-        onClearException={handleClearRoleException}
-        onClearAllExceptions={handleClearAllRoleExceptions}
-      />
+      {canManage ? (
+        <TeamCompositionCard
+          daysOfWeek={DAYS_OF_WEEK}
+          targetsByDay={roleTargetsByDay}
+          countsByDay={roleCountsByDay}
+          roleLabelMap={roleLabelMap}
+          roleOptions={roleOptions}
+          canManage={canManage}
+          onUpdateTargets={handleUpdateRoleTargets}
+          onAutoBuildRoster={() => setAutoBuildDialogOpen(true)}
+          autoBuildBusy={autoBuildBusy || roleTargetsLoading}
+          exceptionRequests={roleExceptions}
+          onClearException={handleClearRoleException}
+          onClearAllExceptions={handleClearAllRoleExceptions}
+        />
+      ) : null}
       <ScheduleTab
         daysOfWeek={DAYS_OF_WEEK}
         displayEmployees={displayEmployees}

@@ -162,6 +162,34 @@ class EmployeeService {
     }));
   }
 
+  async getRoleTargets(params = {}) {
+    const query = this._buildQueryString(params);
+    return await apiClient.get(`/schedule/role-targets${query}`);
+  }
+
+  async updateRoleTargets(payload = {}) {
+    return await apiClient.put('/schedule/role-targets', payload);
+  }
+
+  async getRoleExceptions(params = {}) {
+    const query = this._buildQueryString(params);
+    return await apiClient.get(`/schedule/role-exceptions${query}`);
+  }
+
+  async createRoleException(payload = {}) {
+    return await apiClient.post('/schedule/role-exceptions', payload);
+  }
+
+  async deleteRoleException(id) {
+    return await apiClient.delete(
+      `/schedule/role-exceptions/${encodeURIComponent(id)}`
+    );
+  }
+
+  async clearRoleExceptions() {
+    return await apiClient.delete('/schedule/role-exceptions?clear=all');
+  }
+
   async getScheduleAnalytics(params = {}) {
     const qs = new URLSearchParams();
     Object.entries(params || {}).forEach(([k, v]) => {

@@ -143,6 +143,13 @@ urlpatterns = [
     path("employees/<uuid:emp_id>", emp_views.employee_detail, name="employee_detail"),
     path("employees/with-schedule", emp_views.employees_with_schedule, name="employees_with_schedule"),
     path("schedule", emp_views.schedule, name="schedule"),
+    path("schedule/role-targets", emp_views.schedule_role_targets, name="schedule_role_targets"),
+    path("schedule/role-exceptions", emp_views.schedule_role_exceptions, name="schedule_role_exceptions"),
+    path(
+        "schedule/role-exceptions/<uuid:eid>",
+        emp_views.schedule_role_exception_detail,
+        name="schedule_role_exception_detail",
+    ),
     path("schedule/analytics", emp_views.schedule_analytics, name="schedule_analytics"),
     path("schedule/<uuid:sid>", emp_views.schedule_detail, name="schedule_detail"),
 

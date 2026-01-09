@@ -124,6 +124,56 @@ def _safe_sched(s):
     }
 
 
+def _safe_role_target(t):
+    return {
+        "id": str(t.id),
+        "day": t.day,
+        "role": t.role,
+        "target": int(t.target_count or 0),
+        "createdAt": _iso_or_str(t.created_at),
+        "updatedAt": _iso_or_str(t.updated_at),
+    }
+
+
+def _safe_role_exception(e):
+    requested_by = getattr(e.requested_by, "name", "") or getattr(e.requested_by, "email", "")
+    return {
+        "id": str(e.id),
+        "day": e.day,
+        "role": e.role,
+        "message": e.message or "",
+        "requestedBy": e.requested_by_label or requested_by or "",
+        "requestedAt": _iso_or_str(e.created_at),
+    }
+
+
+def _targets_by_day(items):
+    result = {day: [] for day in DAYS}
+    for entry in items:
+        day = entry.get("day") if isinstance(entry, dict) else getattr(entry, "day", None)
+        if not day:
+            continue
+        if day not in result:
+            result[day] = []
+        if isinstance(entry, dict):
+            result[day].append(
+                {
+                    "id": entry.get("id"),
+                    "role": entry.get("role"),
+                    "target": entry.get("target"),
+                }
+            )
+        else:
+            result[day].append(
+                {
+                    "id": str(entry.id),
+                    "role": entry.role,
+                    "target": int(entry.target_count or 0),
+                }
+            )
+    return result
+
+
 @require_http_methods(["GET", "POST"])
 def employees(request):
     """List/create employees.
@@ -475,10 +525,169 @@ def schedule_detail(request, sid):
         return JsonResponse({"success": False, "message": "Server error"}, status=500)
 
 
+@require_http_methods(["GET", "PUT"])
+def schedule_role_targets(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "schedule.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        from .models import TeamCompositionTarget
+        if request.method == "GET":
+            day = request.GET.get("day")
+            qs = TeamCompositionTarget.objects.all()
+            if day:
+                qs = qs.filter(day=day)
+            qs = qs.order_by("day", "role")
+            items = [_safe_role_target(t) for t in qs]
+            return JsonResponse(
+                {"success": True, "data": {"items": items, "targetsByDay": _targets_by_day(items)}}
+            )
+
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+
+        day = payload.get("day")
+        targets_by_day = payload.get("targetsByDay")
+        targets = payload.get("targets")
+
+        update_map = {}
+        if day:
+            if day not in DAYS:
+                return JsonResponse({"success": False, "message": "Invalid day"}, status=400)
+            update_map[day] = targets if isinstance(targets, list) else []
+        elif isinstance(targets_by_day, dict):
+            update_map = targets_by_day
+        elif isinstance(targets, list):
+            for entry in targets:
+                entry_day = entry.get("day")
+                if not entry_day:
+                    continue
+                update_map.setdefault(entry_day, []).append(entry)
+        else:
+            return JsonResponse({"success": False, "message": "No targets provided"}, status=400)
+
+        for entry_day in update_map.keys():
+            if entry_day not in DAYS:
+                return JsonResponse(
+                    {"success": False, "message": f"Invalid day: {entry_day}"},
+                    status=400,
+                )
+
+        with transaction.atomic():
+            for entry_day, entries in update_map.items():
+                TeamCompositionTarget.objects.filter(day=entry_day).delete()
+                for entry in entries or []:
+                    role = str(entry.get("role") or "").strip()
+                    target = entry.get("target")
+                    try:
+                        target = int(target)
+                    except Exception:
+                        target = 0
+                    if not role or target <= 0:
+                        continue
+                    TeamCompositionTarget.objects.create(
+                        day=entry_day,
+                        role=role,
+                        target_count=target,
+                        created_by=actor,
+                        updated_by=actor,
+                    )
+
+        qs = TeamCompositionTarget.objects.order_by("day", "role")
+        items = [_safe_role_target(t) for t in qs]
+        return JsonResponse(
+            {"success": True, "data": {"items": items, "targetsByDay": _targets_by_day(items)}}
+        )
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
+@require_http_methods(["GET", "POST", "DELETE"])
+def schedule_role_exceptions(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "schedule.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        from .models import TeamCompositionException
+        if request.method == "GET":
+            day = request.GET.get("day")
+            qs = TeamCompositionException.objects.all()
+            if day:
+                qs = qs.filter(day=day)
+            qs = qs.order_by("-created_at")
+            items = [_safe_role_exception(e) for e in qs]
+            return JsonResponse({"success": True, "data": items})
+
+        if request.method == "DELETE":
+            clear_all = (request.GET.get("clear") or "").lower() in {"1", "true", "all"}
+            if clear_all:
+                TeamCompositionException.objects.all().delete()
+                return JsonResponse({"success": True})
+            return JsonResponse({"success": False, "message": "Missing clear=all"}, status=400)
+
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+
+        day = payload.get("day")
+        role = str(payload.get("role") or "").strip()
+        message = str(payload.get("message") or "").strip()
+        requested_by_label = str(payload.get("requestedBy") or "").strip()
+
+        if day not in DAYS:
+            return JsonResponse({"success": False, "message": "Invalid day"}, status=400)
+        if not role:
+            return JsonResponse({"success": False, "message": "Role is required"}, status=400)
+
+        entry = TeamCompositionException.objects.create(
+            day=day,
+            role=role,
+            message=message,
+            requested_by=actor,
+            requested_by_label=requested_by_label,
+        )
+        return JsonResponse({"success": True, "data": _safe_role_exception(entry)})
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
+@require_http_methods(["DELETE"])
+def schedule_role_exception_detail(request, eid):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "schedule.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+    try:
+        from .models import TeamCompositionException
+        entry = TeamCompositionException.objects.filter(id=eid).first()
+        if not entry:
+            return JsonResponse({"success": False, "message": "Not found"}, status=404)
+        entry.delete()
+        return JsonResponse({"success": True})
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
 __all__ = [
     "employees",
     "employees_with_schedule",
     "employee_detail",
     "schedule",
     "schedule_detail",
+    "schedule_role_targets",
+    "schedule_role_exceptions",
+    "schedule_role_exception_detail",
 ]

@@ -87,8 +87,13 @@ const TeamCompositionCard = ({
 
   const exceptionList = useMemo(() => {
     const list = Array.isArray(exceptionRequests) ? exceptionRequests : [];
+    const toEpoch = (value) => {
+      if (typeof value === 'number') return value;
+      const parsed = Date.parse(value || '');
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
     return [...list].sort(
-      (a, b) => (b?.requestedAt || 0) - (a?.requestedAt || 0)
+      (a, b) => toEpoch(b?.requestedAt) - toEpoch(a?.requestedAt)
     );
   }, [exceptionRequests]);
 

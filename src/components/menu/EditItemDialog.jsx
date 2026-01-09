@@ -60,6 +60,14 @@ const EditItemDialog = ({
   const priceInvalid =
     hasPriceValue && (!Number.isFinite(parsedPrice) || parsedPrice < 0);
   const priceError = submitted && priceInvalid;
+  const paxValue = useMemo(
+    () => String(item?.estimatedPax ?? '').trim(),
+    [item]
+  );
+  const parsedPax = paxValue === '' ? Number.NaN : Number(paxValue);
+  const paxInvalid =
+    paxValue !== '' && (!Number.isFinite(parsedPax) || parsedPax < 0);
+  const paxError = submitted && paxInvalid;
   const categoryOptions = useMemo(() => {
     const unique = new Set();
     (Array.isArray(categories) ? categories : []).forEach((entry) => {
@@ -103,6 +111,12 @@ const EditItemDialog = ({
     setItem({ ...item, price: cleaned === '' ? '' : cleaned });
   };
 
+  const handlePaxChange = (event) => {
+    const value = event.target.value;
+    if (!/^\d*$/.test(value)) return;
+    setItem({ ...item, estimatedPax: value === '' ? '' : value });
+  };
+
   const blockExponentInput = (event) => {
     if (event.key === 'e' || event.key === 'E') {
       event.preventDefault();
@@ -124,7 +138,7 @@ const EditItemDialog = ({
     if (saving) return;
 
     setSubmitted(true);
-    if (!nameValue || !categoryValue || priceInvalid) return;
+    if (!nameValue || !categoryValue || priceInvalid || paxInvalid) return;
 
     setSaving(true);
     try {
@@ -298,6 +312,40 @@ const EditItemDialog = ({
                   <p className="text-xs text-muted-foreground">
                     Enter the price in PHP (₱).
                   </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-pax" className="flex items-center h-5">
+                  Pax per Preparation
+                </Label>
+                <Input
+                  id="edit-pax"
+                  type="text"
+                  inputMode="numeric"
+                  value={paxValue}
+                  onChange={handlePaxChange}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === '-' ||
+                      event.key === '+' ||
+                      event.key === 'e' ||
+                      event.key === 'E'
+                    ) {
+                      event.preventDefault();
+                    }
+                  }}
+                  placeholder="e.g., 80"
+                  className={cn(paxError && 'border-destructive')}
+                  disabled={saving}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Determines the availability/sold-out behavior.
+                </p>
+                {paxError && (
+                  <div className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Pax value must be 0 or greater.</span>
+                  </div>
                 )}
               </div>
 

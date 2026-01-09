@@ -161,8 +161,8 @@ const EmployeeSchedule = () => {
   const leaveTabLabel = isAdmin ? 'Leave Management' : 'Leave Records';
   const staffLeaveTabValue = 'leave-request';
   const tabsGridCols = showCombinedAttendanceLeave
-    ? 'grid-cols-3'
-    : 'grid-cols-4';
+    ? 'grid-cols-4'
+    : 'grid-cols-5';
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -1260,24 +1260,27 @@ const EmployeeSchedule = () => {
     />
   );
 
+  const teamCompositionPane = canManage ? (
+    <div className="space-y-6">
+      <TeamCompositionCard
+        daysOfWeek={DAYS_OF_WEEK}
+        targetsByDay={roleTargetsByDay}
+        countsByDay={roleCountsByDay}
+        roleLabelMap={roleLabelMap}
+        roleOptions={roleOptions}
+        canManage={canManage}
+        onUpdateTargets={handleUpdateRoleTargets}
+        onAutoBuildRoster={() => setAutoBuildDialogOpen(true)}
+        autoBuildBusy={autoBuildBusy || roleTargetsLoading}
+        exceptionRequests={roleExceptions}
+        onClearException={handleClearRoleException}
+        onClearAllExceptions={handleClearAllRoleExceptions}
+      />
+    </div>
+  ) : null;
+
   const schedulePane = (
     <div className="space-y-6">
-      {canManage ? (
-        <TeamCompositionCard
-          daysOfWeek={DAYS_OF_WEEK}
-          targetsByDay={roleTargetsByDay}
-          countsByDay={roleCountsByDay}
-          roleLabelMap={roleLabelMap}
-          roleOptions={roleOptions}
-          canManage={canManage}
-          onUpdateTargets={handleUpdateRoleTargets}
-          onAutoBuildRoster={() => setAutoBuildDialogOpen(true)}
-          autoBuildBusy={autoBuildBusy || roleTargetsLoading}
-          exceptionRequests={roleExceptions}
-          onClearException={handleClearRoleException}
-          onClearAllExceptions={handleClearAllRoleExceptions}
-        />
-      ) : null}
       <ScheduleTab
         daysOfWeek={DAYS_OF_WEEK}
         displayEmployees={displayEmployees}
@@ -1315,14 +1318,20 @@ const EmployeeSchedule = () => {
             className={`w-full grid ${tabsGridCols} gap-2 bg-muted/40 p-1 rounded-lg`}
           >
             <TabsTrigger
+              value="team-composition"
+              aria-label="Team Composition"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
+            >
+              <Users className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden lg:inline">Team Composition</span>
+            </TabsTrigger>
+            <TabsTrigger
               value="add"
               aria-label="Add Employee and Schedule"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ShieldPlus className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">
-                Add Employee and Schedule
-              </span>
+              <span className="hidden lg:inline">Add Employee & Sched</span>
             </TabsTrigger>
             <TabsTrigger
               value="schedule"
@@ -1351,6 +1360,9 @@ const EmployeeSchedule = () => {
               </TabsTrigger>
             ) : null}
           </TabsList>
+          <TabsContent value="team-composition" className="space-y-6">
+            {activeTab === 'team-composition' ? teamCompositionPane : null}
+          </TabsContent>
           <TabsContent value="add" className="space-y-6">
             {activeTab === 'add' ? addEmployeeContent : null}
           </TabsContent>

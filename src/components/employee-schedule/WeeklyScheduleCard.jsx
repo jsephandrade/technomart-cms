@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import UserManagementCard from '@/components/users/UserManagementCard';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarRange, ChevronDown } from 'lucide-react';
+import { CalendarRange, ChevronDown, Plus, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_DAY_OPTIONS = [
@@ -94,6 +95,9 @@ const WeeklyScheduleCard = ({
   overviewLoading = false,
   scheduleLoading = false,
   filters,
+  onOpenAddSchedule,
+  onOpenManageEmployees,
+  canManage = false,
 }) => {
   const filteredDays = daysOfWeek.length ? daysOfWeek : DEFAULT_DAY_OPTIONS;
   const selectableDays = (filteredDays || []).filter(
@@ -286,6 +290,25 @@ const WeeklyScheduleCard = ({
         titleStyle="accent"
         titleIcon={CalendarRange}
         description="Plan coverage, assign teammates, and publish this week's roster from a single view."
+        headerActions={
+          canManage ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={onOpenManageEmployees}
+              >
+                <Settings className="h-4 w-4" aria-hidden="true" />
+                Manage team
+              </Button>
+              <Button size="sm" className="gap-2" onClick={onOpenAddSchedule}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add schedule
+              </Button>
+            </>
+          ) : null
+        }
         decor={
           <div
             className="pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl"

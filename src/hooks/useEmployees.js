@@ -125,11 +125,14 @@ export const useSchedule = (initialParams = {}, options = {}) => {
     }
   };
 
-  const addScheduleEntry = async (entry) => {
+  const addScheduleEntry = async (entry, options = {}) => {
+    const { suppressToast = false } = options || {};
     try {
       const created = await employeeService.createSchedule(entry);
       setSchedule((prev) => [...prev, created]);
-      toast.success('Schedule added successfully');
+      if (!suppressToast) {
+        toast.success('Schedule added successfully');
+      }
       return created;
     } catch (err) {
       const errorMessage =

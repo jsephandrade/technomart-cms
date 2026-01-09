@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -18,14 +19,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+const CAPACITY_STYLES = {
+  available: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
+  full: 'border border-destructive/30 bg-destructive/10 text-destructive',
+  missing: 'border border-amber-500/30 bg-amber-500/10 text-amber-700',
+};
+
 const EditScheduleDialog = ({
   editingSchedule,
   setEditingSchedule,
   daysOfWeek,
   employeeList,
+  capacityStatus,
   onSave,
 }) => {
   if (!editingSchedule) return null;
+
+  const capacityLabel = capacityStatus?.status
+    ? capacityStatus.status === 'available'
+      ? 'Available'
+      : capacityStatus.status === 'full'
+        ? 'Full'
+        : 'No target'
+    : null;
 
   return (
     <Dialog
@@ -121,6 +137,28 @@ const EditScheduleDialog = ({
               className="col-span-3"
             />
           </div>
+          {capacityStatus ? (
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={
+                    CAPACITY_STYLES[capacityStatus.status] ||
+                    CAPACITY_STYLES.missing
+                  }
+                >
+                  {capacityLabel}
+                </Badge>
+                <span>
+                  {capacityStatus.roleLabel}: {capacityStatus.currentCount}/
+                  {capacityStatus.target || 0}
+                </span>
+              </div>
+              <p className="mt-1">
+                Targets are set in Team Composition. Requests that exceed the
+                limit will require an exception.
+              </p>
+            </div>
+          ) : null}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setEditingSchedule(null)}>
@@ -134,4 +172,3 @@ const EditScheduleDialog = ({
 };
 
 export default EditScheduleDialog;
-

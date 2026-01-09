@@ -233,13 +233,28 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
       }
     };
     const markLate = async () => {
-      if (!effectiveRecord?.id) return;
+      if (!effectiveRecord) return;
+      const hasRemoteId =
+        Boolean(effectiveRecord.id) &&
+        !String(effectiveRecord.id).startsWith('local-');
       try {
-        await updateRecord(effectiveRecord.id, {
-          status: 'late',
-          checkOut: shiftEndTimeValue || nowTime(),
-          notes: 'Shift window closed without clock-out',
-        });
+        if (hasRemoteId) {
+          await updateRecord(effectiveRecord.id, {
+            status: 'late',
+            checkOut: shiftEndTimeValue || nowTime(),
+            notes: 'Shift window closed without clock-out',
+          });
+        } else {
+          await createRecord({
+            employeeId: subjectEmployeeId,
+            employeeName: user?.name || '',
+            date: today,
+            status: 'late',
+            checkIn: effectiveRecord.checkIn,
+            checkOut: shiftEndTimeValue || nowTime(),
+            notes: 'Shift window closed without clock-out',
+          });
+        }
       } catch (error) {
         console.error('Auto-mark late failed', error);
         autoLateRef.current = false;

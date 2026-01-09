@@ -255,6 +255,12 @@ class EmployeeService {
     await apiClient.delete(`/schedule/${id}`, { retry: { retries: 1 } });
     return true;
   }
+
+  async deleteScheduleByMeta(params = {}) {
+    const query = this._buildQueryString(params);
+    await apiClient.delete(`/schedule${query}`, { retry: { retries: 1 } });
+    return true;
+  }
 }
 
 export const employeeService = new EmployeeService();

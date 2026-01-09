@@ -366,7 +366,7 @@ def employee_detail(request, emp_id):
         return JsonResponse({"success": False, "message": "Server error"}, status=500)
 
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "DELETE"])
 def schedule(request):
     """List/create schedule entries.
 
@@ -425,6 +425,36 @@ def schedule(request):
             )
             items = [_safe_sched(row) for row in rows]
             return JsonResponse({"success": True, "data": items})
+
+        if request.method == "DELETE":
+            employee_id_param = request.GET.get("employeeId") or request.GET.get("employee_id")
+            day = request.GET.get("day")
+            st = _parse_time(request.GET.get("startTime") or request.GET.get("start_time"))
+            et = _parse_time(request.GET.get("endTime") or request.GET.get("end_time"))
+
+            if not employee_id_param:
+                return JsonResponse(
+                    {"success": False, "message": "employeeId is required"},
+                    status=400,
+                )
+            if day not in DAYS:
+                return JsonResponse({"success": False, "message": "Invalid day"}, status=400)
+            if not st or not et or st >= et:
+                return JsonResponse({"success": False, "message": "Invalid start/end time"}, status=400)
+
+            qs = ScheduleEntry.objects.filter(day=day, start_time=st, end_time=et)
+            variants = _identifier_variants(employee_id_param)
+            if variants:
+                qs = qs.annotate(
+                    employee_id_str=Cast("employee_id", CharField())
+                ).filter(employee_id_str__in=variants)
+            else:
+                qs = qs.filter(employee_id=employee_id_param)
+
+            deleted_count, _ = qs.delete()
+            if deleted_count == 0:
+                return JsonResponse({"success": False, "message": "Not found"}, status=404)
+            return JsonResponse({"success": True, "deleted": deleted_count})
 
         # POST create
         try:

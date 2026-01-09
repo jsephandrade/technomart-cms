@@ -142,11 +142,55 @@ export const useSchedule = (initialParams = {}, options = {}) => {
     }
   };
 
-  const deleteScheduleEntry = async (id) => {
+  const isUuidLike = (value) => {
+    if (!value) return false;
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return false;
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const hexPattern = /^[0-9a-f]{32}$/i;
+    return uuidPattern.test(raw) || hexPattern.test(raw);
+  };
+
+  const deleteScheduleEntry = async (entryOrId) => {
+    const entry = entryOrId && typeof entryOrId === 'object' ? entryOrId : null;
+    const scheduleId = entry ? entry.id : entryOrId;
     try {
-      await employeeService.deleteSchedule(id);
-      setSchedule((prev) => prev.filter((s) => s.id !== id));
-      toast.success('Schedule deleted successfully');
+      if (scheduleId && isUuidLike(scheduleId)) {
+        await employeeService.deleteSchedule(scheduleId);
+        setSchedule((prev) => prev.filter((s) => s.id !== scheduleId));
+        toast.success('Schedule deleted successfully');
+        return;
+      }
+
+      if (
+        entry?.employeeId &&
+        entry?.day &&
+        entry?.startTime &&
+        entry?.endTime
+      ) {
+        await employeeService.deleteScheduleByMeta({
+          employeeId: entry.employeeId,
+          day: entry.day,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+        });
+        setSchedule((prev) =>
+          prev.filter(
+            (s) =>
+              !(
+                String(s.employeeId) === String(entry.employeeId) &&
+                s.day === entry.day &&
+                s.startTime === entry.startTime &&
+                s.endTime === entry.endTime
+              )
+          )
+        );
+        toast.success('Schedule deleted successfully');
+        return;
+      }
+
+      throw new Error('Missing schedule identifier');
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to delete schedule';

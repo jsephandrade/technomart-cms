@@ -42,7 +42,13 @@ const POS = () => {
   const displayContainerRef = useRef(null);
 
   // Get data and business logic from custom hooks
-  const { categories, orderQueue, setOrderQueue } = usePOSData();
+  const {
+    categories,
+    orderQueue,
+    setOrderQueue,
+    getPaxInfoForItem,
+    deductEstimatedPax,
+  } = usePOSData();
   const {
     orderHistory,
     loading: historyLoading,
@@ -105,6 +111,10 @@ const POS = () => {
   }, [setOrderQueue]);
 
   const handleProcessPayment = (paymentDetails) => {
+    const orderSnapshot = (currentOrder || []).map((item) => ({
+      menuItemId: item.menuItemId || item.id,
+      quantity: item.quantity || 0,
+    }));
     const { accepted, promise } = processPaymentInBackground(paymentDetails);
     if (!accepted) {
       return false;
@@ -128,6 +138,7 @@ const POS = () => {
       });
     }
 
+    deductEstimatedPax(orderSnapshot);
     return true;
   };
 
@@ -260,6 +271,7 @@ const POS = () => {
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onAddToOrder={addToOrder}
+              getPaxInfo={getPaxInfoForItem}
               mobileOrderCount={orderCount}
               onOpenMobileOrder={() => setIsMobileOrderSheetOpen(true)}
             />

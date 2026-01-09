@@ -14,6 +14,18 @@ const resolveMenuPollIntervalMs = () => {
   }
 };
 
+const parseEstimatedPax = (item = {}) => {
+  const raw =
+    item?.estimatedPax ??
+    item?.estimated_pax ??
+    item?.estimated ??
+    item?.paxEstimate ??
+    item?.pax ??
+    0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
 const EMPTY_QUEUE = {
   orders: [],
   stations: [],
@@ -42,6 +54,7 @@ export const usePOSData = () => {
   const [orderHistory] = useState([]);
   const [categories, setCategories] = useState([]);
   const [orderQueue, setOrderQueue] = useState(EMPTY_QUEUE);
+  const [paxMap, setPaxMap] = useState({});
 
   const loadMenu = useCallback(async () => {
     try {
@@ -149,6 +162,17 @@ export const usePOSData = () => {
         return { ...it, category: canonical };
       });
 
+      const estimates = {};
+      normalizedItems.forEach((item) => {
+        const key = String(item.id);
+        const estimated = parseEstimatedPax(item);
+        estimates[key] = {
+          estimated,
+          remaining: estimated,
+        };
+      });
+      setPaxMap(estimates);
+
       // Build category list with 'All' first, then by sort order.
       const byCat = new Map();
       byCat.set('All', { id: 'all', name: 'All', items: [...normalizedItems] });
@@ -218,10 +242,38 @@ export const usePOSData = () => {
     };
   }, [loadMenu]);
 
+  const getPaxInfoForItem = useCallback(
+    (itemId) => {
+      if (itemId == null) return null;
+      return paxMap[String(itemId)] || null;
+    },
+    [paxMap]
+  );
+
+  const deductEstimatedPax = useCallback((orderItems = []) => {
+    if (!Array.isArray(orderItems) || orderItems.length === 0) return;
+    setPaxMap((prev) => {
+      if (!prev || !Object.keys(prev).length) return prev;
+      const next = { ...prev };
+      orderItems.forEach((entry) => {
+        if (!entry) return;
+        const key = String(entry.menuItemId || entry.id || '');
+        if (!key || !next[key]) return;
+        const quantity = Number(entry.quantity || 0);
+        if (!Number.isFinite(quantity) || quantity <= 0) return;
+        const remaining = Math.max(0, next[key].remaining - quantity);
+        next[key] = { ...next[key], remaining };
+      });
+      return next;
+    });
+  }, []);
+
   return {
     orderHistory,
     categories,
     orderQueue,
     setOrderQueue,
+    getPaxInfoForItem,
+    deductEstimatedPax,
   };
 };

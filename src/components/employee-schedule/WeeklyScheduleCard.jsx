@@ -104,7 +104,6 @@ const WeeklyScheduleCard = ({
   employeeDirectory,
   schedule = [],
   overview,
-  overviewLoading = false,
   scheduleLoading = false,
   filters,
   onOpenAddSchedule,

@@ -86,6 +86,7 @@ const MenuSelection = ({
   searchTerm,
   setSearchTerm,
   onAddToOrder,
+  getPaxInfo = () => null,
   occupyFullWidth = false,
   mobileOrderCount = 0,
   onOpenMobileOrder = null,
@@ -135,6 +136,19 @@ const MenuSelection = ({
     const [brokenImages, setBrokenImages] = useState({});
     const categoryLabel = item.categoryName || item.category || '';
     const isUnavailable = item.available === false;
+    const paxInfo =
+      typeof getPaxInfo === 'function' ? getPaxInfo(item.id) : null;
+    const hasEstimatedPax =
+      paxInfo && typeof paxInfo.estimated === 'number' && paxInfo.estimated > 0;
+    const estimatedPax = hasEstimatedPax
+      ? Math.max(0, Math.floor(paxInfo.estimated))
+      : null;
+    const remainingPax =
+      hasEstimatedPax && typeof paxInfo.remaining === 'number'
+        ? Math.max(0, Math.floor(paxInfo.remaining))
+        : null;
+    const paxRemainingValue =
+      remainingPax !== null ? remainingPax : estimatedPax;
 
     const markBroken = (src) => {
       if (!src) return;
@@ -259,6 +273,20 @@ const MenuSelection = ({
               <CardTitle className="text-base font-semibold leading-tight text-foreground line-clamp-2 sm:text-lg">
                 {item.name}
               </CardTitle>
+              {hasEstimatedPax && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge
+                    variant={
+                      paxRemainingValue === 0 ? 'destructive' : 'outline'
+                    }
+                    className="rounded-full px-3 py-1 text-[9px] font-semibold uppercase tracking-wide"
+                  >
+                    {paxRemainingValue === 0
+                      ? 'Sold out'
+                      : `${paxRemainingValue} / ${estimatedPax} pax left`}
+                  </Badge>
+                </div>
+              )}
             </div>
           </CardHeader>
 

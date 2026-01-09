@@ -5,7 +5,6 @@ import { useEmployees } from '@/hooks/useEmployees';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -13,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import {
   Table,
@@ -34,11 +32,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
-  CalendarRange,
   ClipboardList,
   CheckCircle2,
   Edit as EditIcon,
-  FileText,
   Loader2,
   Plane,
   Trash2,
@@ -48,7 +44,9 @@ import {
 export default function LeaveManagement() {
   const { user, hasAnyRole } = useAuth();
   const isAdmin = hasAnyRole(['admin']);
+  const isManager = hasAnyRole(['manager']) && !isAdmin;
   const isRequester = !isAdmin;
+  const shouldFetchLeaveRecords = isAdmin || isManager;
   const {
     records,
     loading,
@@ -56,7 +54,13 @@ export default function LeaveManagement() {
     createRecord,
     updateRecord,
     deleteRecord,
-  } = useLeaves({}, { autoFetch: isAdmin, suppressErrorToast: !isAdmin });
+  } = useLeaves(
+    {},
+    {
+      autoFetch: shouldFetchLeaveRecords,
+      suppressErrorToast: !shouldFetchLeaveRecords,
+    }
+  );
   const { employees } = useEmployees();
 
   const [filters, setFilters] = useState({
@@ -120,7 +124,9 @@ export default function LeaveManagement() {
 
   const onSave = async () => {
     try {
-      if (!editing.employeeId || !editing.startDate || !editing.endDate) {
+      const hasEmployee =
+        isAdmin || Boolean(selfEmployee?.id || editing.employeeId);
+      if (!hasEmployee || !editing.startDate || !editing.endDate) {
         toast.error('Employee, start and end dates are required');
         return;
       }
@@ -149,6 +155,10 @@ export default function LeaveManagement() {
     () => Object.fromEntries(employees.map((e) => [e.id, e.name])),
     [employees]
   );
+  const employeeLookup = useMemo(
+    () => Object.fromEntries(employees.map((e) => [e.id, e])),
+    [employees]
+  );
   const selfEmployee = useMemo(() => {
     if (user?.employeeId) {
       return {
@@ -172,6 +182,14 @@ export default function LeaveManagement() {
     return found;
   }, [user?.employeeId, user?.name, employees, user?.email]);
 
+  const managerRequests = useMemo(
+    () => (records || []).filter((record) => record.status === 'pending'),
+    [records]
+  );
+  const currentManagerEmployeeId = selfEmployee?.id
+    ? String(selfEmployee.id)
+    : null;
+
   useEffect(() => {
     if (!isAdmin && selfEmployee?.id) {
       setEditing((prev) => {
@@ -192,171 +210,123 @@ export default function LeaveManagement() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Leave request form */}
       {isRequester && (
         <FeaturePanelCard
-          badgeText="Leave Request"
-          badgeIcon={Plane}
-          description="Submit a leave request for review"
+          badgeText="Pending Leave Requests"
+          badgeIcon={ClipboardList}
+          description="Review or monitor leave requests."
           className="w-full"
-          contentClassName="space-y-5"
+          contentClassName="space-y-4"
+          headerActions={
+            !isAdmin && (
+              <Button size="sm" onClick={onAdd}>
+                Apply for Leave
+              </Button>
+            )
+          }
         >
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <ClipboardList className="h-4 w-4" aria-hidden="true" />
-              <span>Request Details</span>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="flex items-center h-5">Leave Type</Label>
-                <Select
-                  value={editing?.type || 'other'}
-                  onValueChange={(v) =>
-                    setEditing((x) => ({
-                      ...(x || {
-                        id: null,
-                        employeeId: '',
-                        startDate: '',
-                        endDate: '',
-                        type: 'other',
-                        status: 'pending',
-                        reason: '',
-                      }),
-                      type: v,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select leave type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sick">Sick</SelectItem>
-                    <SelectItem value="vacation">Vacation</SelectItem>
-                    <SelectItem value="emergency">Emergency</SelectItem>
-                    <SelectItem value="bereavement">Bereavement</SelectItem>
-                    <SelectItem value="maternity">Maternity</SelectItem>
-                    <SelectItem value="paternity">Paternity</SelectItem>
-                    <SelectItem value="training">Training</SelectItem>
-                    <SelectItem value="unpaid">Unpaid</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Helps route your request to the right approver
-                </p>
+          {isManager ? (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Start</TableHead>
+                      <TableHead>End</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(!managerRequests?.length ||
+                      managerRequests.length === 0) &&
+                      !loading && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="text-center text-sm text-muted-foreground"
+                          >
+                            No pending leave requests.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    {(managerRequests || []).map((request) => {
+                      const isOwnRequest =
+                        currentManagerEmployeeId &&
+                        String(request.employeeId) === currentManagerEmployeeId;
+                      return (
+                        <TableRow key={request.id}>
+                          <TableCell>
+                            {request.employeeName ||
+                              employeeMap[request.employeeId] ||
+                              'Unknown'}
+                          </TableCell>
+                          <TableCell>
+                            {employeeLookup[request.employeeId]?.position ||
+                              employeeLookup[request.employeeId]?.role ||
+                              '—'}
+                          </TableCell>
+                          <TableCell className="capitalize">
+                            {request.type}
+                          </TableCell>
+                          <TableCell>{request.startDate}</TableCell>
+                          <TableCell>{request.endDate}</TableCell>
+                          <TableCell className="max-w-[240px] truncate">
+                            {request.reason || '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isOwnRequest ? (
+                              <span className="text-xs text-muted-foreground">
+                                Awaiting approval by peers
+                              </span>
+                            ) : (
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => onApprove(request)}
+                                  className="gap-1 border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => onReject(request)}
+                                  className="gap-1 border-red-600 text-red-700 hover:bg-red-50"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label className="flex items-center gap-2 h-5">
-                  Reason
-                  <Badge variant="secondary" className="text-xs">
-                    Optional
-                  </Badge>
-                </Label>
-                <div className="relative">
-                  <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Textarea
-                    className="min-h-[90px] pl-9"
-                    placeholder="Share a brief reason or notes for your request"
-                    value={editing?.reason || ''}
-                    onChange={(e) =>
-                      setEditing((x) => ({
-                        ...(x || {
-                          id: null,
-                          employeeId: '',
-                          startDate: '',
-                          endDate: '',
-                          type: 'other',
-                          status: 'pending',
-                          reason: '',
-                        }),
-                        reason: e.target.value,
-                      }))
-                    }
+              {loading && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
                   />
+                  Loading...
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Keep it short so the approver can review quickly
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <CalendarRange className="h-4 w-4" aria-hidden="true" />
-              <span>Leave Schedule</span>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1 h-5">
-                  Start Date <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  type="date"
-                  value={editing?.startDate || ''}
-                  onChange={(e) =>
-                    setEditing((x) => ({
-                      ...(x || {
-                        id: null,
-                        employeeId: '',
-                        startDate: '',
-                        endDate: '',
-                        type: 'other',
-                        status: 'pending',
-                        reason: '',
-                      }),
-                      startDate: e.target.value,
-                    }))
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  First day away from work
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1 h-5">
-                  End Date <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  type="date"
-                  value={editing?.endDate || ''}
-                  onChange={(e) =>
-                    setEditing((x) => ({
-                      ...(x || {
-                        id: null,
-                        employeeId: '',
-                        startDate: '',
-                        endDate: '',
-                        type: 'other',
-                        status: 'pending',
-                        reason: '',
-                      }),
-                      endDate: e.target.value,
-                    }))
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Last day covered by the request
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditing(null)}
-            >
-              Clear
-            </Button>
-            <Button size="sm" onClick={onSave} className="gap-2">
-              <Plane className="h-4 w-4" aria-hidden="true" />
-              Submit
-            </Button>
-          </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Your leave requests will be routed to your manager. Use the Apply
+              for Leave button above to open the request form.
+            </p>
+          )}
         </FeaturePanelCard>
       )}
 
@@ -440,6 +410,7 @@ export default function LeaveManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Start</TableHead>
                   <TableHead>End</TableHead>
@@ -465,6 +436,11 @@ export default function LeaveManagement() {
                   <TableRow key={r.id}>
                     <TableCell>
                       {r.employeeName || employeeMap[r.employeeId] || '—'}
+                    </TableCell>
+                    <TableCell>
+                      {employeeLookup[r.employeeId]?.position ||
+                        employeeLookup[r.employeeId]?.role ||
+                        '—'}
                     </TableCell>
                     <TableCell className="capitalize">{r.type}</TableCell>
                     <TableCell>{r.startDate}</TableCell>
@@ -544,16 +520,24 @@ export default function LeaveManagement() {
         </FeaturePanelCard>
       )}
 
-      {isAdmin && (
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editing?.id ? 'Edit Leave' : 'Add Leave'}
-              </DialogTitle>
-              <DialogDescription>Manage employee leave.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3 py-2">
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) {
+            setEditing(null);
+          }
+          setOpen(next);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editing?.id ? 'Edit Leave' : 'Add Leave'}
+            </DialogTitle>
+            <DialogDescription>Manage employee leave.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            {isAdmin ? (
               <div className="grid grid-cols-4 items-center gap-3">
                 <Label className="text-right">Employee</Label>
                 <Select
@@ -574,50 +558,59 @@ export default function LeaveManagement() {
                   </SelectContent>
                 </Select>
               </div>
+            ) : (
               <div className="grid grid-cols-4 items-center gap-3">
-                <Label className="text-right">Type</Label>
-                <Select
-                  value={editing?.type || 'other'}
-                  onValueChange={(v) => setEditing((x) => ({ ...x, type: v }))}
-                >
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sick">Sick</SelectItem>
-                    <SelectItem value="vacation">Vacation</SelectItem>
-                    <SelectItem value="emergency">Emergency</SelectItem>
-                    <SelectItem value="bereavement">Bereavement</SelectItem>
-                    <SelectItem value="maternity">Maternity</SelectItem>
-                    <SelectItem value="paternity">Paternity</SelectItem>
-                    <SelectItem value="training">Training</SelectItem>
-                    <SelectItem value="unpaid">Unpaid</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-right">Employee</Label>
+                <div className="col-span-3 text-sm text-muted-foreground">
+                  {selfEmployee?.name || 'You'}
+                </div>
               </div>
-              <div className="grid grid-cols-4 items-center gap-3">
-                <Label className="text-right">Start</Label>
-                <Input
-                  type="date"
-                  className="col-span-3"
-                  value={editing?.startDate || ''}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, startDate: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-3">
-                <Label className="text-right">End</Label>
-                <Input
-                  type="date"
-                  className="col-span-3"
-                  value={editing?.endDate || ''}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, endDate: e.target.value }))
-                  }
-                />
-              </div>
+            )}
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label className="text-right">Type</Label>
+              <Select
+                value={editing?.type || 'other'}
+                onValueChange={(v) => setEditing((x) => ({ ...x, type: v }))}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sick">Sick</SelectItem>
+                  <SelectItem value="vacation">Vacation</SelectItem>
+                  <SelectItem value="emergency">Emergency</SelectItem>
+                  <SelectItem value="bereavement">Bereavement</SelectItem>
+                  <SelectItem value="maternity">Maternity</SelectItem>
+                  <SelectItem value="paternity">Paternity</SelectItem>
+                  <SelectItem value="training">Training</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label className="text-right">Start</Label>
+              <Input
+                type="date"
+                className="col-span-3"
+                value={editing?.startDate || ''}
+                onChange={(e) =>
+                  setEditing((x) => ({ ...x, startDate: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label className="text-right">End</Label>
+              <Input
+                type="date"
+                className="col-span-3"
+                value={editing?.endDate || ''}
+                onChange={(e) =>
+                  setEditing((x) => ({ ...x, endDate: e.target.value }))
+                }
+              />
+            </div>
+            {isAdmin && (
               <div className="grid grid-cols-4 items-center gap-3">
                 <Label className="text-right">Status</Label>
                 <Select
@@ -636,26 +629,26 @@ export default function LeaveManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-4 items-center gap-3">
-                <Label className="text-right">Reason</Label>
-                <Input
-                  className="col-span-3"
-                  value={editing?.reason || ''}
-                  onChange={(e) =>
-                    setEditing((x) => ({ ...x, reason: e.target.value }))
-                  }
-                />
-              </div>
+            )}
+            <div className="grid grid-cols-4 items-center gap-3">
+              <Label className="text-right">Reason</Label>
+              <Input
+                className="col-span-3"
+                value={editing?.reason || ''}
+                onChange={(e) =>
+                  setEditing((x) => ({ ...x, reason: e.target.value }))
+                }
+              />
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={onSave}>Save</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={onSave}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

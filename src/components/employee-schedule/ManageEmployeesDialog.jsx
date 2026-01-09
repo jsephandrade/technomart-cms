@@ -10,6 +10,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -217,11 +225,25 @@ const ManageEmployeesDialog = ({
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {roleOptions.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {role}
-                    </SelectItem>
-                  ))}
+                  <Command>
+                    <CommandInput placeholder="Search roles..." />
+                    <CommandList className="max-h-56 overflow-y-auto">
+                      <CommandEmpty>No roles found.</CommandEmpty>
+                      <CommandGroup>
+                        {roleOptions.map((role) => (
+                          <CommandItem
+                            key={role}
+                            value={role}
+                            onSelect={(value) =>
+                              handleFieldChange('position', value)
+                            }
+                          >
+                            {role}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
                 </SelectContent>
               </Select>
             </div>

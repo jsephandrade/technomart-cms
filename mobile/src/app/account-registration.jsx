@@ -44,6 +44,8 @@ const API_BASE = `${BASE_URL}/accounts`;
 export default function AccountRegistrationScreen() {
   const router = useRouter();
 
+  const PASSWORD_MIN_LENGTH = 12;
+
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -135,6 +137,54 @@ export default function AccountRegistrationScreen() {
     setErrors((prev) => ({ ...prev, [field]: '' }));
   };
 
+  const collectPasswordIssues = (password, { email, firstName, lastName }) => {
+    const issues = [];
+    const safePassword = String(password || '');
+    if (safePassword.length < PASSWORD_MIN_LENGTH) {
+      issues.push(
+        `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`
+      );
+    }
+    if (!/[A-Z]/.test(safePassword)) {
+      issues.push('Add at least 1 uppercase letter.');
+    }
+    if (!/[a-z]/.test(safePassword)) {
+      issues.push('Add at least 1 lowercase letter.');
+    }
+    if (!/[0-9]/.test(safePassword)) {
+      issues.push('Add at least 1 number.');
+    }
+    if (!/[^A-Za-z0-9]/.test(safePassword)) {
+      issues.push('Add at least 1 symbol.');
+    }
+    if (/\s/.test(safePassword)) {
+      issues.push('Remove spaces from the password.');
+    }
+    const lowerPassword = safePassword.toLowerCase();
+    const emailValue = String(email || '')
+      .trim()
+      .toLowerCase();
+    const emailLocal = emailValue.split('@')[0];
+    if (emailValue && lowerPassword.includes(emailValue)) {
+      issues.push('Do not include your email in the password.');
+    } else if (emailLocal && lowerPassword.includes(emailLocal)) {
+      issues.push('Do not include your email in the password.');
+    }
+    const firstValue = String(firstName || '')
+      .trim()
+      .toLowerCase();
+    const lastValue = String(lastName || '')
+      .trim()
+      .toLowerCase();
+    if (firstValue && lowerPassword.includes(firstValue)) {
+      issues.push('Do not include your first name in the password.');
+    }
+    if (lastValue && lowerPassword.includes(lastValue)) {
+      issues.push('Do not include your last name in the password.');
+    }
+    return issues;
+  };
+
   const validateForm = () => {
     const errs = {};
     if (!form.firstName.trim()) errs.firstName = 'First name is required';
@@ -142,9 +192,17 @@ export default function AccountRegistrationScreen() {
     if (!form.role) errs.role = 'Please select a role';
     if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email))
       errs.email = 'Valid email is required';
-    if (form.password.length < 6)
-      errs.password = 'Password must be at least 6 characters';
-    if (form.confirm !== form.password) errs.confirm = 'Passwords do not match';
+    const passwordIssues = collectPasswordIssues(form.password, {
+      email: form.email,
+      firstName: form.firstName,
+      lastName: form.lastName,
+    });
+    if (passwordIssues.length > 0) errs.password = passwordIssues;
+    if (!form.confirm) {
+      errs.confirm = 'Please confirm your password';
+    } else if (form.confirm !== form.password) {
+      errs.confirm = 'Passwords do not match';
+    }
     return errs;
   };
 
@@ -504,6 +562,15 @@ export default function AccountRegistrationScreen() {
                 />
               </TouchableOpacity>
             </View>
+            <View style={styles.passwordHintGroup}>
+              <Text style={styles.passwordHint}>
+                Use {PASSWORD_MIN_LENGTH}+ characters with uppercase, lowercase,
+                number, and symbol.
+              </Text>
+              <Text style={styles.passwordHint}>
+                Avoid spaces and your name or email.
+              </Text>
+            </View>
             {errors.password && (
               <Text style={styles.errorText}>
                 {formatError(errors.password)}
@@ -810,5 +877,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginLeft: 5,
     fontSize: 13,
+  },
+  passwordHintGroup: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    marginLeft: 5,
+  },
+  passwordHint: {
+    color: '#6B7280',
+    fontSize: 12,
+    fontFamily: 'Roboto_400Regular',
   },
 });

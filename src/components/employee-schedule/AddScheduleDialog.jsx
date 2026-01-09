@@ -171,7 +171,17 @@ const AddScheduleDialog = ({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={onAddSchedule}>Add Schedule</Button>
+          <Button
+            onClick={onAddSchedule}
+            disabled={capacityStatus?.status === 'full'}
+            title={
+              capacityStatus?.status === 'full'
+                ? `${capacityStatus.roleLabel} target is full`
+                : undefined
+            }
+          >
+            Add Schedule
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

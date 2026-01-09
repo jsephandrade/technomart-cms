@@ -17,7 +17,15 @@ import ScheduleTab from '@/components/employee-schedule/ScheduleTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import {
   Archive,
   CalendarDays,
@@ -516,7 +524,18 @@ const EmployeeSchedule = () => {
       return;
     }
 
-    const capacityIssues = repeatDays
+    const availableRepeatDays = repeatDays.filter((day) => {
+      const status = getRoleCapacityForRole(day, roleKey)?.status || 'missing';
+      return status !== 'full';
+    });
+    if (availableRepeatDays.length === 0) {
+      toast.error(
+        'The selected role has reached its capacity for the days you picked.'
+      );
+      return;
+    }
+
+    const capacityIssues = availableRepeatDays
       .map((day) => getRoleCapacityForRole(day, roleKey))
       .filter((issue) => issue.status !== 'available');
     if (capacityIssues.length) {
@@ -541,7 +560,7 @@ const EmployeeSchedule = () => {
       toast.error(`${parts.join('. ')}. Update team composition to proceed.`);
       return;
     }
-    const scheduleEntries = repeatDays.map((day) => ({
+    const scheduleEntries = availableRepeatDays.map((day) => ({
       day,
       startTime: quickAdd.startTime,
       endTime: quickAdd.endTime,
@@ -1132,6 +1151,11 @@ const EmployeeSchedule = () => {
   const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState(null);
   const [scheduleDeleteDialogOpen, setScheduleDeleteDialogOpen] =
     useState(false);
+  const [editDayDialogOpen, setEditDayDialogOpen] = useState(false);
+  const [editDay, setEditDay] = useState('Monday');
+  const [editDayStartTime, setEditDayStartTime] = useState('08:00');
+  const [editDayEndTime, setEditDayEndTime] = useState('16:00');
+  const [editDayBusy, setEditDayBusy] = useState(false);
   const [scheduleClearDialogOpen, setScheduleClearDialogOpen] = useState(false);
 
   const handleDeleteSchedule = (entryOrId) => {
@@ -1149,6 +1173,52 @@ const EmployeeSchedule = () => {
     } finally {
       setScheduleDeleteDialogOpen(false);
       setScheduleDeleteTarget(null);
+    }
+  };
+
+  const handleOpenEditDaySchedule = () => {
+    if (!canManage) return;
+    setEditDayDialogOpen(true);
+  };
+
+  const performEditDaySchedule = async () => {
+    if (!canManage) return;
+    const startMinutes = toMinutes(editDayStartTime);
+    const endMinutes = toMinutes(editDayEndTime);
+    if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+      toast.error('Invalid time values');
+      return;
+    }
+    if (endMinutes <= startMinutes) {
+      toast.error('End time must be after start time');
+      return;
+    }
+    const entries = (schedule || []).filter(
+      (entry) => String(entry?.day) === String(editDay)
+    );
+    if (!entries.length) {
+      toast.info('No shifts found for the selected day');
+      setEditDayDialogOpen(false);
+      return;
+    }
+
+    setEditDayBusy(true);
+    try {
+      await Promise.all(
+        entries.map((entry) =>
+          updateScheduleEntry(entry.id, {
+            startTime: editDayStartTime,
+            endTime: editDayEndTime,
+          })
+        )
+      );
+      toast.success(`Updated ${entries.length} shift(s) on ${editDay}`);
+      setEditDayDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to update shifts');
+    } finally {
+      setEditDayBusy(false);
     }
   };
 
@@ -1277,6 +1347,7 @@ const EmployeeSchedule = () => {
       onArchiveEmployee={handleArchiveEmployeeRequest}
       onOpenManageEmployees={handleOpenManageEmployees}
       onOpenArchivedEmployees={handleOpenArchivedEmployees}
+      getRoleCapacityForRole={getRoleCapacityForRole}
     />
   );
 
@@ -1320,6 +1391,7 @@ const EmployeeSchedule = () => {
           handleScheduleDialogOpenChange(true);
         }}
         onClearAllSchedules={handleClearAllSchedules}
+        onEditDaySchedule={handleOpenEditDaySchedule}
       />
     </div>
   );
@@ -1624,6 +1696,82 @@ const EmployeeSchedule = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={editDayDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditDayDialogOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Edit daily shift time</DialogTitle>
+            <DialogDescription>
+              Set a uniform start/end time for every shift in a single day.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-day" className="text-right">
+                Day
+              </Label>
+              <Select
+                value={editDay}
+                onValueChange={(value) => setEditDay(value)}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select a day" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAYS_OF_WEEK.map((day) => (
+                    <SelectItem key={day} value={day}>
+                      {day}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-start" className="text-right">
+                Start time
+              </Label>
+              <Input
+                id="edit-start"
+                type="time"
+                value={editDayStartTime}
+                onChange={(event) => setEditDayStartTime(event.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-end" className="text-right">
+                End time
+              </Label>
+              <Input
+                id="edit-end"
+                type="time"
+                value={editDayEndTime}
+                onChange={(event) => setEditDayEndTime(event.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setEditDayDialogOpen(false)}
+              disabled={editDayBusy}
+            >
+              Cancel
+            </Button>
+            <Button onClick={performEditDaySchedule} disabled={editDayBusy}>
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={autoBuildDialogOpen}

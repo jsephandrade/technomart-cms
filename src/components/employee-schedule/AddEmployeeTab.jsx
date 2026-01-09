@@ -32,6 +32,7 @@ import { useAuth } from '@/components/AuthContext';
 import {
   CANTEEN_ROLE_OPTIONS,
   mergeRoleOptions,
+  normalizeRoleValue,
   resolveRoleLabel,
 } from '@/lib/canteenRoles';
 import {
@@ -140,6 +141,7 @@ const AddEmployeeTab = ({
   onArchiveEmployee,
   onOpenManageEmployees,
   onOpenArchivedEmployees,
+  getRoleCapacityForRole = () => null,
 }) => {
   const userQuery = useMemo(
     () => ({
@@ -210,6 +212,31 @@ const AddEmployeeTab = ({
       quickAdd.position,
     ]);
   }, [employees, staffUsers, quickAdd.position]);
+  const normalizedRepeatDays = useMemo(() => {
+    if (!Array.isArray(quickAdd.repeatDays)) return [];
+    return Array.from(
+      new Set(quickAdd.repeatDays.filter((day) => Boolean(day)))
+    );
+  }, [quickAdd.repeatDays]);
+
+  const selectedRoleKey = useMemo(() => {
+    const roleLabel =
+      resolveRoleLabel(quickAdd.position, roleOptions) || quickAdd.position;
+    return normalizeRoleValue(roleLabel || '');
+  }, [quickAdd.position, roleOptions]);
+
+  const availableRepeatDays = useMemo(() => {
+    if (!selectedRoleKey) return normalizedRepeatDays;
+    return normalizedRepeatDays.filter((day) => {
+      const status = getRoleCapacityForRole(day, selectedRoleKey)?.status;
+      return status !== 'full';
+    });
+  }, [normalizedRepeatDays, selectedRoleKey, getRoleCapacityForRole]);
+
+  const selectedRepeatDaysSet = useMemo(
+    () => new Set(availableRepeatDays),
+    [availableRepeatDays]
+  );
   const normalizedTeamSearch = teamSearch.trim().toLowerCase();
   const filteredEmployees = normalizedTeamSearch
     ? employees.filter((emp) => {
@@ -504,9 +531,14 @@ const AddEmployeeTab = ({
                 {(daysOfWeek || [])
                   .filter((day) => String(day || '').toLowerCase() !== 'sunday')
                   .map((day) => {
-                    const selected =
-                      Array.isArray(quickAdd.repeatDays) &&
-                      quickAdd.repeatDays.includes(day);
+                    const capacity = selectedRoleKey
+                      ? getRoleCapacityForRole(day, selectedRoleKey)
+                      : null;
+                    const isDayAtCapacity = capacity?.status === 'full';
+                    const buttonTitle = isDayAtCapacity
+                      ? `${capacity?.roleLabel || 'Role'} capacity reached on ${day}`
+                      : undefined;
+                    const isSelected = selectedRepeatDaysSet.has(day);
                     return (
                       <Button
                         type="button"
@@ -514,12 +546,15 @@ const AddEmployeeTab = ({
                         variant="outline"
                         className={cn(
                           'h-8 w-full rounded-full px-0 text-[11px] font-semibold uppercase',
-                          selected
+                          isSelected
                             ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'border-border/60 bg-background text-foreground hover:bg-muted/40'
                         )}
                         key={day}
+                        title={buttonTitle}
+                        disabled={isDayAtCapacity}
                         onClick={() => {
+                          if (isDayAtCapacity) return;
                           setQuickAdd((prev) => {
                             const nextDays = new Set(prev.repeatDays || []);
                             if (nextDays.has(day)) {

@@ -111,6 +111,7 @@ const WeeklyScheduleCard = ({
   onOpenManageEmployees,
   onDeleteSchedule,
   onClearAllSchedules,
+  onEditDaySchedule,
   canManage = false,
 }) => {
   const filteredDays = daysOfWeek.length ? daysOfWeek : DEFAULT_DAY_OPTIONS;
@@ -335,11 +336,16 @@ const WeeklyScheduleCard = ({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={onOpenManageEmployees}>
-                  Manage team
+                  Edit Employee
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onOpenAddSchedule}>
                   Add schedule
                 </DropdownMenuItem>
+                {typeof onEditDaySchedule === 'function' ? (
+                  <DropdownMenuItem onClick={onEditDaySchedule}>
+                    Edit day times
+                  </DropdownMenuItem>
+                ) : null}
                 {typeof onClearAllSchedules === 'function' ? (
                   <>
                     <DropdownMenuSeparator />

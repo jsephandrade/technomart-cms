@@ -66,6 +66,17 @@ const DAYS_OF_WEEK = [
   'Saturday',
 ];
 
+const getManilaDayName = () => {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      weekday: 'long',
+    }).format(new Date());
+  } catch {
+    return DAYS_OF_WEEK[new Date().getDay()];
+  }
+};
+
 const DEFAULT_SCHEDULE_ENTRY = {
   employeeId: '',
   employeeName: '',
@@ -216,6 +227,31 @@ const EmployeeSchedule = () => {
     }
     return { ...user, employeeId: resolvedEmployeeId };
   }, [resolvedEmployeeId, user]);
+
+  const normalizedManilaDay = String(getManilaDayName() || '')
+    .trim()
+    .toLowerCase();
+  const attendanceScheduleEntry = useMemo(() => {
+    if (!attendanceUser || !schedule?.length) return null;
+    const targetId = String(
+      attendanceUser.employeeId || attendanceUser.id || ''
+    ).trim();
+    if (!targetId) return null;
+    return schedule.find((entry) => {
+      if (!entry) return false;
+      const entryDay = String(entry.day || '')
+        .trim()
+        .toLowerCase();
+      if (!entryDay || entryDay !== normalizedManilaDay) return false;
+      const entryEmployeeId = String(
+        entry.employeeId ||
+          entry.employee?.id ||
+          entry.employee?.employeeId ||
+          ''
+      ).trim();
+      return entryEmployeeId === targetId;
+    });
+  }, [attendanceUser, schedule, normalizedManilaDay]);
 
   const displayEmployees = useMemo(
     () =>
@@ -2002,7 +2038,10 @@ const EmployeeSchedule = () => {
                 Track today's time in and time out.
               </DialogDescription>
             </DialogHeader>
-            <AttendanceTimeCard user={attendanceUser} />
+            <AttendanceTimeCard
+              user={attendanceUser}
+              dailySchedule={attendanceScheduleEntry}
+            />
           </DialogContent>
         </Dialog>
       )}

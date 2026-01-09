@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Clock, LogOut } from 'lucide-react';
@@ -50,7 +56,49 @@ const writeLocalAttendance = (employeeId, date, data) => {
   }
 };
 
-const AttendanceTimeCard = ({ user, className }) => {
+const getManilaNow = () =>
+  new Date(
+    new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Manila',
+    })
+  );
+
+const formatTimeForRecord = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+    date.getSeconds()
+  )}`;
+};
+
+const createManilaDateFromTime = (timeStr, referenceDate) => {
+  if (!timeStr) return null;
+  const segments = timeStr.split(':');
+  if (segments.length < 2) return null;
+  const [hours = '0', minutes = '0', seconds = '0'] = segments;
+  const h = Number.parseInt(hours, 10);
+  const m = Number.parseInt(minutes, 10);
+  const s = Number.parseInt(seconds, 10) || 0;
+  if ([h, m, s].some((value) => Number.isNaN(value))) return null;
+  const reference =
+    referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+      ? new Date(referenceDate)
+      : getManilaNow();
+  reference.setHours(h, m, s, 0);
+  return reference;
+};
+
+const toLocalDateStr = (d) => {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+    return '';
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+};
+
+const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
   const { updateProfile } = useAuth();
   const subjectEmployeeId = useMemo(() => {
     if (!user) return null;
@@ -82,30 +130,23 @@ const AttendanceTimeCard = ({ user, className }) => {
     [updateProfile, user?.employeeId]
   );
 
-  const toLocalDateStr = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
-  };
-  const todayStr = () => toLocalDateStr(new Date());
-  const nowTime = () => {
-    const current = new Date();
+  const initialTodayKey = toLocalDateStr(getManilaNow());
+  const [currentTime, setCurrentTime] = useState(() => getManilaNow());
+  const today = useMemo(() => toLocalDateStr(currentTime), [currentTime]);
+  const [localStatus, setLocalStatus] = useState(() =>
+    readLocalAttendance(subjectEmployeeId, initialTodayKey)
+  );
+  const nowTime = useCallback(() => {
+    const current = getManilaNow();
     return `${String(current.getHours()).padStart(2, '0')}:${String(
       current.getMinutes()
     ).padStart(2, '0')}:${String(current.getSeconds()).padStart(2, '0')}`;
-  };
-
-  const today = todayStr();
-  const [currentTime, setCurrentTime] = useState(() => new Date());
-  const [localStatus, setLocalStatus] = useState(() =>
-    readLocalAttendance(subjectEmployeeId, today)
-  );
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const interval = window.setInterval(() => {
-      setCurrentTime(new Date());
+      setCurrentTime(getManilaNow());
     }, 1000);
     return () => window.clearInterval(interval);
   }, []);
@@ -150,6 +191,86 @@ const AttendanceTimeCard = ({ user, className }) => {
     return null;
   }, [todayRecord, localStatus, subjectEmployeeId, today]);
 
+  const shiftEndDate = useMemo(
+    () => createManilaDateFromTime(dailySchedule?.endTime, currentTime),
+    [dailySchedule, currentTime]
+  );
+  const attendanceWindowClosed = Boolean(
+    dailySchedule?.endTime &&
+      shiftEndDate &&
+      currentTime.getTime() > shiftEndDate.getTime()
+  );
+  const autoAbsentRef = useRef(false);
+  const autoLateRef = useRef(false);
+
+  useEffect(() => {
+    autoAbsentRef.current = false;
+    autoLateRef.current = false;
+  }, [dailySchedule, today]);
+
+  useEffect(() => {
+    if (
+      !dailySchedule ||
+      !attendanceWindowClosed ||
+      !subjectEmployeeId ||
+      !today
+    ) {
+      return;
+    }
+    const shiftEndTimeValue = formatTimeForRecord(shiftEndDate);
+    const markAbsent = async () => {
+      try {
+        await createRecord({
+          employeeId: subjectEmployeeId,
+          employeeName: user?.name || '',
+          date: today,
+          status: 'absent',
+          notes: 'Shift window closed without clock-in',
+        });
+      } catch (error) {
+        console.error('Auto-mark absent failed', error);
+        autoAbsentRef.current = false;
+      }
+    };
+    const markLate = async () => {
+      if (!effectiveRecord?.id) return;
+      try {
+        await updateRecord(effectiveRecord.id, {
+          status: 'late',
+          checkOut: shiftEndTimeValue || nowTime(),
+          notes: 'Shift window closed without clock-out',
+        });
+      } catch (error) {
+        console.error('Auto-mark late failed', error);
+        autoLateRef.current = false;
+      }
+    };
+    if (!effectiveRecord?.checkIn && !autoAbsentRef.current) {
+      autoAbsentRef.current = true;
+      markAbsent();
+      return;
+    }
+    if (
+      effectiveRecord?.checkIn &&
+      !effectiveRecord?.checkOut &&
+      !autoLateRef.current
+    ) {
+      autoLateRef.current = true;
+      markLate();
+    }
+  }, [
+    attendanceWindowClosed,
+    createRecord,
+    dailySchedule,
+    effectiveRecord,
+    nowTime,
+    shiftEndDate,
+    subjectEmployeeId,
+    today,
+    updateRecord,
+    user?.name,
+  ]);
+
   const handleTimeIn = async () => {
     const selectedEmployeeId = subjectEmployeeId;
     if (!selectedEmployeeId) {
@@ -166,7 +287,7 @@ const AttendanceTimeCard = ({ user, className }) => {
       const created = await createRecord({
         employeeId: selectedEmployeeId,
         employeeName: user?.name || '',
-        date: todayStr(),
+        date: today,
         checkIn: checkInTime,
         status: 'present',
       });
@@ -220,7 +341,7 @@ const AttendanceTimeCard = ({ user, className }) => {
         const payload = {
           employeeId: selectedEmployeeId,
           employeeName: user?.name || '',
-          date: todayStr(),
+          date: today,
           checkOut: checkOutTime,
           status: 'present',
         };
@@ -238,7 +359,7 @@ const AttendanceTimeCard = ({ user, className }) => {
             const payload = {
               employeeId: selectedEmployeeId,
               employeeName: user?.name || '',
-              date: todayStr(),
+              date: today,
               checkOut: checkOutTime,
               status: 'present',
             };
@@ -377,7 +498,7 @@ const AttendanceTimeCard = ({ user, className }) => {
             'flex-1 min-w-[140px] border-2 border-emerald-600 bg-emerald-600 text-white transition-colors hover:bg-emerald-600/90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600 disabled:cursor-not-allowed disabled:opacity-60'
           )}
           onClick={handleTimeIn}
-          disabled={hasTimedInToday}
+          disabled={hasTimedInToday || attendanceWindowClosed}
         >
           <Clock className="mr-2 h-4 w-4" aria-hidden="true" />
           Time In
@@ -386,14 +507,31 @@ const AttendanceTimeCard = ({ user, className }) => {
           size="lg"
           className={cn(
             'flex-1 min-w-[140px] border-2 bg-red-500 text-white transition-opacity hover:bg-red-500/90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500',
-            !canTimeOut ? 'cursor-not-allowed opacity-70' : 'opacity-100'
+            !canTimeOut || attendanceWindowClosed
+              ? 'cursor-not-allowed opacity-70'
+              : 'opacity-100'
           )}
           onClick={handleTimeOut}
-          disabled={!canTimeOut}
+          disabled={!canTimeOut || attendanceWindowClosed}
         >
           <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
           Time Out
         </Button>
+      </div>
+
+      <div className="space-y-1 text-center text-xs text-muted-foreground">
+        {dailySchedule ? (
+          <p>
+            Scheduled: {dailySchedule.startTime} - {dailySchedule.endTime}
+          </p>
+        ) : (
+          <p>No scheduled shift found for today.</p>
+        )}
+        {attendanceWindowClosed ? (
+          <p className="text-destructive">
+            Shift window closed — attendance locked and auto recorded.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-1 text-center text-sm text-muted-foreground">

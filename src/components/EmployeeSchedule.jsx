@@ -179,6 +179,7 @@ const EmployeeSchedule = () => {
     ? 'Attendance & Leave'
     : 'Attendance Records';
   const leaveTabLabel = isAdmin ? 'Leave Management' : 'Leave Records';
+  const staffLeaveTabValue = 'leave-request';
   const tabsGridCols = showCombinedAttendanceLeave
     ? 'grid-cols-4'
     : 'grid-cols-5';
@@ -353,9 +354,7 @@ const EmployeeSchedule = () => {
     startTime: '08:00',
     endTime: '16:00',
   });
-  const [activeTab, setActiveTab] = useState(() =>
-    isStaffOnly ? 'attendance' : 'schedule'
-  );
+  const [activeTab, setActiveTab] = useState('schedule');
   const [roleExceptionDialog, setRoleExceptionDialog] = useState(null);
   const [roleExceptionReason, setRoleExceptionReason] = useState('');
   const [autoBuildDialogOpen, setAutoBuildDialogOpen] = useState(false);
@@ -1546,27 +1545,27 @@ const EmployeeSchedule = () => {
         >
           <TabsList className="w-full grid grid-cols-2 gap-2 bg-muted/40 p-1 rounded-lg">
             <TabsTrigger
-              value="attendance"
-              aria-label="Attendance Records"
+              value="schedule"
+              aria-label="Weekly Schedule"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
-              <ClipboardList className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">Attendance Records</span>
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden lg:inline">Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
-              value="leave"
-              aria-label="Leave Management"
+              value={staffLeaveTabValue}
+              aria-label="Leave Request"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <Plane className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">Leave Management</span>
+              <span className="hidden lg:inline">Leave Request</span>
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="attendance" className="space-y-6">
-            {activeTab === 'attendance' ? schedulePane : null}
+          <TabsContent value="schedule" className="space-y-6">
+            {activeTab === 'schedule' ? schedulePane : null}
           </TabsContent>
-          <TabsContent value="leave" className="space-y-6">
-            {activeTab === 'leave' ? leaveRequestPanel : null}
+          <TabsContent value={staffLeaveTabValue} className="space-y-6">
+            {activeTab === staffLeaveTabValue ? leaveRequestPanel : null}
           </TabsContent>
         </Tabs>
       ) : (

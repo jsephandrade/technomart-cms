@@ -4,7 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarRange, ChevronDown, Plus, Settings } from 'lucide-react';
+import {
+  CalendarRange,
+  ChevronDown,
+  Plus,
+  Settings,
+  Trash2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_DAY_OPTIONS = [
@@ -97,6 +103,7 @@ const WeeklyScheduleCard = ({
   filters,
   onOpenAddSchedule,
   onOpenManageEmployees,
+  onDeleteSchedule,
   canManage = false,
 }) => {
   const filteredDays = daysOfWeek.length ? daysOfWeek : DEFAULT_DAY_OPTIONS;
@@ -242,6 +249,8 @@ const WeeklyScheduleCard = ({
     const employee =
       entry?.employee || employeeMap.get(String(entry?.employeeId));
     const initials = getInitials(employee?.name || entry?.employeeName);
+    const canDelete =
+      canManage && typeof onDeleteSchedule === 'function' && entry?.id;
 
     return (
       <div
@@ -271,9 +280,23 @@ const WeeklyScheduleCard = ({
                   'Team member'}
               </p>
             </div>
-            <Badge variant="outline" className="text-[11px]">
-              {formatDurationLabel(entry?.startTime, entry?.endTime)}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[11px]">
+                {formatDurationLabel(entry?.startTime, entry?.endTime)}
+              </Badge>
+              {canDelete ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={() => onDeleteSchedule(entry.id)}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Remove shift</span>
+                </Button>
+              ) : null}
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             {entry?.startTime} - {entry?.endTime}

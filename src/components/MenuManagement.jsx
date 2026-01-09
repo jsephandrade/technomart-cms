@@ -1,16 +1,22 @@
 // src/pages/MenuManagement.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import useMenuManagement, {
   useMenuCategories,
 } from '@/hooks/useMenuManagement';
+import PackageFormModal from '@/components/catering/PackageFormModal';
+import PackageManagementPanel from '@/components/catering/PackageManagementPanel';
 import AddItemDialog from '@/components/menu/AddItemDialog';
 import AddCategoryDialog from '@/components/menu/AddCategoryDialog';
 import AddComboMealDialog from '@/components/menu/AddComboMealDialog';
 import EditItemDialog from '@/components/menu/EditItemDialog';
 import CategoryTabs from '@/components/menu/CategoryTabs';
 import { toast } from 'sonner';
+import cateringService from '@/api/services/cateringService';
+import { menuService } from '@/api/services/menuService';
+import { useAuth } from '@/components/AuthContext';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Menu as MenuIcon } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Menu as MenuIcon, Package, PlusCircle } from 'lucide-react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 
 const stripUnsupportedFields = (item = {}) => {
@@ -28,6 +34,7 @@ const stripUnsupportedFields = (item = {}) => {
 };
 
 const MenuManagement = () => {
+  const { can } = useAuth();
   const {
     items,
     createMenuItem,
@@ -85,6 +92,18 @@ const MenuManagement = () => {
   const [comboDialogOpen, setComboDialogOpen] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [packageSearchTerm, setPackageSearchTerm] = useState('');
+  const [packageStatus, setPackageStatus] = useState('active');
+  const [packages, setPackages] = useState([]);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
+  const [packagesError, setPackagesError] = useState(null);
+  const [showPackageModal, setShowPackageModal] = useState(false);
+  const [editingPackage, setEditingPackage] = useState(null);
+  const [isSubmittingPackage, setIsSubmittingPackage] = useState(false);
+  const [menuItems, setMenuItems] = useState([]);
+  const [isLoadingMenuItems, setIsLoadingMenuItems] = useState(false);
+  const [activeTab, setActiveTab] = useState('menu');
+  const canManagePackages = can('catering.manage');
 
   const handleAddItem = () => {
     if (adding) return;
@@ -166,6 +185,157 @@ const MenuManagement = () => {
     };
   }, [uploadQueue, isUploading, uploadItemImage]);
 
+  const fetchPackages = useCallback(
+    async (status = packageStatus) => {
+      setIsLoadingPackages(true);
+      setPackagesError(null);
+      try {
+        const res = await cateringService.listPackages({
+          includeItems: true,
+          active: status === 'active',
+        });
+        const list = res?.data || [];
+        setPackages(Array.isArray(list) ? list : []);
+      } catch (error) {
+        const message =
+          error?.message ||
+          error?.details?.message ||
+          'Failed to load packages';
+        setPackagesError(message);
+        toast.error(message);
+        setPackages([]);
+      } finally {
+        setIsLoadingPackages(false);
+      }
+    },
+    [packageStatus]
+  );
+
+  const fetchMenuItems = useCallback(async () => {
+    setIsLoadingMenuItems(true);
+    try {
+      const res = await menuService.getMenuItems({ archived: false });
+      const list = res?.data || [];
+      setMenuItems(Array.isArray(list) ? list : []);
+    } catch (error) {
+      const message =
+        error?.message ||
+        error?.details?.message ||
+        'Failed to load menu items';
+      toast.error(message);
+      setMenuItems([]);
+    } finally {
+      setIsLoadingMenuItems(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canManagePackages) return;
+    if (activeTab !== 'packages') return;
+    fetchPackages(packageStatus);
+  }, [activeTab, canManagePackages, fetchPackages, packageStatus]);
+
+  useEffect(() => {
+    if (!showPackageModal) return;
+    if (menuItems.length > 0 || isLoadingMenuItems) return;
+    fetchMenuItems();
+  }, [fetchMenuItems, isLoadingMenuItems, menuItems.length, showPackageModal]);
+
+  const handleCreatePackage = useCallback(() => {
+    setEditingPackage(null);
+    setShowPackageModal(true);
+  }, []);
+
+  const handleEditPackage = useCallback((pkg) => {
+    setEditingPackage(pkg);
+    setShowPackageModal(true);
+  }, []);
+
+  const handlePackageModalChange = useCallback((nextOpen) => {
+    setShowPackageModal(nextOpen);
+    if (!nextOpen) {
+      setEditingPackage(null);
+    }
+  }, []);
+
+  const handleSubmitPackage = useCallback(
+    async (payload) => {
+      setIsSubmittingPackage(true);
+      try {
+        const response = editingPackage
+          ? await cateringService.updatePackage(editingPackage.id, payload)
+          : await cateringService.createPackage(payload);
+        if (!response?.success) {
+          throw new Error(
+            response?.message ||
+              (editingPackage
+                ? 'Failed to update package'
+                : 'Failed to create package')
+          );
+        }
+        toast.success(
+          editingPackage
+            ? 'Package updated successfully.'
+            : 'Package created successfully.'
+        );
+        setShowPackageModal(false);
+        setEditingPackage(null);
+        await fetchPackages(packageStatus);
+        return true;
+      } catch (error) {
+        const message =
+          error?.message ||
+          error?.details?.message ||
+          (editingPackage
+            ? 'Failed to update package'
+            : 'Failed to create package');
+        toast.error(message);
+        return false;
+      } finally {
+        setIsSubmittingPackage(false);
+      }
+    },
+    [editingPackage, fetchPackages, packageStatus]
+  );
+
+  const handleTogglePackageActive = useCallback(
+    async (pkg, nextActive) => {
+      if (!pkg?.id) return;
+      try {
+        let response;
+        if (nextActive) {
+          response = await cateringService.updatePackage(pkg.id, {
+            active: true,
+          });
+        } else {
+          response = await cateringService.deactivatePackage(pkg.id);
+        }
+        if (response?.success === false) {
+          throw new Error(
+            response?.message || 'Unable to update package status'
+          );
+        }
+        toast.success(
+          nextActive
+            ? `Package "${pkg.name}" activated.`
+            : `Package "${pkg.name}" deactivated.`
+        );
+        await fetchPackages(packageStatus);
+      } catch (error) {
+        const message =
+          error?.message ||
+          error?.details?.message ||
+          'Unable to update package status';
+        toast.error(message);
+      }
+    },
+    [fetchPackages, packageStatus]
+  );
+
+  const handlePackageStatusChange = useCallback((nextStatus) => {
+    setPackageStatus(nextStatus === 'inactive' ? 'inactive' : 'active');
+  }, []);
+
   const handleEditItem = async (overrideItem) => {
     try {
       const source = stripUnsupportedFields(overrideItem || editingItem);
@@ -241,15 +411,6 @@ const MenuManagement = () => {
 
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex items-center gap-1"
-        onClick={() => setComboDialogOpen(true)}
-      >
-        <PlusCircle className="h-4 w-4" />
-        Add Combo Meal
-      </Button>
       <AddItemDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
@@ -260,40 +421,102 @@ const MenuManagement = () => {
         categories={categories}
         onAddCategory={() => setCategoryDialogOpen(true)}
       />
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex items-center gap-1"
+        onClick={() => setComboDialogOpen(true)}
+      >
+        <PlusCircle className="h-4 w-4" />
+        Add Combo Meal
+      </Button>
     </div>
   );
 
+  const packageActions = canManagePackages ? (
+    <Button onClick={handleCreatePackage}>
+      <Package className="h-4 w-4 mr-2" />
+      Create Package
+    </Button>
+  ) : null;
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <FeaturePanelCard
-        title="Menu Management"
-        titleStyle="accent"
-        titleIcon={MenuIcon}
-        headerActions={actionButtons}
-        contentClassName="space-y-6"
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="space-y-6"
       >
-        <CategoryTabs
-          items={itemsWithImages}
-          categories={categories}
-          categoryRows={categoryRows}
-          onEdit={(it) =>
-            setEditingItem({
-              ...stripUnsupportedFields(it),
-              imageFile: null,
-            })
-          }
-          onArchive={handleArchiveItem}
-          onCategoryUpdated={() => {
-            refetchCategories();
-            refetchActive?.();
-            refetchArchived?.();
-          }}
-          archivedItems={archivedItemsWithImages}
-          archivedLoading={archivedLoading}
-          onRestore={handleRestoreItem}
-          onHardDelete={handleHardDeleteItem}
-        />
-      </FeaturePanelCard>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="menu">Menu Management</TabsTrigger>
+          <TabsTrigger value="packages">Catering Packages</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="menu">
+          <FeaturePanelCard
+            title="Menu Management"
+            titleStyle="accent"
+            titleIcon={MenuIcon}
+            headerActions={actionButtons}
+            contentClassName="space-y-6"
+          >
+            <CategoryTabs
+              items={itemsWithImages}
+              categories={categories}
+              categoryRows={categoryRows}
+              onEdit={(it) =>
+                setEditingItem({
+                  ...stripUnsupportedFields(it),
+                  imageFile: null,
+                })
+              }
+              onArchive={handleArchiveItem}
+              onCategoryUpdated={() => {
+                refetchCategories();
+                refetchActive?.();
+                refetchArchived?.();
+              }}
+              archivedItems={archivedItemsWithImages}
+              archivedLoading={archivedLoading}
+              onRestore={handleRestoreItem}
+              onHardDelete={handleHardDeleteItem}
+            />
+          </FeaturePanelCard>
+        </TabsContent>
+
+        <TabsContent value="packages">
+          <FeaturePanelCard
+            title="Catering Packages"
+            titleStyle="accent"
+            titleIcon={Package}
+            description="Build bundles that managers can select for catering events."
+            headerActions={packageActions}
+            contentClassName="space-y-6"
+          >
+            {canManagePackages ? (
+              <PackageManagementPanel
+                packages={packages}
+                isLoading={isLoadingPackages}
+                error={packagesError}
+                searchTerm={packageSearchTerm}
+                onSearchChange={setPackageSearchTerm}
+                statusFilter={packageStatus}
+                onStatusChange={handlePackageStatusChange}
+                onRetry={() => fetchPackages(packageStatus)}
+                onCreate={handleCreatePackage}
+                onEdit={handleEditPackage}
+                onToggleActive={handleTogglePackageActive}
+                canManage={canManagePackages}
+                showCreateButton={false}
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed border-muted-foreground/40 p-8 text-center text-sm text-muted-foreground">
+                You do not have access to manage catering packages.
+              </div>
+            )}
+          </FeaturePanelCard>
+        </TabsContent>
+      </Tabs>
 
       <EditItemDialog
         item={editingItem}
@@ -341,6 +564,15 @@ const MenuManagement = () => {
             toast.error(e?.message || 'Failed to create combo meal');
           });
         }}
+      />
+
+      <PackageFormModal
+        open={showPackageModal}
+        onOpenChange={handlePackageModalChange}
+        onSubmit={handleSubmitPackage}
+        menuItems={menuItems}
+        initialData={editingPackage}
+        isSubmitting={isSubmittingPackage}
       />
     </div>
   );

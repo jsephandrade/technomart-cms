@@ -151,7 +151,7 @@ urlpatterns = [
         name="schedule_role_exception_detail",
     ),
     path("schedule/analytics", emp_views.schedule_analytics, name="schedule_analytics"),
-    path("schedule/<uuid:sid>", emp_views.schedule_detail, name="schedule_detail"),
+    path("schedule/<str:sid>", emp_views.schedule_detail, name="schedule_detail"),
 
     # Attendance & Leaves
     path("attendance", att_views.attendance, name="attendance"),

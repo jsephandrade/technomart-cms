@@ -5,6 +5,7 @@ checks via helpers in views_common, and JSON responses with { success, data }.
 """
 
 import json
+import uuid
 from datetime import time
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -25,6 +26,34 @@ DAYS = [
     "Friday",
     "Saturday",
 ]
+
+
+def _normalize_uuid_str(value):
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return str(uuid.UUID(raw))
+    except Exception:
+        return raw
+
+
+def _parse_uuid(value):
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(raw)
+    except Exception:
+        return None
 
 
 def _parse_time(val: str):
@@ -111,9 +140,13 @@ def _safe_sched(s):
         end_time = getattr(s, "end_time", None)
         created_at = getattr(s, "created_at", None)
         updated_at = getattr(s, "updated_at", None)
+    normalized_id = _normalize_uuid_str(sid) if sid is not None else None
+    normalized_employee_id = (
+        _normalize_uuid_str(employee_id) if employee_id is not None else None
+    )
     return {
-        "id": str(sid) if sid is not None else None,
-        "employeeId": str(employee_id) if employee_id is not None else None,
+        "id": normalized_id if normalized_id is not None else None,
+        "employeeId": normalized_employee_id if normalized_employee_id is not None else None,
         "employeeName": employee_name or "",
         "employeePosition": employee_position or "",
         "day": day,
@@ -514,7 +547,10 @@ def schedule_detail(request, sid):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
     try:
         from .models import ScheduleEntry, Employee
-        s = ScheduleEntry.objects.select_related("employee").filter(id=sid).first()
+        parsed_sid = _parse_uuid(sid)
+        if not parsed_sid:
+            return JsonResponse({"success": False, "message": "Not found"}, status=404)
+        s = ScheduleEntry.objects.select_related("employee").filter(id=parsed_sid).first()
         if not s:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
         if request.method == "DELETE":

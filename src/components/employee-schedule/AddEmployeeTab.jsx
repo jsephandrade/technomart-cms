@@ -10,6 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Archive,
   Check,
   ChevronsUpDown,
@@ -22,6 +29,11 @@ import {
 import { cn } from '@/lib/utils';
 import { useUsers } from '@/hooks/useUsers';
 import { useAuth } from '@/components/AuthContext';
+import {
+  CANTEEN_ROLE_OPTIONS,
+  mergeRoleOptions,
+  resolveRoleLabel,
+} from '@/lib/canteenRoles';
 import {
   Popover,
   PopoverContent,
@@ -179,6 +191,17 @@ const AddEmployeeTab = ({
     () => appUsers.filter((user) => isStaffEligible(user)),
     [appUsers]
   );
+  const roleOptions = useMemo(() => {
+    const employeeRoles = employees.map((emp) => emp.position);
+    const staffRoles = staffUsers.map(
+      (staff) => staff.role || resolvePrimaryRole(staff)
+    );
+    return mergeRoleOptions(CANTEEN_ROLE_OPTIONS, [
+      ...employeeRoles,
+      ...staffRoles,
+      quickAdd.position,
+    ]);
+  }, [employees, staffUsers, quickAdd.position]);
   const normalizedTeamSearch = teamSearch.trim().toLowerCase();
   const filteredEmployees = normalizedTeamSearch
     ? employees.filter((emp) => {
@@ -235,7 +258,8 @@ const AddEmployeeTab = ({
         setQuickAdd((prev) => ({
           ...prev,
           name: match.name || prev.name,
-          position: match.position || prev.position,
+          position:
+            resolveRoleLabel(match.position, roleOptions) || prev.position,
         }));
       }
     } else if (type === 'user') {
@@ -245,7 +269,9 @@ const AddEmployeeTab = ({
         setQuickAdd((prev) => ({
           ...prev,
           name: match.name || prev.name,
-          position: roleLabel || match.role || prev.position,
+          position:
+            resolveRoleLabel(roleLabel || match.role, roleOptions) ||
+            prev.position,
         }));
       }
     }
@@ -440,17 +466,27 @@ const AddEmployeeTab = ({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">Role</Label>
-              <Input
-                value={quickAdd.position}
-                onChange={(e) =>
+              <Label className="text-xs uppercase tracking-wide">Role *</Label>
+              <Select
+                value={resolveRoleLabel(quickAdd.position, roleOptions)}
+                onValueChange={(value) =>
                   setQuickAdd((prev) => ({
                     ...prev,
-                    position: e.target.value,
+                    position: value,
                   }))
                 }
-                placeholder="Barista"
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">

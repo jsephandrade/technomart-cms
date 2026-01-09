@@ -13,6 +13,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertTriangle,
   ClipboardCheck,
   Plus,
@@ -20,6 +27,11 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  CANTEEN_ROLE_OPTIONS,
+  mergeRoleOptions,
+  resolveRoleLabel,
+} from '@/lib/canteenRoles';
 
 const STATUS_STYLES = {
   ok: 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700',
@@ -76,6 +88,10 @@ const TeamCompositionCard = ({
 }) => {
   const [editingDay, setEditingDay] = useState('');
   const [draftTargets, setDraftTargets] = useState([]);
+  const roleSelections = useMemo(
+    () => mergeRoleOptions(CANTEEN_ROLE_OPTIONS, roleOptions),
+    [roleOptions]
+  );
 
   const activeDays = useMemo(
     () =>
@@ -103,7 +119,7 @@ const TeamCompositionCard = ({
     setDraftTargets(
       Array.isArray(targetsByDay?.[normalized])
         ? targetsByDay[normalized].map((entry) => ({
-            role: entry.role || '',
+            role: resolveRoleLabel(entry.role, roleSelections),
             target: Number(entry.target || 0),
           }))
         : []
@@ -337,14 +353,26 @@ const TeamCompositionCard = ({
                     <Label className="text-xs uppercase tracking-wide">
                       Role
                     </Label>
-                    <Input
-                      value={entry.role || ''}
-                      onChange={(event) =>
-                        handleUpdateDraft(index, 'role', event.target.value)
+                    <Select
+                      value={resolveRoleLabel(entry.role, roleSelections)}
+                      onValueChange={(value) =>
+                        handleUpdateDraft(index, 'role', value)
                       }
-                      placeholder="e.g., Chef"
-                      list={`role-options-${editingDay}`}
-                    />
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roleSelections.map((role) => (
+                          <SelectItem
+                            key={`${editingDay}-${role}`}
+                            value={role}
+                          >
+                            {role}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs uppercase tracking-wide">
@@ -395,12 +423,6 @@ const TeamCompositionCard = ({
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add role
             </Button>
-
-            <datalist id={`role-options-${editingDay}`}>
-              {(roleOptions || []).map((role) => (
-                <option key={role} value={role} />
-              ))}
-            </datalist>
           </div>
 
           <DialogFooter>

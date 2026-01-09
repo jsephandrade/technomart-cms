@@ -199,6 +199,16 @@ const EmployeeSchedule = () => {
     refetch: refetchEmployees,
   } = useEmployees();
 
+  const {
+    schedule = [],
+    addScheduleEntry,
+    updateScheduleEntry,
+    deleteScheduleEntry,
+    clearScheduleEntries,
+    loading: scheduleLoading,
+    refetch: refetchSchedule,
+  } = useSchedule({}, { autoFetch: true });
+
   const resolvedEmployeeId = useMemo(() => {
     if (!user) return null;
     if (user.employeeId) return String(user.employeeId);
@@ -265,16 +275,6 @@ const EmployeeSchedule = () => {
       .filter((emp) => emp && (emp.status || '').toLowerCase() === 'inactive')
       .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
   }, [employees]);
-
-  const {
-    schedule = [],
-    addScheduleEntry,
-    updateScheduleEntry,
-    deleteScheduleEntry,
-    clearScheduleEntries,
-    loading: scheduleLoading,
-    refetch: refetchSchedule,
-  } = useSchedule({}, { autoFetch: true });
 
   const [roleTargetsByDay, setRoleTargetsByDay] = useState(() =>
     buildEmptyRoleTargets(DAYS_OF_WEEK)

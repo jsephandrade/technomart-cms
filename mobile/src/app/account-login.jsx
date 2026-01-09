@@ -229,6 +229,14 @@ export default function AccountLoginScreen() {
 
       const profile = await profileRes.json();
 
+      const statusValue = String(profile?.status || '').toLowerCase();
+      if (statusValue && statusValue !== 'active') {
+        await clearStoredTokens();
+        await AsyncStorage.removeItem(USER_CACHE_KEY);
+        router.replace('/account-pending-approval');
+        return;
+      }
+
       // ✅ Save user profile
       await AsyncStorage.setItem(USER_CACHE_KEY, JSON.stringify(profile));
       setUser(profile);

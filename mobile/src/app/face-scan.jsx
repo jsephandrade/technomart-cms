@@ -247,11 +247,7 @@ export default function FaceScanScreen() {
       }
 
       if (data?.pending) {
-        Alert.alert(
-          'Account pending',
-          'Your account is still pending verification. Please contact admin.'
-        );
-        router.replace('/account-login');
+        router.replace('/account-pending-approval');
         return;
       }
 

@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
 import {
   useFonts,
   Roboto_400Regular,
@@ -62,6 +63,7 @@ export default function AccountRegistrationScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [roleModalVisible, setRoleModalVisible] = useState(false);
+  const [idPhoto, setIdPhoto] = useState(null);
 
   // Google Auth setup
   const [request, , promptAsync] = Google.useAuthRequest({
@@ -137,6 +139,33 @@ export default function AccountRegistrationScreen() {
     setErrors((prev) => ({ ...prev, [field]: '' }));
   };
 
+  const handleCaptureId = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Camera Required',
+        'Please enable camera access to capture your ID.'
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      base64: true,
+      quality: 0.7,
+    });
+
+    if (result.canceled) return;
+
+    const asset = result.assets?.[0];
+    if (!asset?.base64) {
+      Alert.alert('Capture Failed', 'Please try capturing your ID again.');
+      return;
+    }
+
+    setIdPhoto(asset);
+    setErrors((prev) => ({ ...prev, idPhoto: '' }));
+  };
+
   const collectPasswordIssues = (password, { email, firstName, lastName }) => {
     const issues = [];
     const safePassword = String(password || '');
@@ -203,6 +232,7 @@ export default function AccountRegistrationScreen() {
     } else if (form.confirm !== form.password) {
       errs.confirm = 'Passwords do not match';
     }
+    if (!idPhoto?.base64) errs.idPhoto = 'ID photo is required';
     return errs;
   };
 
@@ -219,11 +249,10 @@ export default function AccountRegistrationScreen() {
           password: form.password,
           confirm: form.confirm,
           role: form.role,
+          id_image: `data:image/jpeg;base64,${idPhoto?.base64 || ''}`,
         });
         if (result.success) {
-          Alert.alert('Success', 'Account created successfully!', [
-            { text: 'OK', onPress: () => router.push('/AccountCreatedScreen') },
-          ]);
+          router.push('/account-pending-approval');
           setForm({
             firstName: '',
             lastName: '',
@@ -232,8 +261,13 @@ export default function AccountRegistrationScreen() {
             password: '',
             confirm: '',
           });
+          setIdPhoto(null);
         } else if (result.errors) {
-          setErrors(result.errors);
+          const nextErrors = { ...result.errors };
+          if (nextErrors.id_image && !nextErrors.idPhoto) {
+            nextErrors.idPhoto = nextErrors.id_image;
+          }
+          setErrors(nextErrors);
         } else {
           Alert.alert('Error', result.message);
         }
@@ -266,6 +300,7 @@ export default function AccountRegistrationScreen() {
   const emailHasError = Boolean(errors.email);
   const passwordHasError = Boolean(errors.password);
   const confirmHasError = Boolean(errors.confirm);
+  const idPhotoHasError = Boolean(errors.idPhoto);
   const registerDisabled = loading;
   const roleOptions = [
     {
@@ -620,6 +655,47 @@ export default function AccountRegistrationScreen() {
               </Text>
             )}
 
+            {/* ID Photo */}
+            <View
+              style={[
+                styles.idUploadCard,
+                idPhotoHasError && styles.inputWrapperError,
+              ]}
+            >
+              {idPhoto?.uri ? (
+                <Image source={{ uri: idPhoto.uri }} style={styles.idPreview} />
+              ) : (
+                <View style={styles.idPlaceholder}>
+                  <MaterialCommunityIcons
+                    name="card-account-details-outline"
+                    size={28}
+                    color="#9CA3AF"
+                  />
+                  <Text style={styles.idPlaceholderText}>
+                    Capture a clear photo of your ID
+                  </Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.idCaptureButton}
+                onPress={handleCaptureId}
+              >
+                <MaterialCommunityIcons
+                  name="camera-outline"
+                  size={18}
+                  color="#fff"
+                />
+                <Text style={styles.idCaptureButtonText}>
+                  {idPhoto?.uri ? 'Retake ID Photo' : 'Capture ID Photo'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {errors.idPhoto && (
+              <Text style={styles.errorText}>
+                {formatError(errors.idPhoto)}
+              </Text>
+            )}
+
             {/* Register Button */}
             <TouchableOpacity
               style={[
@@ -887,5 +963,45 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
     fontFamily: 'Roboto_400Regular',
+  },
+  idUploadCard: {
+    borderWidth: 1,
+    borderColor: '#F3D6B7',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#FFF7ED',
+    marginBottom: 12,
+  },
+  idPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 6,
+  },
+  idPlaceholderText: {
+    color: '#6B7280',
+    fontSize: 12,
+    fontFamily: 'Roboto_400Regular',
+    textAlign: 'center',
+  },
+  idPreview: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  idCaptureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F97316',
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  idCaptureButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: 'Roboto_700Bold',
   },
 });

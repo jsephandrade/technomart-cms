@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.contrib.auth.hashers import make_password
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -17,7 +18,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.decorators import api_view, permission_classes
 
-from api.models import AppUser
+from api.models import AppUser, AccessRequest, AccessRequestHeadshot
+from api.views_common import _extract_dataurl_image, _issue_verify_token_from_db, _safe_user_from_db
 from .serializers import RegisterSerializer
 
 
@@ -30,9 +32,64 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            id_image = serializer.validated_data.get("id_image") or ""
+            mime, raw = _extract_dataurl_image(id_image)
+            if not raw:
+                return Response(
+                    {"success": False, "errors": {"id_image": ["ID photo must be a valid image."]}},
+                    status=400,
+                )
+
+            try:
+                with transaction.atomic():
+                    user = serializer.save()
+                    ar, _ = AccessRequest.objects.get_or_create(user=user)
+
+                    try:
+                        for shot in ar.headshots.all():
+                            if shot.image:
+                                shot.image.delete(save=False)
+                    except Exception:
+                        pass
+                    ar.headshots.all().delete()
+
+                    if ar.headshot:
+                        try:
+                            ar.headshot.delete(save=False)
+                        except Exception:
+                            pass
+
+                    ext = ".jpg"
+                    if mime == "image/png":
+                        ext = ".png"
+                    elif mime in ("image/jpeg", "image/jpg"):
+                        ext = ".jpg"
+                    elif mime == "image/webp":
+                        ext = ".webp"
+
+                    filename = f"id_{uuid.uuid4().hex}{ext}"
+                    shot = AccessRequestHeadshot(request=ar, position="ID")
+                    shot.image.save(filename, ContentFile(raw), save=False)
+                    shot.save()
+
+                    ar.headshot = shot.image
+                    ar.status = AccessRequest.STATUS_PENDING
+                    ar.save(update_fields=["headshot", "status", "updated_at"])
+            except Exception:
+                return Response(
+                    {"success": False, "message": "Failed to create account"},
+                    status=500,
+                )
+
+            safe_user = _safe_user_from_db(user)
             return Response(
-                {"success": True, "message": "Account created successfully"}, status=201
+                {
+                    "success": True,
+                    "pending": True,
+                    "user": safe_user,
+                    "verifyToken": _issue_verify_token_from_db(user),
+                },
+                status=201,
             )
         return Response({"success": False, "errors": serializer.errors}, status=400)
 

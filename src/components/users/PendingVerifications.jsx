@@ -143,8 +143,19 @@ export const PendingVerifications = () => {
       .trim()
       .toLowerCase();
 
+  const approveRequest = async (req, overrideRole) => {
+    if (!req?.id) return;
+    const resolvedRole = overrideRole || resolveRole(req) || 'staff';
+    await approve.mutateAsync({ requestId: req.id, role: resolvedRole });
+    closeApproveFlow();
+  };
+
   const openApproveConfirm = (req) => {
     const nextRole = resolveRole(req);
+    if (AUTO_APPROVE_ROLES.has(nextRole)) {
+      approveRequest(req, nextRole);
+      return;
+    }
     setRole(nextRole || 'staff');
     setApproveTarget(req);
     setShowRoleModal(false);
@@ -157,18 +168,12 @@ export const PendingVerifications = () => {
 
   const confirmApprove = () => {
     if (!approveTarget) return;
-    const targetRole = resolveRole(approveTarget);
-    if (AUTO_APPROVE_ROLES.has(targetRole)) {
-      onApprove();
-      return;
-    }
     setShowRoleModal(true);
   };
 
   const onApprove = async () => {
     if (!approveTarget) return;
-    await approve.mutateAsync({ requestId: approveTarget.id, role });
-    closeApproveFlow();
+    await approveRequest(approveTarget, role);
   };
 
   const onRejectRow = (req) => {

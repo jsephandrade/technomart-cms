@@ -108,6 +108,12 @@ class PendingUserGateMiddleware:
             # Only allow active + approved role
             status = (user.status or "").lower()
             role = (user.role or "").lower()
+            if (
+                status == "active"
+                and request.method == "GET"
+                and path.startswith("/api/catering/packages")
+            ):
+                return self.get_response(request)
             if status != "active" or role not in self.APPROVED_ROLES:
                 if path.startswith(self.FACE_BYPASS_PREFIXES):
                     if status == "active":

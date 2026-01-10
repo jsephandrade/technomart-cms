@@ -21,6 +21,8 @@ from .models import (
 from .catering_packages import apply_catering_package
 from .views_common import _actor_from_request, _has_permission
 
+CUSTOMER_VIEW_ROLES = {"customer", "faculty"}
+
 
 def _parse_date(value):
     if not value:
@@ -233,6 +235,16 @@ def _actor_uuid(actor):
     return None
 
 
+def _actor_role(actor):
+    try:
+        role = getattr(actor, "role", "")
+    except Exception:
+        role = ""
+    if not role and isinstance(actor, dict):
+        role = actor.get("role") or ""
+    return str(role or "").lower()
+
+
 @require_http_methods(["GET", "POST"])
 def catering_packages(request):
     actor, err = _actor_from_request(request)
@@ -240,7 +252,11 @@ def catering_packages(request):
         return err
 
     if request.method == "GET":
-        if not (_has_permission(actor, "catering.view") or _has_permission(actor, "all")):
+        if not (
+            _has_permission(actor, "catering.view")
+            or _has_permission(actor, "all")
+            or _actor_role(actor) in CUSTOMER_VIEW_ROLES
+        ):
             return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
         include_items = str(request.GET.get("includeItems") or "").lower() in {"1", "true", "yes"}
@@ -368,7 +384,11 @@ def catering_package_detail(request, package_id):
         return JsonResponse({"success": False, "message": "Package not found"}, status=404)
 
     if request.method == "GET":
-        if not (_has_permission(actor, "catering.view") or _has_permission(actor, "all")):
+        if not (
+            _has_permission(actor, "catering.view")
+            or _has_permission(actor, "all")
+            or _actor_role(actor) in CUSTOMER_VIEW_ROLES
+        ):
             return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
         return JsonResponse({"success": True, "data": _serialize_package(package, include_items=True)})
 

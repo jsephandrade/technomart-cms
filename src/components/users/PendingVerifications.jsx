@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 
 const AUTO_REFRESH_INTERVAL = 20_000;
+const AUTO_APPROVE_ROLES = new Set(['customer', 'faculty']);
 
 export const PendingVerifications = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -137,8 +138,14 @@ export const PendingVerifications = () => {
     setPreviewLoading(false);
   };
 
+  const resolveRole = (req) =>
+    String(req?.user?.role || '')
+      .trim()
+      .toLowerCase();
+
   const openApproveConfirm = (req) => {
-    setRole('staff');
+    const nextRole = resolveRole(req);
+    setRole(nextRole || 'staff');
     setApproveTarget(req);
     setShowRoleModal(false);
   };
@@ -150,6 +157,11 @@ export const PendingVerifications = () => {
 
   const confirmApprove = () => {
     if (!approveTarget) return;
+    const targetRole = resolveRole(approveTarget);
+    if (AUTO_APPROVE_ROLES.has(targetRole)) {
+      onApprove();
+      return;
+    }
     setShowRoleModal(true);
   };
 
@@ -182,7 +194,7 @@ export const PendingVerifications = () => {
       titleIcon={ClipboardList}
       titleAccentClassName="px-3 py-1 text-xs md:text-sm"
       titleClassName="text-xs md:text-sm"
-      description="Review new account requests and assign roles"
+      description="Review new account requests"
       decor={<UserManagementCardDecor />}
       headerContent={
         <Badge variant="secondary" className="font-normal">

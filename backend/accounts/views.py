@@ -74,7 +74,12 @@ class RegisterView(APIView):
 
                     ar.headshot = shot.image
                     ar.status = AccessRequest.STATUS_PENDING
-                    ar.save(update_fields=["headshot", "status", "updated_at"])
+                    requested_role = str(user.role or "").strip().lower()
+                    if requested_role:
+                        extra = dict(ar.extra or {})
+                        extra["requestedRole"] = requested_role
+                        ar.extra = extra
+                    ar.save(update_fields=["headshot", "status", "extra", "updated_at"])
             except Exception:
                 return Response(
                     {"success": False, "message": "Failed to create account"},

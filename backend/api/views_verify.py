@@ -275,6 +275,11 @@ def verify_requests(request):
                 headshot_count = 0
             if not headshot_count and ar.headshot:
                 headshot_count = 1
+            requested_role = ""
+            try:
+                requested_role = (ar.extra or {}).get("requestedRole") or ""
+            except Exception:
+                requested_role = ""
             items.append({
                 "id": str(ar.id),
                 "status": ar.status,
@@ -284,12 +289,14 @@ def verify_requests(request):
                 "notes": ar.notes or "",
                 "hasHeadshot": headshot_count > 0,
                 "headshotCount": headshot_count,
+                "requestedRole": requested_role,
                 "user": {
                     "id": str(ar.user.id),
                     "email": ar.user.email,
                     "name": ar.user.name,
                     "role": ar.user.role,
                     "status": ar.user.status,
+                    "requestedRole": requested_role,
                     "avatar": ar.user.avatar or None,
                     "phone": getattr(ar.user, "phone", "") or "",
                     "emailVerified": bool(getattr(ar.user, "email_verified", False)),

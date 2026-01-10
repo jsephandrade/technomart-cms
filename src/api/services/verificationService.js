@@ -38,10 +38,15 @@ class VerificationService {
     const res = await apiClient.get(`/verify/requests?${params.toString()}`);
     const data = (res?.data || []).map((r) => ({
       id: r.id,
+      requestedRole:
+        r?.requestedRole || r?.user?.requestedRole || r?.user?.role || '',
       user: {
         name: r?.user?.name || '',
         email: r?.user?.email || '',
         phone: r?.user?.phone || '',
+        role: r?.user?.role || '',
+        requestedRole:
+          r?.user?.requestedRole || r?.requestedRole || r?.user?.role || '',
       },
       createdAt: r.createdAt,
       hasHeadshot: Boolean(r.hasHeadshot),

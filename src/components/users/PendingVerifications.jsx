@@ -139,7 +139,9 @@ export const PendingVerifications = () => {
   };
 
   const resolveRole = (req) =>
-    String(req?.user?.role || '')
+    String(
+      req?.requestedRole || req?.user?.requestedRole || req?.user?.role || ''
+    )
       .trim()
       .toLowerCase();
 
@@ -152,10 +154,6 @@ export const PendingVerifications = () => {
 
   const openApproveConfirm = (req) => {
     const nextRole = resolveRole(req);
-    if (AUTO_APPROVE_ROLES.has(nextRole)) {
-      approveRequest(req, nextRole);
-      return;
-    }
     setRole(nextRole || 'staff');
     setApproveTarget(req);
     setShowRoleModal(false);
@@ -168,6 +166,11 @@ export const PendingVerifications = () => {
 
   const confirmApprove = () => {
     if (!approveTarget) return;
+    const nextRole = resolveRole(approveTarget);
+    if (AUTO_APPROVE_ROLES.has(nextRole)) {
+      approveRequest(approveTarget, nextRole);
+      return;
+    }
     setShowRoleModal(true);
   };
 

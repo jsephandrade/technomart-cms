@@ -47,17 +47,26 @@ const AddItemDialog = ({
 }) => {
   const [submitted, setSubmitted] = useState(false);
   const nameInputRef = useRef(null);
+  const paxDefaultedRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
       setSubmitted(false);
+      paxDefaultedRef.current = false;
       return;
     }
     setSubmitted(false);
+    if (
+      !paxDefaultedRef.current &&
+      !String(newItem?.estimatedPax || '').trim()
+    ) {
+      paxDefaultedRef.current = true;
+      setNewItem({ ...newItem, estimatedPax: '60' });
+    }
     setTimeout(() => {
       nameInputRef.current?.focus?.();
     }, 100);
-  }, [open]);
+  }, [newItem, open, setNewItem]);
 
   const nameValue = useMemo(
     () => String(newItem?.name || '').trim(),

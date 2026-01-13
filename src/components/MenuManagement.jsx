@@ -86,7 +86,7 @@ const MenuManagement = () => {
     available: true,
     imageUrl: '',
     imageFile: null,
-    estimatedPax: '',
+    estimatedPax: '60',
   });
   const [adding, setAdding] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -143,7 +143,7 @@ const MenuManagement = () => {
       available: true,
       imageUrl: '',
       imageFile: null,
-      estimatedPax: '',
+      estimatedPax: '60',
     });
     setDialogOpen(false);
     setAdding(false);

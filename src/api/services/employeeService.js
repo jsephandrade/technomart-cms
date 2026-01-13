@@ -1,16 +1,22 @@
 import apiClient from '../client';
+import { resolveEmployeeCompensation } from '@/lib/employeeCompensation';
 
 class EmployeeService {
   _normalizeEmployee(e = {}) {
-    return {
+    const normalized = {
       id: e.id,
       name: e.name || '',
       position: e.position || '',
-      hourlyRate: Number(e.hourlyRate ?? e.hourly_rate ?? e.rate ?? 0),
       contact: e.contact || '',
       status: (e.status || 'active').toLowerCase(),
       avatar: e.avatar || '/placeholder.svg',
     };
+    const { monthlySalary, dailyRate } = resolveEmployeeCompensation({
+      position: normalized.position,
+      monthlySalary: e.monthlySalary ?? e.monthly_salary ?? e.salary,
+      dailyRate: e.dailyRate ?? e.daily_rate,
+    });
+    return { ...normalized, monthlySalary, dailyRate };
   }
 
   _buildQueryString(params = {}) {
@@ -102,7 +108,6 @@ class EmployeeService {
     const payload = {
       name: employee?.name || '',
       position: employee?.position || '',
-      hourlyRate: Number(employee?.hourlyRate ?? 0),
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
     };
@@ -117,7 +122,6 @@ class EmployeeService {
     const payload = {
       name: employee?.name || '',
       position: employee?.position || '',
-      hourlyRate: Number(employee?.hourlyRate ?? 0),
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
       schedule: Array.isArray(employee?.schedule) ? employee.schedule : [],

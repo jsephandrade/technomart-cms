@@ -47,9 +47,10 @@ import {
   AlertCircle,
   UserCheck,
 } from 'lucide-react';
-
-const currency = (value) =>
-  `₱${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+import {
+  formatPhp,
+  resolveEmployeeCompensation,
+} from '@/lib/employeeCompensation';
 
 const roundHours = (value) => Math.round(Number(value || 0) * 10) / 10;
 
@@ -193,12 +194,14 @@ export default function AttendancePanel() {
     const rosterList = employees.map((emp) => {
       const staffHours =
         hoursByStaff.find((entry) => entry.employeeId === emp.id)?.hours ?? 0;
+      const { monthlySalary, dailyRate } = resolveEmployeeCompensation(emp);
 
       return {
         id: emp.id,
         name: emp.name,
         position: emp.position || 'Team Member',
-        hourlyRate: emp.hourlyRate,
+        monthlySalary,
+        dailyRate,
         status: emp.status,
         weeklyHours: roundHours(staffHours),
         isExternal: false,
@@ -211,7 +214,8 @@ export default function AttendancePanel() {
         id: entry.lookupKey,
         name: entry.name,
         position: entry.position,
-        hourlyRate: null,
+        monthlySalary: null,
+        dailyRate: null,
         status: 'guest',
         weeklyHours: roundHours(entry.hours),
         isExternal: true,
@@ -502,7 +506,7 @@ export default function AttendancePanel() {
                     <TableHead>Staff</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead className="text-right">Weekly Hours</TableHead>
-                    <TableHead className="text-right">Hourly Rate</TableHead>
+                    <TableHead className="text-right">Monthly Salary</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -543,9 +547,23 @@ export default function AttendancePanel() {
                           {formatHoursValue(member.weeklyHours)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {member.hourlyRate
-                            ? currency(member.hourlyRate)
-                            : '—'}
+                          {member.monthlySalary !== null &&
+                          member.monthlySalary !== undefined &&
+                          Number.isFinite(Number(member.monthlySalary)) ? (
+                            <div className="space-y-1 text-right">
+                              <div className="font-semibold">
+                                {formatPhp(member.monthlySalary)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Daily:{' '}
+                                {formatPhp(member.dailyRate, {
+                                  maximumFractionDigits: 2,
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                       </TableRow>
                     ))

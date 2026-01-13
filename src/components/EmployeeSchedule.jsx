@@ -89,7 +89,6 @@ const DEFAULT_EMPLOYEE_FORM = {
   id: '',
   name: '',
   position: '',
-  hourlyRate: 0,
   contact: '',
   status: 'active',
 };
@@ -1062,7 +1061,7 @@ const EmployeeSchedule = () => {
 
   const handleUpdateEmployee = async (updates) => {
     if (!canManage) return;
-    const { id, name, position, hourlyRate, contact, status } = updates || {};
+    const { id, name, position, contact, status } = updates || {};
 
     if (!id) {
       toast.error('Select an employee to update');
@@ -1075,14 +1074,9 @@ const EmployeeSchedule = () => {
     }
 
     try {
-      const sanitizedRate = Number.isFinite(Number(hourlyRate))
-        ? Number(hourlyRate)
-        : 0;
-
       await updateEmployee(id, {
         name: name.trim(),
         position: position.trim(),
-        hourlyRate: sanitizedRate,
         contact: contact?.trim() || '',
         status: status ? String(status).toLowerCase() : 'active',
       });
@@ -1303,7 +1297,6 @@ const EmployeeSchedule = () => {
       id: employee.id,
       name: employee.name || '',
       position: employee.position || '',
-      hourlyRate: employee.hourlyRate ?? 0,
       contact: employee.contact || '',
       status: employee.status || 'active',
     });
@@ -1382,7 +1375,6 @@ const EmployeeSchedule = () => {
         id: firstEmployee.id,
         name: firstEmployee.name || '',
         position: firstEmployee.position || '',
-        hourlyRate: firstEmployee.hourlyRate ?? 0,
         contact: firstEmployee.contact || '',
         status: firstEmployee.status || 'active',
       });

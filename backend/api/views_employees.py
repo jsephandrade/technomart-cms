@@ -15,6 +15,7 @@ from django.db.models.functions import Cast, Coalesce
 
 from .views_common import _actor_from_request, _has_permission, _paginate, _identifier_variants
 from .utils_employees import resolve_employee_ref
+from .utils_compensation import resolve_compensation
 
 
 DAYS = [
@@ -69,11 +70,13 @@ def _parse_time(val: str):
 
 
 def _safe_emp(e):
+    monthly_salary, daily_rate = resolve_compensation(getattr(e, "position", ""))
     return {
         "id": str(e.id),
         "name": e.name,
         "position": e.position,
-        "hourlyRate": float(e.hourly_rate or 0),
+        "monthlySalary": float(monthly_salary or 0),
+        "dailyRate": float(daily_rate or 0),
         "contact": e.contact,
         "status": e.status,
         "createdAt": e.created_at.isoformat() if e.created_at else None,
@@ -329,7 +332,6 @@ def employees_with_schedule(request):
             emp = Employee.objects.create(
                 name=name,
                 position=(payload.get("position") or "").strip(),
-                hourly_rate=float(payload.get("hourlyRate") or 0),
                 contact=(payload.get("contact") or "").strip(),
                 status=(payload.get("status") or "active").lower(),
             )
@@ -383,11 +385,6 @@ def employee_detail(request, emp_id):
             emp.name = str(payload["name"]).strip(); changed = True
         if "position" in payload and payload["position"] is not None:
             emp.position = str(payload["position"]).strip(); changed = True
-        if "hourlyRate" in payload and payload["hourlyRate"] is not None:
-            try:
-                emp.hourly_rate = float(payload["hourlyRate"]) ; changed = True
-            except Exception:
-                pass
         if "contact" in payload and payload["contact"] is not None:
             emp.contact = str(payload["contact"]).strip(); changed = True
         if "status" in payload and payload["status"] is not None:

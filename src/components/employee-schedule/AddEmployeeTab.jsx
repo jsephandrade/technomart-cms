@@ -36,6 +36,10 @@ import {
   resolveRoleLabel,
 } from '@/lib/canteenRoles';
 import {
+  formatPhp,
+  resolveEmployeeCompensation,
+} from '@/lib/employeeCompensation';
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -245,7 +249,7 @@ const AddEmployeeTab = ({
           emp.position,
           emp.contact,
           emp.status,
-          emp.hourlyRate != null ? String(emp.hourlyRate) : '',
+          emp.monthlySalary != null ? String(emp.monthlySalary) : '',
         ]
           .filter(Boolean)
           .join(' ')
@@ -409,8 +413,8 @@ const AddEmployeeTab = ({
                                   emp.position,
                                   emp.contact,
                                   emp.status,
-                                  emp.hourlyRate != null
-                                    ? String(emp.hourlyRate)
+                                  emp.monthlySalary != null
+                                    ? String(emp.monthlySalary)
                                     : '',
                                 ]
                                   .filter(Boolean)
@@ -704,10 +708,8 @@ const AddEmployeeTab = ({
                   : 'Active';
                 const initials = getInitials(emp.name || '');
                 const roleLabel = String(emp.position || 'No role');
-                const hourlyRate = Number(emp.hourlyRate ?? 0);
-                const hourlyRateLabel = Number.isFinite(hourlyRate)
-                  ? hourlyRate.toFixed(2)
-                  : '0.00';
+                const { monthlySalary, dailyRate } =
+                  resolveEmployeeCompensation(emp);
                 const contactLabel = emp.contact || 'N/A';
                 return (
                   <div
@@ -739,7 +741,12 @@ const AddEmployeeTab = ({
                           </span>
                           <span className="text-muted-foreground/60">|</span>
                           <span className="whitespace-nowrap">
-                            Hourly rate: {hourlyRateLabel}
+                            Monthly: {formatPhp(monthlySalary)}
+                          </span>
+                          <span className="text-muted-foreground/60">|</span>
+                          <span className="whitespace-nowrap">
+                            Daily:{' '}
+                            {formatPhp(dailyRate, { maximumFractionDigits: 2 })}
                           </span>
                           <span className="text-muted-foreground/60">|</span>
                           <span className="whitespace-nowrap">

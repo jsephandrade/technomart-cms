@@ -1,20 +1,24 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  formatPhp,
+  resolveEmployeeCompensation,
+} from '@/lib/employeeCompensation';
 
 export const StaffSummary = ({ employees, schedule }) => {
   const calculateWeeklyHours = (employeeId) => {
     const employeeSchedule = schedule.filter(
       (s) => s.employeeId === employeeId
     );
-    
+
     return employeeSchedule.reduce((total, entry) => {
       const start = new Date(`2023-01-01 ${entry.startTime}`);
       const end = new Date(`2023-01-01 ${entry.endTime}`);
@@ -33,6 +37,8 @@ export const StaffSummary = ({ employees, schedule }) => {
         <div className="space-y-4">
           {employees.map((employee) => {
             const weeklyHours = calculateWeeklyHours(employee.id);
+            const { monthlySalary, dailyRate } =
+              resolveEmployeeCompensation(employee);
             return (
               <div
                 key={employee.id}
@@ -57,7 +63,10 @@ export const StaffSummary = ({ employees, schedule }) => {
                     {weeklyHours.toFixed(1)}h/week
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    ${employee.hourlyRate}/hr
+                    {formatPhp(monthlySalary)} / mo
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatPhp(dailyRate, { maximumFractionDigits: 2 })} / day
                   </span>
                 </div>
               </div>

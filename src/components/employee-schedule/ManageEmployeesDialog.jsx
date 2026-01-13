@@ -24,6 +24,10 @@ import {
   mergeRoleOptions,
   resolveRoleLabel,
 } from '@/lib/canteenRoles';
+import {
+  formatPhp,
+  resolveEmployeeCompensation,
+} from '@/lib/employeeCompensation';
 
 const ManageEmployeesDialog = ({
   open,
@@ -55,7 +59,6 @@ const ManageEmployeesDialog = ({
     id: '',
     name: '',
     position: '',
-    hourlyRate: 0,
     contact: '',
     status: 'active',
   };
@@ -80,10 +83,6 @@ const ManageEmployeesDialog = ({
         id: firstEmployee.id,
         name: firstEmployee.name || '',
         position: firstEmployee.position || '',
-        hourlyRate:
-          typeof firstEmployee.hourlyRate === 'number'
-            ? firstEmployee.hourlyRate
-            : Number(firstEmployee.hourlyRate || 0),
         contact: firstEmployee.contact || '',
         status: firstEmployee.status || 'active',
       });
@@ -92,7 +91,6 @@ const ManageEmployeesDialog = ({
         id: '',
         name: '',
         position: '',
-        hourlyRate: 0,
         contact: '',
         status: 'active',
       });
@@ -115,10 +113,6 @@ const ManageEmployeesDialog = ({
         id: employee.id,
         name: employee.name || '',
         position: employee.position || '',
-        hourlyRate:
-          typeof employee.hourlyRate === 'number'
-            ? employee.hourlyRate
-            : Number(employee.hourlyRate || 0),
         contact: employee.contact || '',
         status: employee.status || 'active',
       });
@@ -127,7 +121,6 @@ const ManageEmployeesDialog = ({
         id: '',
         name: '',
         position: '',
-        hourlyRate: 0,
         contact: '',
         status: 'active',
       });
@@ -142,7 +135,6 @@ const ManageEmployeesDialog = ({
             id: '',
             name: '',
             position: '',
-            hourlyRate: 0,
             contact: '',
             status: 'active',
           }),
@@ -158,6 +150,10 @@ const ManageEmployeesDialog = ({
   };
 
   const hasEmployees = employeeList.length > 0;
+
+  const { monthlySalary, dailyRate } = resolveEmployeeCompensation({
+    position: normalizedEmployee.position,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -247,23 +243,16 @@ const ManageEmployeesDialog = ({
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="hourlyRate" className="text-right">
-                Hourly Rate
-              </Label>
-              <Input
-                id="hourlyRate"
-                type="number"
-                value={
-                  normalizedEmployee.hourlyRate === null ||
-                  normalizedEmployee.hourlyRate === undefined
-                    ? ''
-                    : String(normalizedEmployee.hourlyRate)
-                }
-                onChange={(e) =>
-                  handleFieldChange('hourlyRate', e.target.value)
-                }
-                className="col-span-3"
-              />
+              <Label className="text-right">Compensation</Label>
+              <div className="col-span-3 space-y-1 text-sm">
+                <div className="font-semibold">
+                  Monthly: {formatPhp(monthlySalary)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Daily rate:{' '}
+                  {formatPhp(dailyRate, { maximumFractionDigits: 2 })}
+                </div>
+              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="contact" className="text-right">

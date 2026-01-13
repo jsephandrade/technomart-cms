@@ -5,13 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import userService from '@/api/services/userService';
+import { Search, UserRound, Briefcase, Coins, PhoneCall } from 'lucide-react';
 import {
-  Search,
-  UserRound,
-  Briefcase,
-  BadgePercent,
-  PhoneCall,
-} from 'lucide-react';
+  formatPhp,
+  resolveEmployeeCompensation,
+} from '@/lib/employeeCompensation';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +39,6 @@ const DEFAULT_FORM = {
   userId: '',
   name: '',
   position: '',
-  hourlyRate: '0',
   contact: '',
   status: 'active',
 };
@@ -104,7 +101,10 @@ const EmployeeDirectoryPanel = ({
         (emp) =>
           (emp.name || '').toLowerCase().includes(q) ||
           (emp.position || '').toLowerCase().includes(q) ||
-          (emp.contact || '').toLowerCase().includes(q)
+          (emp.contact || '').toLowerCase().includes(q) ||
+          String(emp.monthlySalary ?? '')
+            .toLowerCase()
+            .includes(q)
       );
     }
 
@@ -143,10 +143,6 @@ const EmployeeDirectoryPanel = ({
       userId: employee.userId || '',
       name: employee.name || '',
       position: employee.position || '',
-      hourlyRate:
-        employee.hourlyRate === null || employee.hourlyRate === undefined
-          ? '0'
-          : String(employee.hourlyRate),
       contact: employee.contact || '',
       status: employee.status || 'active',
     });
@@ -252,6 +248,9 @@ const EmployeeDirectoryPanel = ({
     const nextStatus = employee?.status === 'inactive' ? 'active' : 'inactive';
     await onToggleEmployeeStatus(employee, nextStatus);
   };
+  const { monthlySalary, dailyRate } = resolveEmployeeCompensation({
+    position: formState.position,
+  });
   const renderRows = () => {
     if (loading) {
       return Array.from({ length: 4 }).map((_, index) => (
@@ -274,62 +273,71 @@ const EmployeeDirectoryPanel = ({
         </TableRow>
       );
     }
-    return sortedEmployees.map((employee) => (
-      <TableRow key={employee.id}>
-        <TableCell className="font-semibold">{employee.name}</TableCell>
-        <TableCell className="text-muted-foreground">
-          {employee.position || '—'}
-        </TableCell>
-        <TableCell>₱{Number(employee.hourlyRate || 0).toFixed(2)}</TableCell>
-        <TableCell>
-          <Badge
-            className={
-              statusBadgeMap[employee.status] ||
-              'bg-muted text-muted-foreground'
-            }
-          >
-            {employee.status
-              ? employee.status.charAt(0).toUpperCase() +
-                employee.status.slice(1)
-              : 'Unknown'}
-          </Badge>
-        </TableCell>
-        <TableCell className="flex items-center gap-2">
-          {canManage ? (
-            <>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-muted-foreground"
-                onClick={() => handleStartEdit(employee)}
-              >
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-                <span className="sr-only">Edit employee</span>
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-muted-foreground"
-                onClick={() => handleToggleStatus(employee)}
-              >
-                {employee.status === 'inactive' ? (
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <Archive className="h-4 w-4" aria-hidden="true" />
-                )}
-                <span className="sr-only">
-                  {employee.status === 'inactive'
-                    ? 'Restore employee'
-                    : 'Archive employee'}
-                </span>
-              </Button>
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">Read only</span>
-          )}
-        </TableCell>
-      </TableRow>
-    ));
+    return sortedEmployees.map((employee) => {
+      const { monthlySalary, dailyRate } =
+        resolveEmployeeCompensation(employee);
+      return (
+        <TableRow key={employee.id}>
+          <TableCell className="font-semibold">{employee.name}</TableCell>
+          <TableCell className="text-muted-foreground">
+            {employee.position || 'N/A'}
+          </TableCell>
+          <TableCell>
+            <div className="font-semibold">{formatPhp(monthlySalary)}</div>
+            <div className="text-xs text-muted-foreground">
+              Daily: {formatPhp(dailyRate, { maximumFractionDigits: 2 })}
+            </div>
+          </TableCell>
+          <TableCell>
+            <Badge
+              className={
+                statusBadgeMap[employee.status] ||
+                'bg-muted text-muted-foreground'
+              }
+            >
+              {employee.status
+                ? employee.status.charAt(0).toUpperCase() +
+                  employee.status.slice(1)
+                : 'Unknown'}
+            </Badge>
+          </TableCell>
+          <TableCell className="flex items-center gap-2">
+            {canManage ? (
+              <>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={() => handleStartEdit(employee)}
+                >
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Edit employee</span>
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={() => handleToggleStatus(employee)}
+                >
+                  {employee.status === 'inactive' ? (
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Archive className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  <span className="sr-only">
+                    {employee.status === 'inactive'
+                      ? 'Restore employee'
+                      : 'Archive employee'}
+                  </span>
+                </Button>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">Read only</span>
+            )}
+          </TableCell>
+        </TableRow>
+      );
+    });
   };
   return (
     <div className="space-y-4 rounded-3xl border border-border/70 bg-card/70 p-4 shadow-sm">
@@ -417,7 +425,7 @@ const EmployeeDirectoryPanel = ({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Hourly Rate</TableHead>
+              <TableHead>Monthly Salary</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[140px]">Actions</TableHead>
             </TableRow>
@@ -513,20 +521,15 @@ const EmployeeDirectoryPanel = ({
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="employee-hourly">Hourly rate (PHP)</Label>
-                <div className="relative">
-                  <BadgePercent className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="employee-hourly"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formState.hourlyRate}
-                    onChange={(event) =>
-                      handleFormChange('hourlyRate', event.target.value)
-                    }
-                    className="pl-9"
-                  />
+                <Label>Compensation (role-based)</Label>
+                <div className="relative rounded-md border border-border/60 bg-muted/40 px-3 py-2 pl-9">
+                  <Coins className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <div className="text-sm font-semibold">
+                    {formatPhp(monthlySalary)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Daily: {formatPhp(dailyRate, { maximumFractionDigits: 2 })}
+                  </div>
                 </div>
               </div>
               <div className="space-y-2">

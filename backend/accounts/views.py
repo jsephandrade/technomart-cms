@@ -32,13 +32,39 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
+            id_front = serializer.validated_data.get("id_front") or ""
+            id_back = serializer.validated_data.get("id_back") or ""
             id_image = serializer.validated_data.get("id_image") or ""
-            mime, raw = _extract_dataurl_image(id_image)
-            if not raw:
+            image_sources = []
+            if id_front or id_back:
+                if id_front:
+                    image_sources.append(("Front", id_front))
+                if id_back:
+                    image_sources.append(("Back", id_back))
+            elif id_image:
+                image_sources.append(("Front", id_image))
+            if not image_sources:
                 return Response(
-                    {"success": False, "errors": {"id_image": ["ID photo must be a valid image."]}},
+                    {"success": False, "errors": {"id_image": ["ID photo is required."]}},
                     status=400,
                 )
+            prepared_images = []
+            for label, data_url in image_sources:
+                mime, raw = _extract_dataurl_image(data_url)
+                if not raw:
+                    error_key = "id_front" if label.lower() == "front" else "id_back"
+                    return Response(
+                        {
+                            "success": False,
+                            "errors": {
+                                error_key: [
+                                    f"{label} ID photo must be a valid image."
+                                ]
+                            },
+                        },
+                        status=400,
+                    )
+                prepared_images.append((label, mime, raw))
 
             try:
                 with transaction.atomic():
@@ -59,20 +85,25 @@ class RegisterView(APIView):
                         except Exception:
                             pass
 
-                    ext = ".jpg"
-                    if mime == "image/png":
-                        ext = ".png"
-                    elif mime in ("image/jpeg", "image/jpg"):
+                    primary_name = ""
+                    for label, mime, raw in prepared_images:
                         ext = ".jpg"
-                    elif mime == "image/webp":
-                        ext = ".webp"
+                        if mime == "image/png":
+                            ext = ".png"
+                        elif mime in ("image/jpeg", "image/jpg"):
+                            ext = ".jpg"
+                        elif mime == "image/webp":
+                            ext = ".webp"
 
-                    filename = f"id_{uuid.uuid4().hex}{ext}"
-                    shot = AccessRequestHeadshot(request=ar, position="ID")
-                    shot.image.save(filename, ContentFile(raw), save=False)
-                    shot.save()
+                        filename = f"id_{uuid.uuid4().hex}{ext}"
+                        shot = AccessRequestHeadshot(request=ar, position=label)
+                        shot.image.save(filename, ContentFile(raw), save=False)
+                        shot.save()
+                        if not primary_name:
+                            primary_name = shot.image.name
 
-                    ar.headshot = shot.image
+                    if primary_name:
+                        ar.headshot.name = primary_name
                     ar.status = AccessRequest.STATUS_PENDING
                     requested_role = str(user.role or "").strip().lower()
                     if requested_role:

@@ -10,7 +10,9 @@ class RegisterSerializer(serializers.ModelSerializer):
     confirm = serializers.CharField(write_only=True)
     first_name = serializers.CharField(write_only=True)
     last_name = serializers.CharField(write_only=True)
-    id_image = serializers.CharField(write_only=True)
+    id_image = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    id_front = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    id_back = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = AppUser
@@ -22,6 +24,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "id_image",
+            "id_front",
+            "id_back",
         ]
 
     def _password_issues(self, password, email, first_name, last_name):
@@ -65,6 +69,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         first_name = attrs.get("first_name") or ""
         last_name = attrs.get("last_name") or ""
         id_image = attrs.get("id_image") or ""
+        id_front = attrs.get("id_front") or ""
+        id_back = attrs.get("id_back") or ""
 
         if password != confirm:
             errors["confirm"] = "Passwords do not match"
@@ -77,12 +83,26 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         if pwd_issues:
             errors["password"] = pwd_issues
-        if not id_image:
-            errors["id_image"] = ["ID photo is required."]
+        if id_front or id_back:
+            if not id_front:
+                errors["id_front"] = ["Front ID photo is required."]
+            if not id_back:
+                errors["id_back"] = ["Back ID photo is required."]
+            if id_front:
+                _, raw = _extract_dataurl_image(id_front)
+                if not raw:
+                    errors["id_front"] = ["Front ID photo must be a valid image."]
+            if id_back:
+                _, raw = _extract_dataurl_image(id_back)
+                if not raw:
+                    errors["id_back"] = ["Back ID photo must be a valid image."]
         else:
-            _, raw = _extract_dataurl_image(id_image)
-            if not raw:
-                errors["id_image"] = ["ID photo must be a valid image."]
+            if not id_image:
+                errors["id_image"] = ["ID photo is required."]
+            else:
+                _, raw = _extract_dataurl_image(id_image)
+                if not raw:
+                    errors["id_image"] = ["ID photo must be a valid image."]
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -94,6 +114,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         first = validated_data.pop("first_name")
         last = validated_data.pop("last_name")
         validated_data.pop("id_image", None)
+        validated_data.pop("id_front", None)
+        validated_data.pop("id_back", None)
         validated_data["name"] = f"{first} {last}"
         user = AppUser(**validated_data)
         user.set_password(password)

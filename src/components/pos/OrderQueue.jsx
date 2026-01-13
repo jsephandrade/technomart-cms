@@ -15,6 +15,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Package,
   Smartphone,
   Clock,
@@ -440,6 +448,7 @@ const OrderQueue = ({
   const [statusUpdating, setStatusUpdating] = useState({});
   const [paymentUpdating, setPaymentUpdating] = useState({});
   const [checkedItems, setCheckedItems] = useState(() => getOrderChecklist());
+  const [cancelledDetail, setCancelledDetail] = useState(null);
   const autoFlowInFlightRef = useRef(new Set());
   const queueOrders = useMemo(() => {
     if (!orderQueue) return [];
@@ -746,6 +755,19 @@ const OrderQueue = ({
     const hours = Math.floor(diffInMinutes / 60);
     if (hours === 1) return '1 hour ago';
     return `${hours} hours ago`;
+  };
+
+  const formatDateTime = (input) => {
+    if (!input) return '—';
+    const d = input instanceof Date ? input : new Date(input);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   };
 
   const getStatusColor = (status) => {
@@ -1357,12 +1379,21 @@ const OrderQueue = ({
                         {formatTimeAgo(timestamp)}
                       </p>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className="bg-red-100 text-red-700 border-red-200"
-                    >
-                      Cancelled
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className="bg-red-100 text-red-700 border-red-200"
+                      >
+                        Cancelled
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCancelledDetail(order)}
+                      >
+                        View
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -1377,6 +1408,104 @@ const OrderQueue = ({
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(cancelledDetail)}
+        onOpenChange={(open) => {
+          if (!open) setCancelledDetail(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Cancelled Order #
+              {formatOrderNumber(cancelledDetail?.orderNumber) ||
+                cancelledDetail?.orderNumber ||
+                cancelledDetail?.id ||
+                '—'}
+            </DialogTitle>
+            <DialogDescription>
+              {formatCancelReason(getCancelReason(cancelledDetail)) ||
+                'Cancelled order details'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-sm">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">
+                  Customer
+                </p>
+                <p className="font-medium">
+                  {cancelledDetail?.customerName ||
+                    cancelledDetail?.customer_name ||
+                    cancelledDetail?.customer ||
+                    'Walk-in customer'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">
+                  Cancelled At
+                </p>
+                <p className="font-medium">
+                  {formatDateTime(getCancelledTimestamp(cancelledDetail))}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">
+                  Payment
+                </p>
+                <p className="font-medium">
+                  {formatPaymentMethodLabel(
+                    getPaymentMethod(cancelledDetail)
+                  ) || '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Total</p>
+                <p className="font-medium">
+                  ₱
+                  {Number(
+                    cancelledDetail?.total ??
+                      cancelledDetail?.total_amount ??
+                      cancelledDetail?.totalAmount ??
+                      0
+                  ).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-muted/40 p-3">
+              <p className="text-xs uppercase text-muted-foreground">Items</p>
+              <div className="mt-2 space-y-2">
+                {(cancelledDetail?.items || []).length ? (
+                  cancelledDetail.items.map((item, idx) => (
+                    <div
+                      key={`${item.id || item.name}-${idx}`}
+                      className="flex items-start justify-between gap-3 text-sm"
+                    >
+                      <span>
+                        {item.quantity}x {item.name}
+                      </span>
+                      <span>₱{(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No item details available.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelledDetail(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

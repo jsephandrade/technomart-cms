@@ -143,6 +143,22 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
     ).padStart(2, '0')}:${String(current.getSeconds()).padStart(2, '0')}`;
   }, []);
 
+  const resolveStatusForCheckIn = useCallback(
+    (checkInTime) => {
+      if (!dailySchedule?.startTime || !checkInTime) return 'present';
+      const scheduledStart = createManilaDateFromTime(
+        dailySchedule.startTime,
+        currentTime
+      );
+      const checkInDate = createManilaDateFromTime(checkInTime, currentTime);
+      if (!scheduledStart || !checkInDate) return 'present';
+      return checkInDate.getTime() > scheduledStart.getTime()
+        ? 'late'
+        : 'present';
+    },
+    [currentTime, dailySchedule?.startTime]
+  );
+
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const interval = window.setInterval(() => {
@@ -173,6 +189,11 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
     setLocalStatus(readLocalAttendance(subjectEmployeeId, today));
   }, [subjectEmployeeId, today, todayRecord?.checkIn, todayRecord?.checkOut]);
 
+  const localStatusLabel = useMemo(() => {
+    if (!localStatus.checkInAt) return 'present';
+    return resolveStatusForCheckIn(localStatus.checkInAt);
+  }, [localStatus.checkInAt, resolveStatusForCheckIn]);
+
   const effectiveRecord = useMemo(() => {
     if (todayRecord) return todayRecord;
     if (!subjectEmployeeId) return null;
@@ -185,11 +206,11 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
           localStatus.checkInAt || (localStatus.checkIn ? 'local' : null),
         checkOut:
           localStatus.checkOutAt || (localStatus.checkOut ? 'local' : null),
-        status: 'present',
+        status: localStatusLabel,
       };
     }
     return null;
-  }, [todayRecord, localStatus, subjectEmployeeId, today]);
+  }, [todayRecord, localStatus, localStatusLabel, subjectEmployeeId, today]);
 
   const shiftEndDate = useMemo(
     () => createManilaDateFromTime(dailySchedule?.endTime, currentTime),
@@ -299,12 +320,13 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
 
     try {
       const checkInTime = nowTime();
+      const resolvedStatus = resolveStatusForCheckIn(checkInTime);
       const created = await createRecord({
         employeeId: selectedEmployeeId,
         employeeName: user?.name || '',
         date: today,
         checkIn: checkInTime,
-        status: 'present',
+        status: resolvedStatus,
       });
       const resolvedEmployeeId = created?.employeeId || selectedEmployeeId;
       await syncEmployeeId(created?.employeeId);
@@ -351,6 +373,8 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
         null;
       const recordId = effectiveRecord?.id;
       const isLocalRecord = !recordId || String(recordId).startsWith('local-');
+      const recordStatus =
+        effectiveRecord?.status || resolveStatusForCheckIn(checkInTimeValue);
       let updated = null;
       if (isLocalRecord) {
         const payload = {
@@ -358,7 +382,7 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
           employeeName: user?.name || '',
           date: today,
           checkOut: checkOutTime,
-          status: 'present',
+          status: recordStatus || 'present',
         };
         if (checkInTimeValue) {
           payload.checkIn = checkInTimeValue;
@@ -376,7 +400,7 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
               employeeName: user?.name || '',
               date: today,
               checkOut: checkOutTime,
-              status: 'present',
+              status: recordStatus || 'present',
             };
             if (checkInTimeValue) {
               payload.checkIn = checkInTimeValue;

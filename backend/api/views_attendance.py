@@ -111,6 +111,40 @@ def _employee_role_match(employee):
     return "", None
 
 
+def _resolve_schedule_for_date(employee, record_date):
+    if not employee or not record_date:
+        return None
+    try:
+        from .models import ScheduleEntry
+    except Exception:
+        return None
+    try:
+        day_label = record_date.strftime("%A")
+    except Exception:
+        return None
+    if not day_label:
+        return None
+    return (
+        ScheduleEntry.objects.filter(employee=employee, day=day_label)
+        .order_by("start_time")
+        .first()
+    )
+
+
+def _attendance_status_for_checkin(employee, record_date, check_in_time, fallback="present"):
+    if not employee or not record_date or not check_in_time:
+        return fallback
+    try:
+        schedule_entry = _resolve_schedule_for_date(employee, record_date)
+        if not schedule_entry or not schedule_entry.start_time:
+            return fallback
+        if check_in_time > schedule_entry.start_time:
+            return "late"
+        return "present"
+    except Exception:
+        return fallback
+
+
 def _auto_assign_leave_coverage(leave_record):
     try:
         from .models import Employee, ScheduleEntry, LeaveRecord
@@ -524,7 +558,7 @@ def attendance(request):
         co = _parse_time(payload.get("checkOut")) if payload.get("checkOut") else None
         status = (payload.get("status") or "present").lower()
         if not can_manage:
-            status = "present"
+            status = _attendance_status_for_checkin(emp, d, ci, "present")
         notes = payload.get("notes") or ""
 
         with transaction.atomic():
@@ -546,7 +580,9 @@ def attendance(request):
                 updated = False
                 if ci and not rec.check_in:
                     rec.check_in = ci
-                    rec.status = status
+                    rec.status = _attendance_status_for_checkin(
+                        emp, rec.date, ci, rec.status or "present"
+                    )
                     updated = True
                 if co and not rec.check_out:
                     rec.check_out = co
@@ -633,6 +669,10 @@ def attendance_detail(request, rid):
         updated = False
         if "checkIn" in payload:
             rec.check_in = _parse_time(payload["checkIn"]) if payload["checkIn"] else None
+            if rec.check_in:
+                rec.status = _attendance_status_for_checkin(
+                    rec.employee, rec.date, rec.check_in, rec.status or "present"
+                )
             updated = True
         if "checkOut" in payload:
             rec.check_out = _parse_time(payload["checkOut"]) if payload["checkOut"] else None

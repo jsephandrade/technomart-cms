@@ -124,26 +124,35 @@ export default function LeaveManagement() {
 
   const onSave = async () => {
     try {
-      const hasEmployee =
-        isAdmin || Boolean(selfEmployee?.id || editing.employeeId);
-      if (!hasEmployee || !editing.startDate || !editing.endDate) {
+      if (!editing) {
         toast.error('Employee, start and end dates are required');
         return;
       }
-      const payload = { ...editing };
+      const startDate = String(editing.startDate || '').trim();
+      const endDate = String(editing.endDate || '').trim();
+      if (!startDate || !endDate) {
+        toast.error('Employee, start and end dates are required');
+        return;
+      }
+      if (isAdmin && !editing.employeeId) {
+        toast.error('Employee, start and end dates are required');
+        return;
+      }
+      if (!isAdmin && !selfEmployee?.id) {
+        toast.error('No employee profile found. Please contact your manager.');
+        return;
+      }
+      const payload = {
+        ...editing,
+        startDate,
+        endDate,
+      };
       if (!isAdmin) {
         payload.status = 'pending';
-        if (selfEmployee?.id) {
-          payload.employeeId = selfEmployee.id;
-        } else {
-          toast.error(
-            'No employee profile found. Please contact your manager.'
-          );
-          return;
-        }
+        payload.employeeId = selfEmployee.id;
       }
       if (!editing.id) await createRecord(payload);
-      else await updateRecord(editing.id, editing);
+      else await updateRecord(editing.id, payload);
       setOpen(false);
       toast.success('Saved');
     } catch (e) {

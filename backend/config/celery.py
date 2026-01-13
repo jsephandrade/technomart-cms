@@ -50,6 +50,10 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.auto_unlock_no_show_accounts',
         'schedule': 300.0,  # Every 5 minutes
     },
+    'auto-mark-absent-attendance': {
+        'task': 'api.tasks.auto_mark_absent_attendance',
+        'schedule': 300.0,  # Every 5 minutes
+    },
     'cleanup-old-notifications': {
         'task': 'api.tasks.cleanup_old_notifications',
         'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM

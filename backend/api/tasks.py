@@ -4,7 +4,7 @@ Celery tasks for background notification processing.
 
 import json
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Optional, List, Dict, Any
 
 try:
@@ -23,6 +23,7 @@ except ImportError:
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -547,6 +548,114 @@ def auto_unlock_no_show_accounts(limit: int = 200):
             processed += 1
         except Exception:
             continue
+
+    return processed
+
+
+@shared_task
+def auto_mark_absent_attendance(limit: int = 500):
+    """
+    Mark employees as absent once their scheduled shift has ended without a time-in.
+    """
+    try:
+        from .models import AttendanceRecord, LeaveRecord, ScheduleEntry
+    except Exception as exc:
+        logger.error(f"Attendance auto-absent initialization failed: {exc}")
+        return 0
+
+    now = timezone.localtime(timezone.now())
+    today = now.date()
+    day_label = now.strftime("%A")
+
+    def combine_date_time(record_date, time_value):
+        if not record_date or not time_value:
+            return None
+        try:
+            combined = datetime.combine(record_date, time_value)
+            if timezone.is_naive(combined):
+                combined = timezone.make_aware(
+                    combined, timezone.get_current_timezone()
+                )
+            return combined
+        except Exception:
+            return None
+
+    schedule_rows = ScheduleEntry.objects.filter(
+        day=day_label,
+        employee__status__iexact="active",
+    ).filter(
+        Q(employee__user__isnull=True)
+        | (
+            Q(employee__user__status__iexact="active")
+            & Q(employee__user__is_active=True)
+        )
+    ).values("employee_id", "end_time")
+
+    if not schedule_rows:
+        return 0
+
+    latest_shift_end = {}
+    for row in schedule_rows:
+        emp_id = row.get("employee_id")
+        end_time = row.get("end_time")
+        if not emp_id or not end_time:
+            continue
+        end_dt = combine_date_time(today, end_time)
+        if not end_dt:
+            continue
+        current = latest_shift_end.get(emp_id)
+        if not current or end_dt > current:
+            latest_shift_end[emp_id] = end_dt
+
+    due_ids = [
+        emp_id for emp_id, end_dt in latest_shift_end.items() if now > end_dt
+    ]
+    if not due_ids:
+        return 0
+
+    leave_ids = set(
+        LeaveRecord.objects.filter(
+            employee_id__in=due_ids,
+            status=LeaveRecord.STATUS_APPROVED,
+            start_date__lte=today,
+            end_date__gte=today,
+        ).values_list("employee_id", flat=True)
+    )
+
+    target_ids = [emp_id for emp_id in due_ids if emp_id not in leave_ids]
+    if not target_ids:
+        return 0
+
+    max_limit = int(limit or 0)
+    if max_limit > 0 and len(target_ids) > max_limit:
+        target_ids = target_ids[:max_limit]
+
+    existing_records = AttendanceRecord.objects.filter(
+        employee_id__in=target_ids, date=today
+    )
+    existing_by_employee = {rec.employee_id: rec for rec in existing_records}
+
+    processed = 0
+    for emp_id in target_ids:
+        record = existing_by_employee.get(emp_id)
+        if record and record.check_in:
+            continue
+        if record:
+            if record.status != AttendanceRecord.STATUS_ABSENT:
+                record.status = AttendanceRecord.STATUS_ABSENT
+                record.notes = (
+                    record.notes or "Shift window closed without clock-in"
+                )
+                record.save(update_fields=["status", "notes", "updated_at"])
+                processed += 1
+            continue
+        AttendanceRecord.objects.create(
+            employee_id=emp_id,
+            date=today,
+            status=AttendanceRecord.STATUS_ABSENT,
+            notes="Shift window closed without clock-in",
+        )
+        processed += 1
 
     return processed
 

@@ -52,6 +52,7 @@ export const PendingVerifications = () => {
   const [previewShots, setPreviewShots] = useState([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [expandedShot, setExpandedShot] = useState(null);
   const [approveTarget, setApproveTarget] = useState(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [rejectTarget, setRejectTarget] = useState(null);
@@ -95,6 +96,7 @@ export const PendingVerifications = () => {
     setPreviewShots([]);
     setPreviewError('');
     setPreviewLoading(true);
+    setExpandedShot(null);
     try {
       const list = await verificationService.listHeadshots(reqId);
       if (Array.isArray(list) && list.length > 0) {
@@ -136,6 +138,7 @@ export const PendingVerifications = () => {
     setPreviewId(null);
     setPreviewError('');
     setPreviewLoading(false);
+    setExpandedShot(null);
   };
 
   const resolveRole = (req) =>
@@ -420,7 +423,13 @@ export const PendingVerifications = () => {
                     <img
                       src={shot.url}
                       alt={shot.position || 'Headshot'}
-                      className="max-h-[40vh] w-full rounded-md border object-cover"
+                      className="max-h-[40vh] w-full cursor-zoom-in rounded-md border object-cover"
+                      onClick={() =>
+                        setExpandedShot({
+                          url: shot.url,
+                          position: shot.position || 'Headshot',
+                        })
+                      }
                     />
                     {shot.position ? (
                       <div className="text-center text-xs text-muted-foreground">
@@ -436,6 +445,36 @@ export const PendingVerifications = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={closePreview}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expanded image dialog */}
+      <Dialog
+        open={Boolean(expandedShot)}
+        onOpenChange={(v) => !v && setExpandedShot(null)}
+      >
+        <DialogContent className="sm:max-w-[880px]">
+          <DialogHeader>
+            <DialogTitle>{expandedShot?.position || 'Photo'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center">
+            {expandedShot?.url ? (
+              <img
+                src={expandedShot.url}
+                alt={expandedShot.position || 'Photo'}
+                className="max-h-[75vh] w-full rounded-md border object-contain"
+              />
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExpandedShot(null)}
+            >
               Close
             </Button>
           </DialogFooter>

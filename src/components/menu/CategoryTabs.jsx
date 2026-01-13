@@ -74,6 +74,8 @@ const CategoryTabs = ({
   const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [bulkPaxValue, setBulkPaxValue] = useState('60');
+  const [bulkPaxError, setBulkPaxError] = useState('');
   const showArchived = activeTab === 'archived';
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
@@ -178,14 +180,27 @@ const CategoryTabs = ({
 
   const handleConfirmBulkAssign = useCallback(async () => {
     if (!canBulkAssign || bulkAssigning) return;
+    const trimmed = String(bulkPaxValue || '').trim();
+    const parsed = trimmed === '' ? Number.NaN : Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setBulkPaxError('Enter a non-negative number.');
+      return;
+    }
     setBulkAssigning(true);
     try {
-      await onBulkSetPax?.(activeCategory);
+      await onBulkSetPax?.(activeCategory, Math.floor(parsed));
       setBulkAssignOpen(false);
+      setBulkPaxError('');
     } finally {
       setBulkAssigning(false);
     }
-  }, [activeCategory, bulkAssigning, canBulkAssign, onBulkSetPax]);
+  }, [
+    activeCategory,
+    bulkAssigning,
+    bulkPaxValue,
+    canBulkAssign,
+    onBulkSetPax,
+  ]);
 
   const handleTabsListWheel = useCallback((event) => {
     const el = tabsListRef.current;
@@ -399,17 +414,21 @@ const CategoryTabs = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setBulkAssignOpen(true)}
+            onClick={() => {
+              setBulkAssignOpen(true);
+              setBulkPaxError('');
+              setBulkPaxValue('60');
+            }}
             disabled={!canBulkAssign || bulkAssigning}
             className="flex items-center gap-1"
             title={
               canBulkAssign
-                ? `Set pax to 60 for ${activeCategory}`
+                ? `Set pax for ${activeCategory}`
                 : 'Select a category with items'
             }
           >
             <Sparkles className="h-4 w-4" />
-            Set Pax 60
+            Set Pax
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -574,12 +593,18 @@ const CategoryTabs = ({
         }}
       />
 
-      <AlertDialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+      <AlertDialog
+        open={bulkAssignOpen}
+        onOpenChange={(open) => {
+          setBulkAssignOpen(open);
+          if (!open) setBulkPaxError('');
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Set pax to 60?</AlertDialogTitle>
+            <AlertDialogTitle>Set pax for category?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will set pax per preparation to 60 for{' '}
+              This will set pax per preparation for{' '}
               <span className="font-semibold text-foreground">
                 {categoryItems.length || 0} item
                 {categoryItems.length === 1 ? '' : 's'}
@@ -591,6 +616,32 @@ const CategoryTabs = ({
               .
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="bulk-pax-input">
+              Pax per preparation
+            </label>
+            <input
+              id="bulk-pax-input"
+              type="text"
+              inputMode="numeric"
+              value={bulkPaxValue}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                if (!/^\d*$/.test(nextValue)) return;
+                setBulkPaxValue(nextValue);
+                setBulkPaxError('');
+              }}
+              placeholder="e.g., 60"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            />
+            {bulkPaxError ? (
+              <p className="text-xs text-destructive">{bulkPaxError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Must be 0 or greater.
+              </p>
+            )}
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={bulkAssigning}>
               Cancel

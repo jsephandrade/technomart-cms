@@ -476,11 +476,16 @@ const MenuManagement = () => {
   };
 
   const handleBulkSetPax = useCallback(
-    async (categoryName) => {
+    async (categoryName, paxValue) => {
       if (bulkPaxUpdating) return false;
       const normalizedCategory = String(categoryName || '').trim();
       if (!normalizedCategory) {
         toast.error('Select a category first.');
+        return false;
+      }
+      const parsedPax = Number(paxValue);
+      if (!Number.isFinite(parsedPax) || parsedPax < 0) {
+        toast.error('Pax must be 0 or greater.');
         return false;
       }
       const targets = (items || []).filter(
@@ -494,7 +499,9 @@ const MenuManagement = () => {
       setBulkPaxUpdating(true);
       try {
         const results = await Promise.allSettled(
-          targets.map((item) => updateMenuItem(item.id, { estimatedPax: 60 }))
+          targets.map((item) =>
+            updateMenuItem(item.id, { estimatedPax: Math.floor(parsedPax) })
+          )
         );
         const failures = results.filter(
           (result) => result.status === 'rejected'
@@ -508,7 +515,7 @@ const MenuManagement = () => {
           return false;
         }
         toast.success(
-          `Set pax to 60 for ${targets.length} item${
+          `Set pax to ${Math.floor(parsedPax)} for ${targets.length} item${
             targets.length === 1 ? '' : 's'
           } in ${normalizedCategory}.`
         );

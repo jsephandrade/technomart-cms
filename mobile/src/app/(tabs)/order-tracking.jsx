@@ -81,13 +81,6 @@ const STATUS_MAPPING = {
   voided: 'voided',
 };
 const ORDER_POLL_INTERVAL_MS = 12000;
-const CANCELLABLE_STATUSES = new Set([
-  'pending',
-  'accepted',
-  'in_queue',
-  'queued',
-  'new',
-]);
 
 const normalizeStatusKey = (value) => {
   if (!value) return 'pending';
@@ -395,10 +388,7 @@ const isPreviousStatus = (status) => {
   return ['completed', 'cancelled', 'refunded', 'voided'].includes(key);
 };
 
-const canCancelStatus = (status) => {
-  const key = normalizeStatusKey(status);
-  return CANCELLABLE_STATUSES.has(key);
-};
+const canCancelStatus = (status) => normalizeStatusKey(status) === 'pending';
 
 export default function OrderTrackingScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });

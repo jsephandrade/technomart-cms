@@ -43,6 +43,7 @@ const EditItemDialog = ({
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const nameInputRef = useRef(null);
+  const paxDefaultedRef = useRef(false);
 
   const isArchived = useMemo(
     () => Boolean(item?.archived || item?.archivedAt || item?.archived_at),
@@ -85,13 +86,21 @@ const EditItemDialog = ({
   const itemId = item?.id;
 
   useEffect(() => {
+    paxDefaultedRef.current = false;
+  }, [itemId]);
+
+  useEffect(() => {
     if (!itemId) return;
     setSubmitted(false);
     setSaving(false);
+    if (!paxDefaultedRef.current && !String(item?.estimatedPax ?? '').trim()) {
+      paxDefaultedRef.current = true;
+      setItem({ ...item, estimatedPax: '60' });
+    }
     setTimeout(() => {
       nameInputRef.current?.focus?.();
     }, 100);
-  }, [itemId]);
+  }, [item, itemId, setItem]);
 
   if (!item) return null;
 

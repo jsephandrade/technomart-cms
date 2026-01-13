@@ -105,6 +105,7 @@ const MenuManagement = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [isLoadingMenuItems, setIsLoadingMenuItems] = useState(false);
   const [activeTab, setActiveTab] = useState('menu');
+  const [bulkPaxUpdating, setBulkPaxUpdating] = useState(false);
   const canManagePackages = can('catering.manage');
 
   const handleAddItem = () => {
@@ -474,6 +475,57 @@ const MenuManagement = () => {
     refetchActive();
   };
 
+  const handleBulkSetPax = useCallback(
+    async (categoryName) => {
+      if (bulkPaxUpdating) return false;
+      const normalizedCategory = String(categoryName || '').trim();
+      if (!normalizedCategory) {
+        toast.error('Select a category first.');
+        return false;
+      }
+      const targets = (items || []).filter(
+        (item) =>
+          String(item?.category || '').trim() === normalizedCategory && item?.id
+      );
+      if (targets.length === 0) {
+        toast.error(`No items found in ${normalizedCategory}.`);
+        return false;
+      }
+      setBulkPaxUpdating(true);
+      try {
+        const results = await Promise.allSettled(
+          targets.map((item) => updateMenuItem(item.id, { estimatedPax: 60 }))
+        );
+        const failures = results.filter(
+          (result) => result.status === 'rejected'
+        );
+        if (failures.length > 0) {
+          toast.error(
+            `Updated ${targets.length - failures.length}/${
+              targets.length
+            } items in ${normalizedCategory}.`
+          );
+          return false;
+        }
+        toast.success(
+          `Set pax to 60 for ${targets.length} item${
+            targets.length === 1 ? '' : 's'
+          } in ${normalizedCategory}.`
+        );
+        refetchActive?.();
+        return true;
+      } catch (error) {
+        toast.error(
+          error?.message || `Failed to update ${normalizedCategory} items.`
+        );
+        return false;
+      } finally {
+        setBulkPaxUpdating(false);
+      }
+    },
+    [bulkPaxUpdating, items, refetchActive, updateMenuItem]
+  );
+
   const actionButtons = (
     <div className="flex flex-wrap items-center gap-2">
       <AddItemDialog
@@ -545,6 +597,7 @@ const MenuManagement = () => {
               archivedLoading={archivedLoading}
               onRestore={handleRestoreItem}
               onHardDelete={handleHardDeleteItem}
+              onBulkSetPax={handleBulkSetPax}
             />
           </FeaturePanelCard>
         </TabsContent>

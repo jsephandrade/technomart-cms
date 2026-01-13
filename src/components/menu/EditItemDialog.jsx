@@ -101,21 +101,27 @@ const EditItemDialog = ({
     if (!itemId) return;
     setSubmitted(false);
     setSaving(false);
-    if (!paxDefaultedRef.current) {
-      const resolved = String(resolvedPax ?? '').trim();
-      const resolvedNum = resolved === '' ? Number.NaN : Number(resolved);
-      if (!resolved || !Number.isFinite(resolvedNum) || resolvedNum <= 0) {
-        paxDefaultedRef.current = true;
-        setItem({ ...item, estimatedPax: '60' });
-      } else if (!String(item?.estimatedPax ?? '').trim()) {
-        paxDefaultedRef.current = true;
-        setItem({ ...item, estimatedPax: resolved });
-      }
-    }
     setTimeout(() => {
       nameInputRef.current?.focus?.();
     }, 100);
-  }, [item, itemId, setItem]);
+  }, [itemId]);
+
+  useEffect(() => {
+    if (!itemId || paxDefaultedRef.current) return;
+    const resolved = String(resolvedPax ?? '').trim();
+    const resolvedNum = resolved === '' ? Number.NaN : Number(resolved);
+    if (!resolved || !Number.isFinite(resolvedNum) || resolvedNum <= 0) {
+      paxDefaultedRef.current = true;
+      setItem((prev) => (prev ? { ...prev, estimatedPax: '60' } : prev));
+      return;
+    }
+    paxDefaultedRef.current = true;
+    setItem((prev) => {
+      if (!prev) return prev;
+      if (String(prev.estimatedPax ?? '').trim()) return prev;
+      return { ...prev, estimatedPax: resolved };
+    });
+  }, [itemId, resolvedPax, setItem]);
 
   if (!item) return null;
 

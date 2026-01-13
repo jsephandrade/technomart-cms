@@ -39,6 +39,7 @@ import {
   Loader2,
   Edit,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import ItemGrid from './ItemGrid';
 import ItemList from './ItemList';
@@ -57,6 +58,7 @@ const CategoryTabs = ({
   archivedLoading = false,
   onRestore = () => {},
   onHardDelete = () => {},
+  onBulkSetPax,
 }) => {
   const [activeView, setActiveView] = useState('grid');
   const [archivedView, setArchivedView] = useState('list');
@@ -70,6 +72,8 @@ const CategoryTabs = ({
   const [tabsHasOverflow, setTabsHasOverflow] = useState(false);
   const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false);
   const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkAssigning, setBulkAssigning] = useState(false);
   const showArchived = activeTab === 'archived';
   const showUnavailable = activeTab === 'unavailable';
   const view = showArchived ? archivedView : activeView;
@@ -91,6 +95,19 @@ const CategoryTabs = ({
     });
     return Array.from(map.values());
   }, [items, archivedItems]);
+
+  const activeCategory = useMemo(
+    () => (categories || []).find((category) => category === activeTab) || '',
+    [activeTab, categories]
+  );
+  const categoryItems = useMemo(() => {
+    if (!activeCategory) return [];
+    return (items || []).filter((item) => item?.category === activeCategory);
+  }, [activeCategory, items]);
+  const canBulkAssign =
+    Boolean(activeCategory) &&
+    categoryItems.length > 0 &&
+    typeof onBulkSetPax === 'function';
 
   const categoryMetaByName = useMemo(() => {
     const map = new Map();
@@ -158,6 +175,17 @@ const CategoryTabs = ({
       setHardDeletingSafe(false);
     }
   }, [hardDeleteTarget, onHardDelete, setHardDeletingSafe]);
+
+  const handleConfirmBulkAssign = useCallback(async () => {
+    if (!canBulkAssign || bulkAssigning) return;
+    setBulkAssigning(true);
+    try {
+      await onBulkSetPax?.(activeCategory);
+      setBulkAssignOpen(false);
+    } finally {
+      setBulkAssigning(false);
+    }
+  }, [activeCategory, bulkAssigning, canBulkAssign, onBulkSetPax]);
 
   const handleTabsListWheel = useCallback((event) => {
     const el = tabsListRef.current;
@@ -368,6 +396,21 @@ const CategoryTabs = ({
           ) : null}
         </div>
         <div className="flex items-center gap-2 self-end md:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBulkAssignOpen(true)}
+            disabled={!canBulkAssign || bulkAssigning}
+            className="flex items-center gap-1"
+            title={
+              canBulkAssign
+                ? `Set pax to 60 for ${activeCategory}`
+                : 'Select a category with items'
+            }
+          >
+            <Sparkles className="h-4 w-4" />
+            Set Pax 60
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -530,6 +573,47 @@ const CategoryTabs = ({
           onCategoryUpdated?.(deleted);
         }}
       />
+
+      <AlertDialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Set pax to 60?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will set pax per preparation to 60 for{' '}
+              <span className="font-semibold text-foreground">
+                {categoryItems.length || 0} item
+                {categoryItems.length === 1 ? '' : 's'}
+              </span>{' '}
+              in{' '}
+              <span className="font-semibold text-foreground">
+                {activeCategory || 'this category'}
+              </span>
+              .
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkAssigning}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                handleConfirmBulkAssign();
+              }}
+              disabled={!canBulkAssign || bulkAssigning}
+            >
+              {bulkAssigning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Apply'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={Boolean(hardDeleteTarget)}

@@ -19,12 +19,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCart } from '../../context/CartContext';
 
-const SIZE_OPTIONS = [
-  { label: 'Regular', value: 'Regular', price: 0, hint: 'Standard serving' },
-  { label: 'Large', value: 'Large', price: 15, hint: 'More to enjoy' },
-  { label: 'Family', value: 'Family', price: 30, hint: 'Shareable size' },
-];
-
 const ADD_ONS = [
   { key: 'extra_rice', label: 'Extra Rice', price: 10 },
   { key: 'extra_sauce', label: 'Extra Sauce', price: 5 },
@@ -40,7 +34,6 @@ export default function CustomizeOrderScreen() {
   const { cart, updateCartItem } = useCart();
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
-  const [selectedSize, setSelectedSize] = useState(SIZE_OPTIONS[0]);
   const [selectedAddOns, setSelectedAddOns] = useState([]);
 
   const item = useMemo(() => {
@@ -57,23 +50,18 @@ export default function CustomizeOrderScreen() {
 
   useEffect(() => {
     if (!item) return;
-    const match =
-      SIZE_OPTIONS.find((option) => option.value === item.size) ||
-      SIZE_OPTIONS[0];
-    setSelectedSize(match);
     setSelectedAddOns(
       Array.isArray(item.addOns) ? item.addOns.filter(Boolean) : []
     );
   }, [item]);
 
   const additionsTotal = useMemo(() => {
-    const sizeCost = selectedSize?.price || 0;
     const addonsCost = selectedAddOns.reduce((sum, key) => {
       const addon = ADD_ONS.find((entry) => entry.key === key);
       return sum + (addon?.price || 0);
     }, 0);
-    return sizeCost + addonsCost;
-  }, [selectedAddOns, selectedSize]);
+    return addonsCost;
+  }, [selectedAddOns]);
 
   const updatedPrice = useMemo(
     () => Number((basePrice + additionsTotal).toFixed(2)),
@@ -97,14 +85,11 @@ export default function CustomizeOrderScreen() {
       selectedAddOns.includes(entry.key)
     ).map((entry) => entry.label);
     const customizeParts = [];
-    if (selectedSize?.label) {
-      customizeParts.push(`Size: ${selectedSize.label}`);
-    }
     if (addOnLabels.length) {
       customizeParts.push(`Add-ons: ${addOnLabels.join(', ')}`);
     }
     updateCartItem(itemId, {
-      size: selectedSize?.label || null,
+      size: null,
       addOns: selectedAddOns,
       customize: customizeParts.join(' | '),
       basePrice,
@@ -155,7 +140,7 @@ export default function CustomizeOrderScreen() {
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={26} color="black" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Customize</Text>
+            <Text style={styles.headerTitle}>Add-ons</Text>
             <Ionicons name="fast-food-outline" size={26} color="black" />
           </View>
           <Text
@@ -171,66 +156,6 @@ export default function CustomizeOrderScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Size</Text>
-            <Text style={styles.sectionSubtitle}>Choose a serving</Text>
-          </View>
-        </View>
-        <View style={styles.optionCard}>
-          {SIZE_OPTIONS.map((option, index) => {
-            const selected = option.value === selectedSize?.value;
-            const isLast = index === SIZE_OPTIONS.length - 1;
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.optionRow,
-                  !isLast && styles.optionRowSpacing,
-                  selected && styles.optionRowActive,
-                ]}
-                onPress={() => setSelectedSize(option)}
-              >
-                <View style={styles.optionBody}>
-                  <Text
-                    style={[
-                      styles.optionLabel,
-                      selected && styles.optionLabelActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  <Text style={styles.optionHint}>{option.hint}</Text>
-                </View>
-                <View style={styles.optionMeta}>
-                  <View
-                    style={[
-                      styles.optionPriceChip,
-                      selected && styles.optionPriceChipActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.optionPrice,
-                        selected && styles.optionPriceActive,
-                      ]}
-                    >
-                      {option.price
-                        ? `+${formatPeso(option.price)}`
-                        : 'Included'}
-                    </Text>
-                  </View>
-                  {selected && (
-                    <View style={styles.optionSelectedBadge}>
-                      <Text style={styles.optionSelectedText}>Selected</Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>Add-ons</Text>
@@ -466,11 +391,6 @@ const styles = StyleSheet.create({
   },
   optionLabelActive: {
     color: '#9A3412',
-  },
-  optionHint: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
   },
   optionMeta: {
     alignItems: 'flex-end',

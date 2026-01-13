@@ -593,51 +593,60 @@ const changePassword = async () => {
 // Cancel (Delete) Order
 
 export const cancelOrder = async (order) => {
-  // 1️⃣ Validate the order object
-  if (!order || !order.order_number) {
+  const orderNumber =
+    typeof order === 'string'
+      ? order
+      : order?.order_number ||
+        order?.orderNumber ||
+        order?.order_id ||
+        order?.orderId ||
+        order?.id ||
+        '';
+  if (!orderNumber) {
     console.warn('Cancel failed: order number is missing', order);
     Alert.alert('Error', 'Cannot cancel order: invalid order.');
-    return;
+    return { success: false, message: 'Missing order number' };
   }
 
-  const orderNumber = order.order_number;
-
-  // 2️⃣ Ask user for confirmation
-  Alert.alert('Cancel Order', 'Are you sure you want to cancel this order?', [
-    { text: 'No' },
-    {
-      text: 'Yes',
-      style: 'destructive',
-      onPress: async () => {
-        try {
-          // 3️⃣ Get a valid token
-          const token = await getValidToken();
-          if (!token) throw new Error('No valid token. Please log in again.');
-
-          // 4️⃣ Call backend DELETE API
-          await api.delete(`/orders/${orderNumber}/cancel/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          Alert.alert('Success', 'Order canceled successfully!');
-
-          // 5️⃣ Refresh orders list (optional)
-          if (typeof fetchUserOrders === 'function') {
-            await fetchUserOrders();
-          }
-        } catch (err) {
-          console.error(
-            'Cancel order failed:',
-            err.response?.data || err.message
-          );
-          Alert.alert(
-            'Error',
-            err.response?.data?.message || 'Failed to cancel order.'
-          );
-        }
+  return new Promise((resolve) => {
+    Alert.alert('Cancel Order', 'Are you sure you want to cancel this order?', [
+      {
+        text: 'No',
+        style: 'cancel',
+        onPress: () => resolve({ success: false, cancelled: true }),
       },
-    },
-  ]);
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const token = await getValidToken();
+            if (!token) throw new Error('No valid token. Please log in again.');
+
+            await api.delete(`/orders/${orderNumber}/cancel/`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+
+            Alert.alert('Success', 'Order canceled successfully!');
+            resolve({ success: true });
+          } catch (err) {
+            console.error(
+              'Cancel order failed:',
+              err.response?.data || err.message
+            );
+            Alert.alert(
+              'Error',
+              err.response?.data?.message || 'Failed to cancel order.'
+            );
+            resolve({
+              success: false,
+              message: err.response?.data?.message || err.message,
+            });
+          }
+        },
+      },
+    ]);
+  });
 };
 
 const pickImage = async () => {

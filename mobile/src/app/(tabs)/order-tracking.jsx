@@ -17,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
-import { fetchMenuItems, fetchUserOrders } from '../../api/api';
+import { cancelOrder, fetchMenuItems, fetchUserOrders } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
 
 const SUPPORT_EMAIL = 'josephformentera2@gmail.com';
@@ -81,6 +81,13 @@ const STATUS_MAPPING = {
   voided: 'voided',
 };
 const ORDER_POLL_INTERVAL_MS = 12000;
+const CANCELLABLE_STATUSES = new Set([
+  'pending',
+  'accepted',
+  'in_queue',
+  'queued',
+  'new',
+]);
 
 const normalizeStatusKey = (value) => {
   if (!value) return 'pending';
@@ -388,6 +395,11 @@ const isPreviousStatus = (status) => {
   return ['completed', 'cancelled', 'refunded', 'voided'].includes(key);
 };
 
+const canCancelStatus = (status) => {
+  const key = normalizeStatusKey(status);
+  return CANCELLABLE_STATUSES.has(key);
+};
+
 export default function OrderTrackingScreen() {
   const [fontsLoaded] = useFonts({ Roboto_700Bold });
   const [currentOrders, setCurrentOrders] = useState([]);
@@ -578,6 +590,23 @@ export default function OrderTrackingScreen() {
     } catch (err) {
       console.error('Contact support failed:', err);
       Alert.alert('Contact Support', `Please email us at ${SUPPORT_EMAIL}.`);
+    }
+  };
+
+  const handleCancelOrder = async (order) => {
+    if (!order) return;
+    if (!canCancelStatus(order?.status)) {
+      Alert.alert(
+        'Cancel unavailable',
+        'Orders can only be cancelled before preparation starts.'
+      );
+      return;
+    }
+    const orderNumber = resolveOrderNumber(order);
+    const result = await cancelOrder(orderNumber);
+    if (result?.success) {
+      handleCloseModal();
+      loadData({ silent: true, includeMenu: false });
     }
   };
 
@@ -811,6 +840,7 @@ export default function OrderTrackingScreen() {
   const selectedTotal = resolveOrderTotal(selectedOrder, selectedItems);
   const selectedOrderNumber = resolveOrderNumber(selectedOrder);
   const selectedOrderDate = resolveOrderDate(selectedOrder);
+  const canCancelSelected = canCancelStatus(selectedOrder?.status);
   const recentPreviousOrders = useMemo(
     () => previousOrders.slice(0, 2),
     [previousOrders]
@@ -967,6 +997,30 @@ export default function OrderTrackingScreen() {
                   style={styles.supportButtonIcon}
                 />
                 <Text style={styles.supportButtonText}>Contact Support</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.cancelButton,
+                  !canCancelSelected && styles.cancelButtonDisabled,
+                ]}
+                disabled={!canCancelSelected}
+                onPress={() => handleCancelOrder(selectedOrder)}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={18}
+                  color={canCancelSelected ? '#DC2626' : '#9CA3AF'}
+                  style={styles.supportButtonIcon}
+                />
+                <Text
+                  style={[
+                    styles.cancelButtonText,
+                    !canCancelSelected && styles.cancelButtonTextDisabled,
+                  ]}
+                >
+                  Cancel Order
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </Animated.View>
@@ -1429,6 +1483,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#9A3412',
+  },
+  cancelButton: {
+    marginTop: 10,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  cancelButtonDisabled: {
+    backgroundColor: '#F3F4F6',
+  },
+  cancelButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  cancelButtonTextDisabled: {
+    color: '#9CA3AF',
   },
   loadingContainer: {
     flex: 1,

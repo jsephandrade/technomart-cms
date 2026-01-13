@@ -405,6 +405,16 @@ const OrderQueue = ({
     );
   }, [queueOrders]);
 
+  const cancelledOrders = useMemo(
+    () =>
+      queueOrders.filter((order) =>
+        ['cancelled', 'canceled'].includes(
+          normalizeStatus(getOrderStatus(order))
+        )
+      ),
+    [queueOrders]
+  );
+
   const walkInOrders = useMemo(
     () => visibleOrders.filter((order) => getOrderChannel(order) === 'walk-in'),
     [visibleOrders]
@@ -1211,57 +1221,68 @@ const OrderQueue = ({
         </CardContent>
       </Card>
 
-      {/* Statistics Overview */}
+      {/* Cancelled Orders */}
       <Card className="md:col-span-2">
         <CardHeader>
-          <CardTitle>Queue Statistics</CardTitle>
-          <CardDescription>
-            Overview of current order processing
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-muted/50 p-4 rounded-md">
-              <p className="text-sm font-medium text-muted-foreground">
-                Total Orders
-              </p>
-              <p className="text-3xl font-bold">{visibleOrders.length}</p>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle>Cancelled Orders</CardTitle>
+              <CardDescription>
+                Synced cancellations from mobile and web
+              </CardDescription>
             </div>
-            <div className="bg-yellow-50 p-4 rounded-md">
-              <p className="text-sm font-medium text-yellow-800">Queued</p>
-              <p className="text-3xl font-bold text-yellow-800">
-                {
-                  visibleOrders.filter((o) =>
-                    ['pending', 'accepted', 'in_queue', 'new'].includes(
-                      getOrderStatus(o)
-                    )
-                  ).length
-                }
-              </p>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-md">
-              <p className="text-sm font-medium text-blue-800">In Progress</p>
-              <p className="text-3xl font-bold text-blue-800">
-                {
-                  visibleOrders.filter((o) =>
-                    ['preparing', 'in_progress', 'in_prep'].includes(
-                      getOrderStatus(o)
-                    )
-                  ).length
-                }
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-md">
-              <p className="text-sm font-medium text-green-800">Ready</p>
-              <p className="text-3xl font-bold text-green-800">
-                {
-                  visibleOrders.filter((o) =>
-                    ['ready', 'staged', 'handoff'].includes(getOrderStatus(o))
-                  ).length
-                }
-              </p>
-            </div>
+            <Badge
+              variant="outline"
+              className="bg-red-50 text-red-700 border-red-200"
+            >
+              {cancelledOrders.length} Cancelled
+            </Badge>
           </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {cancelledOrders.length ? (
+            <div className="divide-y max-h-[320px] overflow-y-auto scrollbar-hide">
+              {cancelledOrders.map((order) => {
+                const label =
+                  formatOrderNumber(order.orderNumber) ||
+                  order.orderNumber ||
+                  order.id;
+                const customer =
+                  order.customerName ||
+                  order.customer_name ||
+                  order.customer ||
+                  'Walk-in customer';
+                const timestamp =
+                  order.timeReceived || order.createdAt || order.created_at;
+                return (
+                  <div key={order.id} className="p-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">#{label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {customer}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatTimeAgo(timestamp)}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="bg-red-100 text-red-700 border-red-200"
+                    >
+                      Cancelled
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-10 text-center">
+              <Package className="h-9 w-9 text-muted-foreground/50 mb-3" />
+              <p className="text-sm text-muted-foreground">
+                No cancelled orders yet
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

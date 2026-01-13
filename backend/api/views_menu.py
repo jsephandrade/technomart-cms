@@ -193,6 +193,9 @@ def _safe_menu_item(mi, category_map=None, ingredient_lookup=None):
                 pax_value = 0
                 available_value = False
 
+        if pax_value <= 0:
+            available_value = False
+
         return {
             "id": str(mi.id),
             "name": mi.name,
@@ -215,6 +218,10 @@ def _safe_menu_item(mi, category_map=None, ingredient_lookup=None):
         category_name = getattr(mi, "category", "")
         category_id = _resolve_category_id(category_name, category_map)
         # Fallback for in-memory dicts to keep compatibility if ever used
+        pax_value = getattr(mi, "paxPerPreparation", 0) or 0
+        available_value = bool(getattr(mi, "available", True))
+        if pax_value <= 0:
+            available_value = False
         return {
             "id": str(getattr(mi, "id", "")),
             "name": getattr(mi, "name", "Unnamed"),
@@ -222,14 +229,14 @@ def _safe_menu_item(mi, category_map=None, ingredient_lookup=None):
             "category": getattr(mi, "category", ""),
             "categoryId": category_id,
             "price": float(getattr(mi, "price", 0) or 0),
-            "available": bool(getattr(mi, "available", True)),
+            "available": bool(available_value),
             "archived": bool(getattr(mi, "archived", False)),
             "archivedAt": getattr(mi, "archivedAt", None),
             "image": image_url,
             "ingredients": getattr(mi, "ingredients", []) or [],
             "preparationTime": getattr(mi, "preparationTime", 0) or 0,
-            "paxPerPreparation": getattr(mi, "paxPerPreparation", 0) or 0,
-            "estimatedPax": getattr(mi, "paxPerPreparation", 0) or 0,
+            "paxPerPreparation": pax_value,
+            "estimatedPax": pax_value,
         }
 
 

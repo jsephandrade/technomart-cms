@@ -177,6 +177,16 @@ const ItemCard = ({
   const staticPaxValue = Number.isFinite(Number(rawStaticPax))
     ? Math.max(0, Math.floor(Number(rawStaticPax)))
     : 0;
+  const paxAvailabilityValue =
+    paxRemainingValue !== null
+      ? paxRemainingValue
+      : hasStaticPax
+        ? staticPaxValue
+        : null;
+  const isAvailable =
+    !isArchived &&
+    Boolean(item.available) &&
+    (paxAvailabilityValue === null || paxAvailabilityValue > 0);
   const comboMeal = isComboMeal(item);
 
   const badge = isArchived
@@ -185,7 +195,7 @@ const ItemCard = ({
         variant: 'outline',
         className: 'bg-slate-100 text-slate-600 border-transparent',
       }
-    : item.available
+    : isAvailable
       ? {
           label: 'Available',
           variant: 'outline',

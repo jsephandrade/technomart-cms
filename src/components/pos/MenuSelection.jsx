@@ -135,7 +135,6 @@ const MenuSelection = ({
     const ingredientImages = resolveIngredientImages(item, imageById);
     const [brokenImages, setBrokenImages] = useState({});
     const categoryLabel = item.categoryName || item.category || '';
-    const isUnavailable = item.available === false;
     const paxInfo = usePaxForItem(item.id);
     const hasEstimatedPax =
       paxInfo && typeof paxInfo.estimated === 'number' && paxInfo.estimated > 0;
@@ -148,6 +147,9 @@ const MenuSelection = ({
         : null;
     const paxRemainingValue =
       remainingPax !== null ? remainingPax : estimatedPax;
+    const isUnavailable =
+      item.available === false ||
+      (paxRemainingValue !== null && paxRemainingValue <= 0);
     const showCategoryLabel = Boolean(categoryLabel);
     const showPaxBadge = hasEstimatedPax && paxRemainingValue !== null;
 

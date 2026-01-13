@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, Edit, Power } from 'lucide-react';
+import { Search, Plus, Edit, Archive, CheckCircle } from 'lucide-react';
 
 const formatNumber = (value) => {
   const numeric = Number(value);
@@ -84,8 +84,14 @@ const PackageManagementPanel = ({
 
       <Tabs value={statusFilter} onValueChange={onStatusChange}>
         <TabsList className="grid w-full max-w-sm grid-cols-2">
-          <TabsTrigger value="active">Active</TabsTrigger>
-          <TabsTrigger value="inactive">Inactive</TabsTrigger>
+          <TabsTrigger value="active" className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4" />
+            Available
+          </TabsTrigger>
+          <TabsTrigger value="inactive" className="flex items-center gap-2">
+            <Archive className="h-4 w-4" />
+            Archive
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -139,9 +145,21 @@ const PackageManagementPanel = ({
                     </div>
                     <Badge
                       variant={pkg.active ? 'default' : 'secondary'}
-                      className={pkg.active ? 'bg-primary/10 text-primary' : ''}
+                      className={`flex items-center gap-1 ${
+                        pkg.active ? 'bg-primary/10 text-primary' : ''
+                      }`}
                     >
-                      {pkg.active ? 'Active' : 'Inactive'}
+                      {pkg.active ? (
+                        <>
+                          <CheckCircle className="h-3 w-3" />
+                          Available
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="h-3 w-3" />
+                          Archived
+                        </>
+                      )}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -189,9 +207,19 @@ const PackageManagementPanel = ({
                         variant={pkg.active ? 'destructive' : 'default'}
                         size="sm"
                         onClick={() => handleRequestToggle(pkg)}
+                        className="flex items-center gap-2"
                       >
-                        <Power className="h-4 w-4" />
-                        {pkg.active ? '' : ''}
+                        {pkg.active ? (
+                          <>
+                            <Archive className="h-4 w-4" />
+                            Archive
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            Available
+                          </>
+                        )}
                       </Button>
                     </div>
                   ) : null}
@@ -212,8 +240,8 @@ const PackageManagementPanel = ({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {confirmState?.nextActive
-                ? 'Activate package?'
-                : 'Deactivate package?'}
+                ? 'Make package available?'
+                : 'Archive package?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmState?.nextActive

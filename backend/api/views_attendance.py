@@ -145,6 +145,52 @@ def _attendance_status_for_checkin(employee, record_date, check_in_time, fallbac
         return fallback
 
 
+def _combine_date_time(record_date, time_value):
+    if not record_date or not time_value:
+        return None
+    try:
+        combined = datetime.combine(record_date, time_value)
+        if dj_tz.is_naive(combined):
+            combined = dj_tz.make_aware(combined, dj_tz.get_current_timezone())
+        return combined
+    except Exception:
+        return None
+
+
+def _auto_mark_absent_if_shift_passed(employee, record_date, now=None):
+    if not employee or not record_date:
+        return None
+    try:
+        from .models import AttendanceRecord
+    except Exception:
+        return None
+    try:
+        schedule_entry = _resolve_schedule_for_date(employee, record_date)
+        if not schedule_entry or not schedule_entry.end_time:
+            return None
+        now_dt = dj_tz.localtime(now or dj_tz.now())
+        shift_end = _combine_date_time(record_date, schedule_entry.end_time)
+        if not shift_end or now_dt <= shift_end:
+            return None
+        existing = AttendanceRecord.objects.filter(
+            employee=employee, date=record_date
+        ).first()
+        if existing:
+            if not existing.check_in and existing.status != "absent":
+                existing.status = "absent"
+                existing.notes = existing.notes or "Shift window closed without clock-in"
+                existing.save(update_fields=["status", "notes", "updated_at"])
+            return existing
+        return AttendanceRecord.objects.create(
+            employee=employee,
+            date=record_date,
+            status="absent",
+            notes="Shift window closed without clock-in",
+        )
+    except Exception:
+        return None
+
+
 def _auto_assign_leave_coverage(leave_record):
     try:
         from .models import Employee, ScheduleEntry, LeaveRecord
@@ -469,9 +515,17 @@ def attendance(request):
                 employee_name=Coalesce(F("employee__name"), Value("")),
             )
             if not can_manage:
-                _, self_emp_id = _employee_for_actor(actor, allow_fallback=True)
+                self_emp, self_emp_id = _employee_for_actor(
+                    actor, allow_fallback=True
+                )
                 if not self_emp_id:
                     return JsonResponse({"success": True, "data": []})
+                if not self_emp and self_emp_id:
+                    self_emp = Employee.objects.filter(id=self_emp_id).first()
+                if self_emp:
+                    _auto_mark_absent_if_shift_passed(
+                        self_emp, dj_tz.localdate()
+                    )
                 allowed_ids = _identifier_variants(self_emp_id) or {str(self_emp_id)}
                 qs = qs.filter(employee_id_str__in=allowed_ids)
             elif employee_id_param:

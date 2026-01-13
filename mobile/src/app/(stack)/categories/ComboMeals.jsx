@@ -204,12 +204,8 @@ export default function ComboMeals() {
 
   const renderItem = ({ item }) => {
     const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
-    const isAvailable =
-      item?.available !== false &&
-      item?.is_available !== false &&
-      item?.isAvailable !== false &&
-      item?.sold_out !== true &&
-      item?.soldOut !== true;
+    const paxRemaining = getPaxRemaining(item);
+    const isAvailable = isPaxAvailable(item);
     const [mainSrc, topSrc, bottomSrc] = item.collageSources || [];
     const mainImage = toImageSource(mainSrc);
     const topImage = toImageSource(topSrc);
@@ -247,6 +243,23 @@ export default function ComboMeals() {
           </View>
         </View>
         <Text style={styles.name}>{item.name}</Text>
+        {paxRemaining !== null && (
+          <View
+            style={[
+              styles.paxBadge,
+              paxRemaining === 0 && styles.paxBadgeEmpty,
+            ]}
+          >
+            <Text
+              style={[
+                styles.paxBadgeText,
+                paxRemaining === 0 && styles.paxBadgeTextEmpty,
+              ]}
+            >
+              {paxRemaining} pax
+            </Text>
+          </View>
+        )}
         <Text style={styles.price}>₱{item.price}</Text>
 
         <View style={styles.controls}>
@@ -432,6 +445,24 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
     textAlign: 'center',
+  },
+  paxBadge: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
+  paxBadgeEmpty: {
+    backgroundColor: '#FEE2E2',
+  },
+  paxBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Roboto_700Bold',
+    color: '#075985',
+  },
+  paxBadgeTextEmpty: {
+    color: '#B91C1C',
   },
   price: {
     fontSize: 18,

@@ -29,6 +29,7 @@ import { fetchMenuItems, USER_CACHE_KEY } from '../../api/api';
 import { useCart } from '../../context/CartContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { resolveImageSource } from '../../utils/image';
+import { getPaxRemaining, isPaxAvailable } from '../../utils/pax';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const COLLAGE_GAP = 4;
@@ -480,7 +481,8 @@ export default function HomeDashboardScreen() {
           {allItemsFiltered.length > 0 ? (
             allItemsFiltered.map((item) => {
               const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
-              const isAvailable = item.available !== false;
+              const paxRemaining = getPaxRemaining(item);
+              const isAvailable = isPaxAvailable(item);
               const combo = isComboItem(item);
               const collageImages = combo
                 ? resolveComboImages(item, imageById).slice(0, 3)
@@ -533,11 +535,30 @@ export default function HomeDashboardScreen() {
                       <Text style={styles.menuName} numberOfLines={1}>
                         {item.name}
                       </Text>
-                      {!isAvailable && (
-                        <View style={styles.soldOutBadge}>
-                          <Text style={styles.soldOutText}>Sold Out</Text>
-                        </View>
-                      )}
+                      <View style={styles.menuBadgeRow}>
+                        {paxRemaining !== null && (
+                          <View
+                            style={[
+                              styles.paxBadge,
+                              paxRemaining === 0 && styles.paxBadgeEmpty,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.paxBadgeText,
+                                paxRemaining === 0 && styles.paxBadgeTextEmpty,
+                              ]}
+                            >
+                              {paxRemaining} pax
+                            </Text>
+                          </View>
+                        )}
+                        {!isAvailable && (
+                          <View style={styles.soldOutBadge}>
+                            <Text style={styles.soldOutText}>Sold Out</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                     <Text style={styles.menuDesc} numberOfLines={2}>
                       {item.description || 'No description available.'}
@@ -803,6 +824,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  menuBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   menuName: {
     fontSize: 16,
     fontWeight: '700',
@@ -835,6 +861,23 @@ const styles = StyleSheet.create({
   soldOutText: {
     fontSize: 10,
     fontWeight: '700',
+    color: '#B91C1C',
+  },
+  paxBadge: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  paxBadgeEmpty: {
+    backgroundColor: '#FEE2E2',
+  },
+  paxBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#075985',
+  },
+  paxBadgeTextEmpty: {
     color: '#B91C1C',
   },
   qtyControls: {

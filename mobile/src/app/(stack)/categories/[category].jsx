@@ -14,6 +14,7 @@ import { useCart } from '../../../context/CartContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import { resolveImageSource } from '../../../utils/image';
+import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
 
 export default function CategoryScreen() {
   const { category } = useLocalSearchParams();
@@ -205,6 +206,8 @@ export default function CategoryScreen() {
         ) : (
           items.map((item) => {
             const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
+            const paxRemaining = getPaxRemaining(item);
+            const isAvailable = isPaxAvailable(item);
             return (
               <View
                 key={item.id}
@@ -243,7 +246,7 @@ export default function CategoryScreen() {
                     }}
                   >
                     {item.name}{' '}
-                    {item.available === false && (
+                    {!isAvailable && (
                       <Text style={{ color: '#ef4444' }}> (Sold Out)</Text>
                     )}
                   </Text>
@@ -252,6 +255,29 @@ export default function CategoryScreen() {
                   >
                     {item.description}
                   </Text>
+                  {paxRemaining !== null && (
+                    <View
+                      style={{
+                        alignSelf: 'flex-start',
+                        marginTop: 6,
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        borderRadius: 999,
+                        backgroundColor:
+                          paxRemaining === 0 ? '#FEE2E2' : '#E0F2FE',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: '700',
+                          color: paxRemaining === 0 ? '#B91C1C' : '#075985',
+                        }}
+                      >
+                        {paxRemaining} pax
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text
@@ -263,7 +289,7 @@ export default function CategoryScreen() {
                   >
                     ₱{item.price}
                   </Text>
-                  {item.available && (
+                  {isAvailable && (
                     <View
                       style={{
                         flexDirection: 'row',

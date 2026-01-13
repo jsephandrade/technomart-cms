@@ -25,6 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../styles/cn';
 import { resolveImageSource } from '../utils/image';
 import { useCart } from '../context/CartContext';
+import { getPaxRemaining, isPaxAvailable } from '../utils/pax';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(width * 0.78, 320);
@@ -156,7 +157,7 @@ export default function Recommended({ items = [], allItems = [] }) {
 
   const data = useMemo(() => {
     return items
-      .filter((entry) => entry && !entry.archived && entry.available !== false)
+      .filter((entry) => entry && !entry.archived && isPaxAvailable(entry))
       .map((item, index) => {
         const ratingValue =
           item.rating != null && Number.isFinite(Number(item.rating))
@@ -179,6 +180,7 @@ export default function Recommended({ items = [], allItems = [] }) {
           rating: ratingValue,
           reviews: reviewsValue,
           description: item.description || '',
+          paxRemaining: getPaxRemaining(item),
           source: item,
           collageSources,
         };
@@ -221,6 +223,7 @@ export default function Recommended({ items = [], allItems = [] }) {
     (item) => {
       if (!item) return;
       const source = item.source || {};
+      if (!isPaxAvailable(source)) return;
       addToCart({
         ...source,
         id: source.id ?? item.id,
@@ -354,6 +357,23 @@ export default function Recommended({ items = [], allItems = [] }) {
                         {formatCurrency(item.price)}
                       </Text>
                     </View>
+                    {item.paxRemaining !== null && (
+                      <View
+                        style={[
+                          styles.paxPill,
+                          item.paxRemaining === 0 && styles.paxPillEmpty,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.paxPillText,
+                            item.paxRemaining === 0 && styles.paxPillTextEmpty,
+                          ]}
+                        >
+                          {item.paxRemaining} pax
+                        </Text>
+                      </View>
+                    )}
                     {Number.isFinite(item.rating) ? (
                       <View style={styles.ratingPill}>
                         <Text style={styles.ratingText}>
@@ -556,6 +576,24 @@ const styles = StyleSheet.create({
     fontSize: 25,
     fontWeight: '700',
     color: '#9A3412',
+  },
+  paxPill: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(224,242,254,0.9)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  paxPillEmpty: {
+    backgroundColor: 'rgba(254,226,226,0.95)',
+  },
+  paxPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#075985',
+  },
+  paxPillTextEmpty: {
+    color: '#B91C1C',
   },
   ratingPill: {
     marginLeft: 8,

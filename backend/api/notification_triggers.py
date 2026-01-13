@@ -437,7 +437,9 @@ def trigger_leave_status_change(leave_request):
             template_name,
             start_date=leave_request.start_date.strftime('%B %d, %Y') if leave_request.start_date else 'TBD',
             end_date=leave_request.end_date.strftime('%B %d, %Y') if leave_request.end_date else 'TBD',
-            reason=leave_request.rejection_reason or 'N/A'
+            reason=getattr(leave_request, 'rejection_reason', None)
+            or getattr(leave_request, 'reason', None)
+            or 'N/A'
         )
 
         # Notify the employee (if they have a user account)

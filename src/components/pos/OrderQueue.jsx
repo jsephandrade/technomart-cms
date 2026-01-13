@@ -23,13 +23,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  BadgeDollarSign,
   Package,
   Smartphone,
   Clock,
   Check,
+  CreditCard,
+  Eye,
   PauseCircle,
   PlayCircle,
   Loader2,
+  ListOrdered,
+  User,
+  X,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 import { formatOrderNumber } from '@/lib/utils';
@@ -1332,10 +1339,13 @@ const OrderQueue = ({
 
       {/* Cancelled Orders */}
       <Card className="md:col-span-2">
-        <CardHeader>
+        <CardHeader className="bg-red-50 border-b">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <CardTitle>Cancelled Orders</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-red-600" />
+                Cancelled Orders
+              </CardTitle>
               <CardDescription>
                 Synced cancellations from mobile and web
               </CardDescription>
@@ -1364,36 +1374,44 @@ const OrderQueue = ({
                 const timestamp = getCancelledTimestamp(order);
                 const reasonLabel = formatCancelReason(getCancelReason(order));
                 return (
-                  <div key={order.id} className="p-4 flex items-center gap-4">
+                  <div
+                    key={order.id}
+                    className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between hover:bg-slate-50"
+                  >
                     <div className="flex-1">
                       <p className="text-sm font-semibold">#{label}</p>
                       <p className="text-xs text-muted-foreground">
                         {customer}
                       </p>
-                      {reasonLabel ? (
-                        <p className="text-xs text-muted-foreground">
-                          Reason: {reasonLabel}
-                        </p>
-                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge
+                          variant="outline"
+                          className="bg-red-100 text-red-700 border-red-200"
+                        >
+                          Cancelled
+                        </Badge>
+                        {reasonLabel ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-50 text-amber-700 border-amber-200"
+                          >
+                            {reasonLabel}
+                          </Badge>
+                        ) : null}
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {formatTimeAgo(timestamp)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className="bg-red-100 text-red-700 border-red-200"
-                      >
-                        Cancelled
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCancelledDetail(order)}
-                      >
-                        View
-                      </Button>
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-2 self-start sm:self-auto"
+                      onClick={() => setCancelledDetail(order)}
+                    >
+                      <Eye className="h-4 w-4" />
+                      View
+                    </Button>
                   </div>
                 );
               })}
@@ -1415,9 +1433,10 @@ const OrderQueue = ({
           if (!open) setCancelledDetail(null);
         }}
       >
-        <DialogContent className="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[720px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-600" />
               Cancelled Order #
               {formatOrderNumber(cancelledDetail?.orderNumber) ||
                 cancelledDetail?.orderNumber ||
@@ -1431,52 +1450,71 @@ const OrderQueue = ({
           </DialogHeader>
 
           <div className="space-y-4 text-sm">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">
-                  Customer
-                </p>
-                <p className="font-medium">
-                  {cancelledDetail?.customerName ||
-                    cancelledDetail?.customer_name ||
-                    cancelledDetail?.customer ||
-                    'Walk-in customer'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">
-                  Cancelled At
-                </p>
-                <p className="font-medium">
-                  {formatDateTime(getCancelledTimestamp(cancelledDetail))}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">
-                  Payment
-                </p>
-                <p className="font-medium">
-                  {formatPaymentMethodLabel(
-                    getPaymentMethod(cancelledDetail)
-                  ) || '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">Total</p>
-                <p className="font-medium">
-                  ₱
-                  {Number(
-                    cancelledDetail?.total ??
-                      cancelledDetail?.total_amount ??
-                      cancelledDetail?.totalAmount ??
-                      0
-                  ).toFixed(2)}
-                </p>
+            <div className="rounded-lg border bg-slate-50/70 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex items-start gap-3">
+                  <User className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Customer
+                    </p>
+                    <p className="font-medium">
+                      {cancelledDetail?.customerName ||
+                        cancelledDetail?.customer_name ||
+                        cancelledDetail?.customer ||
+                        'Walk-in customer'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Clock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Cancelled At
+                    </p>
+                    <p className="font-medium">
+                      {formatDateTime(getCancelledTimestamp(cancelledDetail))}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CreditCard className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Payment
+                    </p>
+                    <p className="font-medium">
+                      {formatPaymentMethodLabel(
+                        getPaymentMethod(cancelledDetail)
+                      ) || '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <BadgeDollarSign className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Total
+                    </p>
+                    <p className="font-medium">
+                      ₱
+                      {Number(
+                        cancelledDetail?.total ??
+                          cancelledDetail?.total_amount ??
+                          cancelledDetail?.totalAmount ??
+                          0
+                      ).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-xs uppercase text-muted-foreground">Items</p>
+              <p className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                <ListOrdered className="h-4 w-4" />
+                Items
+              </p>
               <div className="mt-2 space-y-2">
                 {(cancelledDetail?.items || []).length ? (
                   cancelledDetail.items.map((item, idx) => (
@@ -1500,7 +1538,12 @@ const OrderQueue = ({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelledDetail(null)}>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setCancelledDetail(null)}
+            >
+              <X className="h-4 w-4" />
               Close
             </Button>
           </DialogFooter>

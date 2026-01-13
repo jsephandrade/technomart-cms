@@ -76,8 +76,11 @@ export default function AccountCaptureIdScreen() {
 
   const validate = () => {
     const next = {};
-    if (!frontPhoto?.base64) next.front = 'Front ID photo is required';
-    if (!backPhoto?.base64) next.back = 'Back ID photo is required';
+    if (!frontPhoto?.base64) {
+      next.front = 'Front ID photo is required';
+    } else if (!backPhoto?.base64) {
+      next.back = 'Back ID photo is required';
+    }
     return next;
   };
 
@@ -165,7 +168,9 @@ export default function AccountCaptureIdScreen() {
     );
   }
 
-  const canSubmit = Boolean(frontPhoto?.base64 && backPhoto?.base64);
+  const hasFront = Boolean(frontPhoto?.base64);
+  const hasBack = Boolean(backPhoto?.base64);
+  const canSubmit = Boolean(hasFront && hasBack);
 
   return (
     <ImageBackground
@@ -189,85 +194,103 @@ export default function AccountCaptureIdScreen() {
             Upload clear photos of the front and back of your ID.
           </Text>
 
-          <View
-            style={[
-              styles.idUploadCard,
-              errors.front && styles.inputWrapperError,
-            ]}
-          >
-            <Text style={styles.idLabel}>Front of ID</Text>
-            {frontPhoto?.uri ? (
-              <Image
-                source={{ uri: frontPhoto.uri }}
-                style={styles.idPreview}
-              />
-            ) : (
-              <View style={styles.idPlaceholder}>
-                <MaterialCommunityIcons
-                  name="card-account-details-outline"
-                  size={28}
-                  color="#9CA3AF"
-                />
-                <Text style={styles.idPlaceholderText}>
-                  Capture the front of your ID
-                </Text>
+          {!hasFront ? (
+            <>
+              <View
+                style={[
+                  styles.idUploadCard,
+                  errors.front && styles.inputWrapperError,
+                ]}
+              >
+                <Text style={styles.idLabel}>Front of ID</Text>
+                <View style={styles.idPlaceholder}>
+                  <MaterialCommunityIcons
+                    name="card-account-details-outline"
+                    size={28}
+                    color="#9CA3AF"
+                  />
+                  <Text style={styles.idPlaceholderText}>
+                    Capture the front of your ID
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.idCaptureButton}
+                  onPress={() => handleCapture('front')}
+                >
+                  <MaterialCommunityIcons
+                    name="camera-outline"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.idCaptureButtonText}>Capture Front</Text>
+                </TouchableOpacity>
               </View>
-            )}
-            <TouchableOpacity
-              style={styles.idCaptureButton}
-              onPress={() => handleCapture('front')}
-            >
-              <MaterialCommunityIcons
-                name="camera-outline"
-                size={18}
-                color="#fff"
-              />
-              <Text style={styles.idCaptureButtonText}>
-                {frontPhoto?.uri ? 'Retake Front' : 'Capture Front'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {errors.front ? (
-            <Text style={styles.errorText}>{formatError(errors.front)}</Text>
+              {errors.front ? (
+                <Text style={styles.errorText}>
+                  {formatError(errors.front)}
+                </Text>
+              ) : null}
+            </>
           ) : null}
 
-          <View
-            style={[
-              styles.idUploadCard,
-              errors.back && styles.inputWrapperError,
-            ]}
-          >
-            <Text style={styles.idLabel}>Back of ID</Text>
-            {backPhoto?.uri ? (
-              <Image source={{ uri: backPhoto.uri }} style={styles.idPreview} />
-            ) : (
-              <View style={styles.idPlaceholder}>
-                <MaterialCommunityIcons
-                  name="card-account-details-outline"
-                  size={28}
-                  color="#9CA3AF"
-                />
-                <Text style={styles.idPlaceholderText}>
-                  Capture the back of your ID
-                </Text>
+          {hasFront ? (
+            <>
+              <View style={styles.stepHintRow}>
+                <Text style={styles.stepHintText}>Front captured</Text>
+                <TouchableOpacity
+                  style={styles.stepHintButton}
+                  onPress={() => handleCapture('front')}
+                >
+                  <MaterialCommunityIcons
+                    name="camera-outline"
+                    size={16}
+                    color="#9A3412"
+                  />
+                  <Text style={styles.stepHintButtonText}>Retake Front</Text>
+                </TouchableOpacity>
               </View>
-            )}
-            <TouchableOpacity
-              style={styles.idCaptureButton}
-              onPress={() => handleCapture('back')}
-            >
-              <MaterialCommunityIcons
-                name="camera-outline"
-                size={18}
-                color="#fff"
-              />
-              <Text style={styles.idCaptureButtonText}>
-                {backPhoto?.uri ? 'Retake Back' : 'Capture Back'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {errors.back ? (
-            <Text style={styles.errorText}>{formatError(errors.back)}</Text>
+              <View
+                style={[
+                  styles.idUploadCard,
+                  errors.back && styles.inputWrapperError,
+                ]}
+              >
+                <Text style={styles.idLabel}>Back of ID</Text>
+                {backPhoto?.uri ? (
+                  <Image
+                    source={{ uri: backPhoto.uri }}
+                    style={styles.idPreview}
+                  />
+                ) : (
+                  <View style={styles.idPlaceholder}>
+                    <MaterialCommunityIcons
+                      name="card-account-details-outline"
+                      size={28}
+                      color="#9CA3AF"
+                    />
+                    <Text style={styles.idPlaceholderText}>
+                      Capture the back of your ID
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.idCaptureButton}
+                  onPress={() => handleCapture('back')}
+                >
+                  <MaterialCommunityIcons
+                    name="camera-outline"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.idCaptureButtonText}>
+                    {backPhoto?.uri ? 'Retake Back' : 'Capture Back'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {errors.back ? (
+                <Text style={styles.errorText}>{formatError(errors.back)}</Text>
+              ) : null}
+            </>
           ) : null}
 
           <View style={styles.actions}>
@@ -364,6 +387,32 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#FFF7ED',
     marginBottom: 10,
+  },
+  stepHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  stepHintText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  stepHintButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFECDD',
+  },
+  stepHintButtonText: {
+    fontSize: 12,
+    fontFamily: 'Roboto_700Bold',
+    color: '#9A3412',
   },
   idLabel: {
     fontSize: 14,

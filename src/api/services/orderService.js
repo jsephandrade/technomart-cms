@@ -117,6 +117,35 @@ const normalizeOrder = (order) => {
     AUTO_ADVANCE_DEFAULT_SECONDS
   );
 
+  const meta = order.meta || {};
+  const cancelReason =
+    order.cancelReason ||
+    order.cancel_reason ||
+    meta.cancel_reason ||
+    meta.cancelReason ||
+    meta.no_show_reason ||
+    meta.noShowReason ||
+    '';
+  const cancelledAt = toISO(
+    order.cancelledAt ||
+      order.cancelled_at ||
+      meta.cancelled_at ||
+      meta.cancelledAt ||
+      null
+  );
+  const cancelledSource =
+    order.cancelledSource ||
+    order.cancelled_source ||
+    meta.cancelled_source ||
+    meta.cancelledSource ||
+    '';
+  const cancelledBy =
+    order.cancelledBy ||
+    order.cancelled_by ||
+    meta.cancelled_by ||
+    meta.cancelledBy ||
+    '';
+
   const items = Array.isArray(order.items)
     ? order.items.map(normalizeItem)
     : [];
@@ -176,7 +205,11 @@ const normalizeOrder = (order) => {
       pauseReason: autoAdvancePauseReason,
       durationSeconds: autoAdvanceDurationSeconds,
     },
-    meta: order.meta || {},
+    meta,
+    cancelReason,
+    cancelledAt,
+    cancelledSource,
+    cancelledBy,
     items,
   };
 };

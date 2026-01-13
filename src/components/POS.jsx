@@ -39,6 +39,7 @@ const POS = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('pos');
   const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
+  const [cancelledOrders, setCancelledOrders] = useState([]);
   const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(false);
   const displayContainerRef = useRef(null);
 
@@ -105,6 +106,22 @@ const POS = () => {
     return EMPTY_QUEUE_STATE;
   }, [setOrderQueue]);
 
+  const refreshCancelledOrders = useCallback(async () => {
+    try {
+      const res = await orderService.getOrders({
+        status: 'cancelled',
+        limit: 50,
+      });
+      const data = Array.isArray(res?.data) ? res.data : [];
+      setCancelledOrders(data);
+      return data;
+    } catch (e) {
+      console.error(e);
+    }
+    setCancelledOrders([]);
+    return [];
+  }, []);
+
   const handleProcessPayment = (paymentDetails) => {
     const orderSnapshot = (currentOrder || []).map((item) => ({
       menuItemId: item.menuItemId || item.id,
@@ -150,6 +167,7 @@ const POS = () => {
     try {
       await orderService.updateOrderStatus(orderId, newStatus);
       await refreshQueue();
+      await refreshCancelledOrders();
       return true;
     } catch (e) {
       console.error(e);
@@ -189,7 +207,7 @@ const POS = () => {
     let cancelled = false;
     const tick = async () => {
       try {
-        await refreshQueue();
+        await Promise.all([refreshQueue(), refreshCancelledOrders()]);
       } catch {
       } finally {
         if (!cancelled) timer = setTimeout(tick, 5000);
@@ -200,7 +218,7 @@ const POS = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [refreshQueue]);
+  }, [refreshQueue, refreshCancelledOrders]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -293,6 +311,7 @@ const POS = () => {
         <TabsContent value="queue">
           <OrderQueue
             orderQueue={orderQueue}
+            cancelledOrders={cancelledOrders}
             refreshQueue={refreshQueue}
             updateOrderStatus={updateOrderStatus}
             updateOrderItemState={updateOrderItemState}

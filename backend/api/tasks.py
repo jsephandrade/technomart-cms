@@ -360,7 +360,6 @@ def auto_expire_no_show_orders(limit: int = 50):
         from .views_orders import (
             canonical_status,
             _clear_auto_flow,
-            _is_order_fully_paid,
             _is_walk_in_channel,
             _is_guest_user,
             _safe_order,
@@ -405,8 +404,6 @@ def auto_expire_no_show_orders(limit: int = 50):
                     order.order_type
                 ):
                     continue
-                if _is_order_fully_paid(order):
-                    continue
 
                 meta = order.meta or {}
                 if meta.get("no_show_processed"):
@@ -423,6 +420,9 @@ def auto_expire_no_show_orders(limit: int = 50):
                 meta["no_show_processed"] = True
                 meta["no_show_processed_at"] = now_ts.isoformat()
                 meta["no_show_reason"] = "pickup_window_expired"
+                meta["cancel_reason"] = "pickup_window_expired"
+                meta["cancelled_at"] = now_ts.isoformat()
+                meta["cancelled_source"] = "system"
                 order.meta = meta
 
                 update_fields = ["status", "meta", "updated_at"]

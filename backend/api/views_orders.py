@@ -768,6 +768,18 @@ def _safe_order(o, with_items=True):
         except Exception:
             age_seconds = 0
 
+    meta = o.meta or {}
+    cancel_reason = (
+        meta.get("cancel_reason")
+        or meta.get("cancelReason")
+        or meta.get("no_show_reason")
+        or meta.get("noShowReason")
+        or ""
+    )
+    cancelled_at = meta.get("cancelled_at") or meta.get("cancelledAt") or None
+    cancelled_source = meta.get("cancelled_source") or meta.get("cancelledSource") or ""
+    cancelled_by = meta.get("cancelled_by") or meta.get("cancelledBy") or ""
+
     data = {
         "id": str(o.id),
         "orderNumber": o.order_number,
@@ -803,7 +815,11 @@ def _safe_order(o, with_items=True):
         "lastStationCode": o.last_station_code or "",
         "lateBySeconds": int(o.late_by_seconds or 0),
         "ageSeconds": age_seconds,
-        "meta": o.meta or {},
+        "meta": meta,
+        "cancelReason": cancel_reason,
+        "cancelledAt": cancelled_at,
+        "cancelledSource": cancelled_source,
+        "cancelledBy": cancelled_by,
         "phaseSequence": int(o.phase_sequence or 0),
         "phaseStartedAt": o.phase_started_at.isoformat()
         if o.phase_started_at
@@ -2046,6 +2062,23 @@ def order_status(request, oid):
             elif previous_canonical == "completed" and target_status != "completed":
                 o.completed_at = None
                 update_fields.append("completed_at")
+
+        cancel_reason = (
+            (payload.get("reason") or payload.get("cancelReason") or payload.get("cancel_reason") or "")
+            .strip()
+        )
+        if target_status == "cancelled" and (status_changed or cancel_reason):
+            meta = o.meta or {}
+            if cancel_reason:
+                meta["cancel_reason"] = cancel_reason
+            elif status_changed and not meta.get("cancel_reason"):
+                meta["cancel_reason"] = "manual_cancelled"
+            if not meta.get("cancelled_at"):
+                meta["cancelled_at"] = dj_tz.now().isoformat()
+            if actor and not meta.get("cancelled_by"):
+                meta["cancelled_by"] = str(getattr(actor, "id", "")) or meta.get("cancelled_by", "")
+            o.meta = meta
+            update_fields.append("meta")
 
         auto_fields: list[str] = []
 

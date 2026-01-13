@@ -13,6 +13,7 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
+from django.shortcuts import get_object_or_404
 from api.models import Order, OrderItem, MenuItem, PaymentTransaction, CheckoutSession
 from .serializers import OrderSerializer
 from notifications.models import Notification
@@ -276,8 +277,24 @@ import traceback
 def cancel_order(request, order_number):
     # Fetch order without checking user
     order = get_object_or_404(Order, order_number=order_number)
-    order.status = 'cancelled'
-    order.save()
+    update_fields = []
+    if order.status != 'cancelled':
+        order.status = 'cancelled'
+        update_fields.append('status')
+
+    meta = order.meta or {}
+    if not meta.get('cancel_reason'):
+        meta['cancel_reason'] = 'user_cancelled'
+    if not meta.get('cancelled_at'):
+        meta['cancelled_at'] = dj_tz.now().isoformat()
+    if not meta.get('cancelled_source'):
+        meta['cancelled_source'] = 'user'
+    order.meta = meta
+    update_fields.append('meta')
+
+    if 'updated_at' not in update_fields:
+        update_fields.append('updated_at')
+    order.save(update_fields=update_fields)
     return JsonResponse({'message': f'Order {order_number} cancelled successfully.'})
 @api_view(['GET'])
 @permission_classes([AllowAny])

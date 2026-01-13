@@ -276,6 +276,52 @@ const isOrderPaid = (order) => {
   return true;
 };
 
+const getCancelReason = (order) => {
+  if (!order) return '';
+  const meta = order.meta || {};
+  return (
+    order.cancelReason ||
+    order.cancel_reason ||
+    meta.cancel_reason ||
+    meta.cancelReason ||
+    meta.no_show_reason ||
+    meta.noShowReason ||
+    ''
+  );
+};
+
+const formatCancelReason = (reason) => {
+  const normalized = String(reason || '').trim();
+  if (!normalized) return '';
+  const key = normalized.toLowerCase();
+  const map = {
+    pickup_window_expired: 'Pickup window expired',
+    user_cancelled: 'Cancelled by customer',
+    manual_cancelled: 'Cancelled manually',
+    staff_cancelled: 'Cancelled by staff',
+    no_show: 'No show',
+  };
+  if (map[key]) return map[key];
+  return normalized
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+};
+
+const getCancelledTimestamp = (order) => {
+  const candidates = [
+    order?.cancelledAt,
+    order?.cancelled_at,
+    order?.meta?.cancelled_at,
+    order?.meta?.cancelledAt,
+    order?.updatedAt,
+    order?.updated_at,
+  ];
+  for (const value of candidates) {
+    if (value) return value;
+  }
+  return order?.timeReceived || order?.createdAt || order?.created_at || null;
+};
+
 const READY_STATUS_SET = new Set(['ready', 'staged', 'handoff']);
 
 const shouldDisableReadyAutoAdvance = (order, statusOverride = null) => {
@@ -349,6 +395,7 @@ const formatCountdown = (seconds) => {
 
 const OrderQueue = ({
   orderQueue,
+  cancelledOrders: cancelledOrdersProp,
   refreshQueue,
   updateOrderStatus,
   updateOrderAutoFlow,
@@ -405,15 +452,12 @@ const OrderQueue = ({
     );
   }, [queueOrders]);
 
-  const cancelledOrders = useMemo(
-    () =>
-      queueOrders.filter((order) =>
-        ['cancelled', 'canceled'].includes(
-          normalizeStatus(getOrderStatus(order))
-        )
-      ),
-    [queueOrders]
-  );
+  const cancelledOrders = useMemo(() => {
+    if (Array.isArray(cancelledOrdersProp)) return cancelledOrdersProp;
+    return queueOrders.filter((order) =>
+      ['cancelled', 'canceled'].includes(normalizeStatus(getOrderStatus(order)))
+    );
+  }, [cancelledOrdersProp, queueOrders]);
 
   const walkInOrders = useMemo(
     () => visibleOrders.filter((order) => getOrderChannel(order) === 'walk-in'),
@@ -651,6 +695,7 @@ const OrderQueue = ({
   );
 
   const formatTimeAgo = (input) => {
+    if (!input) return 'Unknown';
     const d = input instanceof Date ? input : new Date(input);
     const ts = d.getTime();
     if (Number.isNaN(ts)) return 'Unknown';
@@ -1252,8 +1297,8 @@ const OrderQueue = ({
                   order.customer_name ||
                   order.customer ||
                   'Walk-in customer';
-                const timestamp =
-                  order.timeReceived || order.createdAt || order.created_at;
+                const timestamp = getCancelledTimestamp(order);
+                const reasonLabel = formatCancelReason(getCancelReason(order));
                 return (
                   <div key={order.id} className="p-4 flex items-center gap-4">
                     <div className="flex-1">
@@ -1261,6 +1306,11 @@ const OrderQueue = ({
                       <p className="text-xs text-muted-foreground">
                         {customer}
                       </p>
+                      {reasonLabel ? (
+                        <p className="text-xs text-muted-foreground">
+                          Reason: {reasonLabel}
+                        </p>
+                      ) : null}
                       <p className="text-xs text-muted-foreground">
                         {formatTimeAgo(timestamp)}
                       </p>

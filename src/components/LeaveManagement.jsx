@@ -40,6 +40,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
+import { employeeService } from '@/api/services/employeeService';
 
 export default function LeaveManagement() {
   const { user, hasAnyRole } = useAuth();
@@ -61,7 +62,7 @@ export default function LeaveManagement() {
       suppressErrorToast: !shouldFetchLeaveRecords,
     }
   );
-  const { employees } = useEmployees();
+  const { employees, refetch: refetchEmployees } = useEmployees();
 
   const [filters, setFilters] = useState({
     employeeId: '_all',
@@ -134,11 +135,45 @@ export default function LeaveManagement() {
         toast.error('Employee, start and end dates are required');
         return;
       }
+      const ensureSelfEmployee = async () => {
+        if (selfEmployee?.id) return selfEmployee;
+        const name =
+          (user?.name || '').trim() || (user?.email || '').trim() || 'Employee';
+        const email = (user?.email || '').trim();
+        const role = String(user?.role || '').trim();
+        const roleLabel = role ? role[0].toUpperCase() + role.slice(1) : '';
+        try {
+          const created = await employeeService.createEmployeeWithSchedule({
+            name,
+            contact: email,
+            position: roleLabel,
+            status: 'active',
+            schedule: [],
+          });
+          const createdEmployee =
+            created?.employee ||
+            created?.data?.employee ||
+            created?.employeeProfile ||
+            null;
+          if (createdEmployee?.id) {
+            setEditing((prev) =>
+              prev ? { ...prev, employeeId: createdEmployee.id } : prev
+            );
+            refetchEmployees?.();
+            return createdEmployee;
+          }
+        } catch {}
+        return null;
+      };
       if (isAdmin && !editing.employeeId) {
         toast.error('Employee, start and end dates are required');
         return;
       }
-      if (!isAdmin && !selfEmployee?.id) {
+      let requester = selfEmployee;
+      if (!isAdmin && !requester?.id) {
+        requester = await ensureSelfEmployee();
+      }
+      if (!isAdmin && !requester?.id) {
         toast.error('No employee profile found. Please contact your manager.');
         return;
       }
@@ -149,7 +184,7 @@ export default function LeaveManagement() {
       };
       if (!isAdmin) {
         payload.status = 'pending';
-        payload.employeeId = selfEmployee.id;
+        payload.employeeId = requester.id;
       }
       if (!editing.id) await createRecord(payload);
       else await updateRecord(editing.id, payload);

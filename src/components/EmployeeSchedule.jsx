@@ -240,6 +240,17 @@ const EmployeeSchedule = () => {
     if (!attendanceUser) return '';
     return String(attendanceUser.employeeId || attendanceUser.id || '').trim();
   }, [attendanceUser]);
+  const todayScheduleEntries = useMemo(() => {
+    if (!schedule?.length) return [];
+    return schedule.filter((entry) => {
+      if (!entry) return false;
+      const entryDay = String(entry.day || '')
+        .trim()
+        .toLowerCase();
+      return Boolean(entryDay && entryDay === normalizedManilaDay);
+    });
+  }, [schedule, normalizedManilaDay]);
+
   const attendanceScheduleEntry = useMemo(() => {
     if (!attendanceUser || !schedule?.length) return null;
     const targetId = attendanceEmployeeId;
@@ -259,8 +270,20 @@ const EmployeeSchedule = () => {
       return entryEmployeeId === targetId;
     });
   }, [attendanceEmployeeId, attendanceUser, schedule, normalizedManilaDay]);
+
+  const resolvedAttendanceScheduleEntry = useMemo(() => {
+    if (attendanceScheduleEntry) return attendanceScheduleEntry;
+    if (isStaffOnly && todayScheduleEntries.length > 0) {
+      return [...todayScheduleEntries].sort((a, b) =>
+        String(a?.startTime || '').localeCompare(String(b?.startTime || ''))
+      )[0];
+    }
+    return null;
+  }, [attendanceScheduleEntry, isStaffOnly, todayScheduleEntries]);
   const hasAssignedShift = useMemo(() => {
-    if (!attendanceEmployeeId || !schedule?.length) return false;
+    if (!schedule?.length) return false;
+    if (isStaffOnly && schedule.length > 0) return true;
+    if (!attendanceEmployeeId) return false;
     return schedule.some((entry) => {
       if (!entry) return false;
       const entryEmployeeId = String(
@@ -271,7 +294,7 @@ const EmployeeSchedule = () => {
       ).trim();
       return entryEmployeeId === attendanceEmployeeId;
     });
-  }, [attendanceEmployeeId, schedule]);
+  }, [attendanceEmployeeId, isStaffOnly, schedule]);
 
   const displayEmployees = useMemo(
     () =>
@@ -668,8 +691,8 @@ const EmployeeSchedule = () => {
   };
 
   const hasShiftToday = useMemo(
-    () => Boolean(attendanceScheduleEntry),
-    [attendanceScheduleEntry]
+    () => Boolean(resolvedAttendanceScheduleEntry),
+    [resolvedAttendanceScheduleEntry]
   );
 
   const autoBuildPlan = useMemo(() => {
@@ -920,7 +943,7 @@ const EmployeeSchedule = () => {
 
     if (scheduleLoading) return;
 
-    if (!attendanceScheduleEntry) {
+    if (!resolvedAttendanceScheduleEntry) {
       clearAttendanceIndicators();
       return;
     }
@@ -937,7 +960,7 @@ const EmployeeSchedule = () => {
     hasShiftToday,
     location,
     scheduleLoading,
-    attendanceScheduleEntry,
+    resolvedAttendanceScheduleEntry,
     navigate,
   ]);
 
@@ -964,7 +987,7 @@ const EmployeeSchedule = () => {
       );
     };
 
-    if (!attendanceScheduleEntry) {
+    if (!resolvedAttendanceScheduleEntry) {
       clearPopupState();
       return;
     }
@@ -982,7 +1005,7 @@ const EmployeeSchedule = () => {
     location.search,
     location.state,
     scheduleLoading,
-    attendanceScheduleEntry,
+    resolvedAttendanceScheduleEntry,
     navigate,
   ]);
 
@@ -1006,7 +1029,7 @@ const EmployeeSchedule = () => {
     }
 
     if (scheduleLoading) return;
-    if (!attendanceScheduleEntry) return;
+    if (!resolvedAttendanceScheduleEntry) return;
     if (attendanceDialogOpen || attendanceAutoOpenDismissed.current) return;
 
     attendanceAutoOpenDismissed.current = true;
@@ -1018,14 +1041,14 @@ const EmployeeSchedule = () => {
     hasShiftToday,
     location.pathname,
     scheduleLoading,
-    attendanceScheduleEntry,
+    resolvedAttendanceScheduleEntry,
   ]);
 
   useEffect(() => {
-    if (!attendanceScheduleEntry && attendanceDialogOpen) {
+    if (!resolvedAttendanceScheduleEntry && attendanceDialogOpen) {
       setAttendanceDialogOpen(false);
     }
-  }, [attendanceDialogOpen, attendanceScheduleEntry]);
+  }, [attendanceDialogOpen, resolvedAttendanceScheduleEntry]);
 
   const lookupEmployeeName = (employeeId) =>
     displayEmployees.find((e) => e?.id === employeeId)?.name || 'Unknown';
@@ -2020,7 +2043,7 @@ const EmployeeSchedule = () => {
         </DialogContent>
       </Dialog>
 
-      {attendanceUser && attendanceScheduleEntry ? (
+      {attendanceUser && resolvedAttendanceScheduleEntry ? (
         <Dialog
           open={attendanceDialogOpen}
           onOpenChange={handleAttendanceDialogChange}
@@ -2034,7 +2057,7 @@ const EmployeeSchedule = () => {
             </DialogHeader>
             <AttendanceTimeCard
               user={attendanceUser}
-              dailySchedule={attendanceScheduleEntry}
+              dailySchedule={resolvedAttendanceScheduleEntry}
             />
           </DialogContent>
         </Dialog>

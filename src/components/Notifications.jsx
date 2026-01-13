@@ -149,9 +149,6 @@ const Notifications = () => {
     };
   }, []);
   const markAllAsRead = async () => {
-    try {
-      await notificationsService.markAllRead?.();
-    } catch {}
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
   const markAsRead = async (id) => {

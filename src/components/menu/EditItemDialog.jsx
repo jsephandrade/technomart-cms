@@ -103,7 +103,8 @@ const EditItemDialog = ({
     setSaving(false);
     if (!paxDefaultedRef.current) {
       const resolved = String(resolvedPax ?? '').trim();
-      if (!resolved) {
+      const resolvedNum = resolved === '' ? Number.NaN : Number(resolved);
+      if (!resolved || !Number.isFinite(resolvedNum) || resolvedNum <= 0) {
         paxDefaultedRef.current = true;
         setItem({ ...item, estimatedPax: '60' });
       } else if (!String(item?.estimatedPax ?? '').trim()) {

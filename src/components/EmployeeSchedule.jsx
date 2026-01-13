@@ -170,6 +170,7 @@ const EmployeeSchedule = () => {
   const canManage = hasAnyRole(['manager']);
   const isAdmin = hasAnyRole(['admin']);
   const isStaffOnly = hasAnyRole(['staff']) && !canManage;
+  const canViewAttendanceDialog = hasAnyRole(['staff', 'manager']);
   const allowAttendanceWithoutShift = isStaffOnly;
   const ATTENDANCE_TAB_VALUE = 'attendance-records';
   const LEAVE_TAB_VALUE = 'leave-management';
@@ -235,11 +236,13 @@ const EmployeeSchedule = () => {
   const normalizedManilaDay = String(getManilaDayName() || '')
     .trim()
     .toLowerCase();
+  const attendanceEmployeeId = useMemo(() => {
+    if (!attendanceUser) return '';
+    return String(attendanceUser.employeeId || attendanceUser.id || '').trim();
+  }, [attendanceUser]);
   const attendanceScheduleEntry = useMemo(() => {
     if (!attendanceUser || !schedule?.length) return null;
-    const targetId = String(
-      attendanceUser.employeeId || attendanceUser.id || ''
-    ).trim();
+    const targetId = attendanceEmployeeId;
     if (!targetId) return null;
     return schedule.find((entry) => {
       if (!entry) return false;
@@ -255,7 +258,20 @@ const EmployeeSchedule = () => {
       ).trim();
       return entryEmployeeId === targetId;
     });
-  }, [attendanceUser, schedule, normalizedManilaDay]);
+  }, [attendanceEmployeeId, attendanceUser, schedule, normalizedManilaDay]);
+  const hasAssignedShift = useMemo(() => {
+    if (!attendanceEmployeeId || !schedule?.length) return false;
+    return schedule.some((entry) => {
+      if (!entry) return false;
+      const entryEmployeeId = String(
+        entry.employeeId ||
+          entry.employee?.id ||
+          entry.employee?.employeeId ||
+          ''
+      ).trim();
+      return entryEmployeeId === attendanceEmployeeId;
+    });
+  }, [attendanceEmployeeId, schedule]);
 
   const displayEmployees = useMemo(
     () =>
@@ -865,7 +881,7 @@ const EmployeeSchedule = () => {
   }, [canManage]);
 
   useEffect(() => {
-    if (!isStaffOnly) return;
+    if (!canViewAttendanceDialog) return;
 
     const searchParams = new URLSearchParams(location.search || '');
     const attendanceParam = (
@@ -917,8 +933,8 @@ const EmployeeSchedule = () => {
   }, [
     attendanceDialogOpen,
     allowAttendanceWithoutShift,
+    canViewAttendanceDialog,
     hasShiftToday,
-    isStaffOnly,
     location,
     scheduleLoading,
     attendanceScheduleEntry,
@@ -978,7 +994,7 @@ const EmployeeSchedule = () => {
   };
 
   useEffect(() => {
-    if (!isStaffOnly) return;
+    if (!canViewAttendanceDialog) return;
 
     const normalizedPath = (location.pathname || '').replace(/\/+$/, '') || '/';
     const matchesEmployeesRoute =
@@ -998,8 +1014,8 @@ const EmployeeSchedule = () => {
   }, [
     attendanceDialogOpen,
     allowAttendanceWithoutShift,
+    canViewAttendanceDialog,
     hasShiftToday,
-    isStaffOnly,
     location.pathname,
     scheduleLoading,
     attendanceScheduleEntry,
@@ -1393,7 +1409,7 @@ const EmployeeSchedule = () => {
 
   const schedulePane = (
     <div className="space-y-6">
-      {!attendanceScheduleEntry && attendanceUser ? (
+      {attendanceUser && !scheduleLoading && !hasAssignedShift ? (
         <div className="rounded-2xl border border-destructive/60 bg-destructive/5 p-4 text-sm text-destructive shadow-sm">
           <p className="font-semibold text-destructive">
             No assigned shift detected

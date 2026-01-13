@@ -694,6 +694,40 @@ def _parse_uuid(val):
         return None
 
 
+def _extract_ingredient_requirements(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+    requirements = []
+    for entry in raw:
+        if not entry:
+            continue
+        qty = 1
+        if isinstance(entry, dict):
+            item_id = (
+                entry.get("id")
+                or entry.get("menuItemId")
+                or entry.get("itemId")
+                or entry.get("menu_item_id")
+            )
+            qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count") or 1
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                qty = 1
+        else:
+            item_id = entry
+        if not item_id:
+            continue
+        qty = max(1, qty)
+        requirements.append((str(item_id), qty))
+    return requirements
+
+
 def _safe_item(i):
     state = canonical_item_state(getattr(i, "state", None))
     now_ts = dj_tz.now()
@@ -928,6 +962,15 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
                 menu_item = blueprint.get("menu_item")
                 qty = int(blueprint.get("quantity") or 0)
                 if not menu_item or qty <= 0:
+                    continue
+                requirements = _extract_ingredient_requirements(
+                    getattr(menu_item, "ingredients", []) or []
+                )
+                if requirements:
+                    for ingredient_id, multiplier in requirements:
+                        if ingredient_id == str(menu_item.id):
+                            continue
+                        totals[ingredient_id] += qty * max(1, int(multiplier or 1))
                     continue
                 totals[str(menu_item.id)] += qty
             if not totals:

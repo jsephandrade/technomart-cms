@@ -347,13 +347,41 @@ const MenuManagement = () => {
         return;
       }
       const map = {};
+      const comboRequirements = {};
       menuItems.forEach((item) => {
         if (!item?.id) return;
         const key = String(item.id);
         const estimated = parseEstimatedPax(item);
         map[key] = { estimated, remaining: estimated };
+        const raw =
+          item.ingredients ?? item.ingredientIds ?? item.ingredient_ids ?? [];
+        if (Array.isArray(raw) && raw.length > 0) {
+          const requirements = raw
+            .map((entry) => {
+              if (!entry) return null;
+              if (typeof entry === 'object') {
+                const id =
+                  entry.id ||
+                  entry.menuItemId ||
+                  entry.itemId ||
+                  entry.menu_item_id ||
+                  null;
+                if (!id) return null;
+                const qtyRaw = entry.quantity || entry.qty || entry.count || 1;
+                const qty = Number.isFinite(Number(qtyRaw))
+                  ? Math.max(1, Math.floor(Number(qtyRaw)))
+                  : 1;
+                return { id: String(id), qty };
+              }
+              return { id: String(entry), qty: 1 };
+            })
+            .filter(Boolean);
+          if (requirements.length > 0) {
+            comboRequirements[key] = requirements;
+          }
+        }
       });
-      initPaxState(map);
+      initPaxState(map, { combos: comboRequirements });
     };
     buildMap();
   }, [menuItems]);

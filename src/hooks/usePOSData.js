@@ -75,6 +75,27 @@ export const usePOSData = () => {
           obj?.ingredients ?? obj?.ingredientIds ?? obj?.ingredient_ids;
         return Array.isArray(raw) ? raw : [];
       };
+      const resolveIngredientRequirements = (obj) =>
+        resolveIngredients(obj)
+          .map((entry) => {
+            if (!entry) return null;
+            if (typeof entry === 'object') {
+              const id =
+                entry.id ||
+                entry.menuItemId ||
+                entry.itemId ||
+                entry.menu_item_id ||
+                null;
+              if (!id) return null;
+              const qtyRaw = entry.quantity || entry.qty || entry.count || 1;
+              const qty = Number.isFinite(Number(qtyRaw))
+                ? Math.max(1, Math.floor(Number(qtyRaw)))
+                : 1;
+              return { id: String(id), qty };
+            }
+            return { id: String(entry), qty: 1 };
+          })
+          .filter(Boolean);
       const items = (itemsRes?.data || []).map((it) => {
         const catName = getCatName(it.category) || 'General';
         const image = toImage(it);
@@ -151,6 +172,7 @@ export const usePOSData = () => {
       });
 
       const estimates = {};
+      const comboRequirements = {};
       normalizedItems.forEach((item) => {
         const key = String(item.id);
         const estimated = parseEstimatedPax(item);
@@ -158,8 +180,12 @@ export const usePOSData = () => {
           estimated,
           remaining: estimated,
         };
+        const requirements = resolveIngredientRequirements(item);
+        if (requirements.length > 0) {
+          comboRequirements[key] = requirements;
+        }
       });
-      initPaxState(estimates);
+      initPaxState(estimates, { combos: comboRequirements });
 
       // Build category list with 'All' first, then by sort order.
       const byCat = new Map();

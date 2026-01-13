@@ -126,6 +126,8 @@ const POS = () => {
     const orderSnapshot = (currentOrder || []).map((item) => ({
       menuItemId: item.menuItemId || item.id,
       quantity: item.quantity || 0,
+      ingredients:
+        item.ingredients || item.ingredientIds || item.ingredient_ids,
     }));
     const { accepted, promise } = processPaymentInBackground(paymentDetails);
     if (!accepted) {

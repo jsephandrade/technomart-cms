@@ -61,9 +61,17 @@ const EditItemDialog = ({
   const priceInvalid =
     hasPriceValue && (!Number.isFinite(parsedPrice) || parsedPrice < 0);
   const priceError = submitted && priceInvalid;
-  const paxValue = useMemo(
-    () => String(item?.estimatedPax ?? '').trim(),
+  const resolvedPax = useMemo(
+    () =>
+      item?.estimatedPax ??
+      item?.paxPerPreparation ??
+      item?.pax_per_preparation ??
+      '',
     [item]
+  );
+  const paxValue = useMemo(
+    () => String(resolvedPax ?? '').trim(),
+    [resolvedPax]
   );
   const parsedPax = paxValue === '' ? Number.NaN : Number(paxValue);
   const paxInvalid =
@@ -93,9 +101,15 @@ const EditItemDialog = ({
     if (!itemId) return;
     setSubmitted(false);
     setSaving(false);
-    if (!paxDefaultedRef.current && !String(item?.estimatedPax ?? '').trim()) {
-      paxDefaultedRef.current = true;
-      setItem({ ...item, estimatedPax: '60' });
+    if (!paxDefaultedRef.current) {
+      const resolved = String(resolvedPax ?? '').trim();
+      if (!resolved) {
+        paxDefaultedRef.current = true;
+        setItem({ ...item, estimatedPax: '60' });
+      } else if (!String(item?.estimatedPax ?? '').trim()) {
+        paxDefaultedRef.current = true;
+        setItem({ ...item, estimatedPax: resolved });
+      }
     }
     setTimeout(() => {
       nameInputRef.current?.focus?.();
@@ -343,7 +357,7 @@ const EditItemDialog = ({
                       event.preventDefault();
                     }
                   }}
-                  placeholder="e.g., 80"
+                  placeholder="60"
                   className={cn(paxError && 'border-destructive')}
                   disabled={saving}
                 />

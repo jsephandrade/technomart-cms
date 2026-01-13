@@ -216,13 +216,49 @@ const getPickupTimestamp = (order) => {
   return pickupDate ? pickupDate.getTime() : Number.POSITIVE_INFINITY;
 };
 
-const formatPickupTime = (order) => {
+const resolvePickupWindowMinutes = () => {
+  try {
+    const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+    const raw = env?.VITE_ORDER_PICKUP_WINDOW_MINUTES;
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  } catch {}
+  return 30;
+};
+
+const resolvePickupGraceMinutes = () => {
+  try {
+    const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+    const raw = env?.VITE_ORDER_PICKUP_GRACE_MINUTES;
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  } catch {}
+  return 15;
+};
+
+const formatPickupWindowRange = (order) => {
   const pickupDate = resolvePickupDate(order);
-  if (!pickupDate) return '—';
-  return pickupDate.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  if (!pickupDate) return 'Unknown';
+  const windowMinutes = resolvePickupWindowMinutes();
+  const endDate = new Date(pickupDate.getTime() + windowMinutes * 60 * 1000);
+  const formatTime = (value) =>
+    value.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  return `${formatTime(pickupDate)} - ${formatTime(endDate)}`;
+};
+
+const getGraceCountdownSeconds = (order, nowMs) => {
+  const pickupDate = resolvePickupDate(order);
+  if (!pickupDate) return null;
+  const windowMinutes = resolvePickupWindowMinutes();
+  const graceMinutes = resolvePickupGraceMinutes();
+  if (!windowMinutes || !graceMinutes) return null;
+  const windowEndMs = pickupDate.getTime() + windowMinutes * 60 * 1000;
+  const graceEndMs = windowEndMs + graceMinutes * 60 * 1000;
+  if (nowMs < windowEndMs || nowMs >= graceEndMs) return null;
+  return Math.ceil((graceEndMs - nowMs) / 1000);
 };
 
 const isOrderPaid = (order) => {
@@ -1044,7 +1080,8 @@ const OrderQueue = ({
                     : 'border-amber-200 bg-amber-100 text-amber-800';
                 const paymentMethodLabel =
                   formatPaymentMethodLabel(paymentMethod) || 'Cash';
-                const pickupTimeLabel = formatPickupTime(order);
+                const pickupTimeLabel = formatPickupWindowRange(order);
+                const graceCountdown = getGraceCountdownSeconds(order, nowTs);
                 const completeDisabled =
                   statusUpdating[order.id] || !allItemsChecked || !isPaid;
                 const completeTitle = !allItemsChecked
@@ -1123,6 +1160,11 @@ const OrderQueue = ({
                         {pickupTimeLabel}
                       </span>
                     </div>
+                    {graceCountdown !== null && (
+                      <div className="text-xs text-amber-600">
+                        Grace period ends in {formatCountdown(graceCountdown)}
+                      </div>
+                    )}
 
                     <div className="bg-muted/50 p-3 rounded-md">
                       {(Array.isArray(order.items) ? order.items : []).map(

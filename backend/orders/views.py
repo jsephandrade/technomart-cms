@@ -22,7 +22,8 @@ from datetime import timedelta
 from django.utils import timezone as dj_tz
 import uuid
 from menu.models import MenuItem  # adjust import to your menu app
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 
 PAYMENT_CASH_ALIASES = {
     "cash",
@@ -273,7 +274,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import traceback
-@require_POST
+@csrf_exempt
+@require_http_methods(["POST", "DELETE"])
 def cancel_order(request, order_number):
     # Fetch order without checking user
     order = get_object_or_404(Order, order_number=order_number)

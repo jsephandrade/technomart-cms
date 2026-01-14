@@ -47,7 +47,7 @@ export default function LeaveManagement() {
   const isAdmin = hasAnyRole(['admin']);
   const isManager = hasAnyRole(['manager']) && !isAdmin;
   const isRequester = !isAdmin;
-  const shouldFetchLeaveRecords = isAdmin || isManager;
+  const shouldFetchLeaveRecords = isAdmin || isManager || isRequester;
   const {
     records,
     loading,
@@ -230,9 +230,16 @@ export default function LeaveManagement() {
     () => (records || []).filter((record) => record.status === 'pending'),
     [records]
   );
-  const currentManagerEmployeeId = selfEmployee?.id
-    ? String(selfEmployee.id)
-    : null;
+  const selfEmployeeId = selfEmployee?.id ? String(selfEmployee.id) : null;
+  const requesterRecords = useMemo(() => {
+    if (!selfEmployeeId) return records || [];
+    return (records || []).filter((record) => {
+      const recordEmployeeId = record?.employeeId
+        ? String(record.employeeId)
+        : '';
+      return !recordEmployeeId || recordEmployeeId === selfEmployeeId;
+    });
+  }, [records, selfEmployeeId]);
 
   useEffect(() => {
     if (!isAdmin && selfEmployee?.id) {
@@ -256,7 +263,7 @@ export default function LeaveManagement() {
     <div className="space-y-6 animate-fade-in">
       {isRequester && (
         <FeaturePanelCard
-          badgeText="Pending Leave Requests"
+          badgeText="Leave Requests"
           badgeIcon={ClipboardList}
           description="Review or monitor leave requests."
           className="w-full"
@@ -299,8 +306,8 @@ export default function LeaveManagement() {
                       )}
                     {(managerRequests || []).map((request) => {
                       const isOwnRequest =
-                        currentManagerEmployeeId &&
-                        String(request.employeeId) === currentManagerEmployeeId;
+                        selfEmployeeId &&
+                        String(request.employeeId) === selfEmployeeId;
                       return (
                         <TableRow key={request.id}>
                           <TableCell>
@@ -366,10 +373,76 @@ export default function LeaveManagement() {
               )}
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Your leave requests will be routed to your manager. Use the Apply
-              for Leave button above to open the request form.
-            </p>
+            <>
+              <p className="text-sm text-muted-foreground">
+                Your leave requests will be routed to your manager. Use the
+                Apply for Leave button above to open the request form.
+              </p>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Start</TableHead>
+                      <TableHead>End</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Reason</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(!requesterRecords?.length ||
+                      requesterRecords.length === 0) &&
+                      !loading && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            className="text-center text-sm text-muted-foreground"
+                          >
+                            No leave requests yet.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    {(requesterRecords || []).map((request) => (
+                      <TableRow key={request.id}>
+                        <TableCell className="capitalize">
+                          {request.type}
+                        </TableCell>
+                        <TableCell>{request.startDate}</TableCell>
+                        <TableCell>{request.endDate}</TableCell>
+                        <TableCell className="capitalize">
+                          <Badge
+                            variant="outline"
+                            className={
+                              request.status === 'approved'
+                                ? 'border-green-300 text-green-700'
+                                : request.status === 'pending'
+                                  ? 'border-amber-300 text-amber-700'
+                                  : request.status === 'rejected'
+                                    ? 'border-red-300 text-red-700'
+                                    : ''
+                            }
+                          >
+                            {request.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[240px] truncate">
+                          {request.reason || '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {loading && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                  Loading...
+                </div>
+              )}
+            </>
           )}
         </FeaturePanelCard>
       )}

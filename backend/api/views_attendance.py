@@ -782,15 +782,27 @@ def leaves(request):
     try:
         from .models import LeaveRecord, Employee
         if request.method == "GET":
-            # Only managers/admins can view leave records
-            if not _has_permission(actor, "leave.manage"):
-                return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+            can_manage = _has_permission(actor, "leave.manage")
             employee_id = request.GET.get("employeeId")
             status = (request.GET.get("status") or "").lower()
             type_v = (request.GET.get("type") or "").lower()
             qs = LeaveRecord.objects.select_related("employee").all()
-            if employee_id:
-                qs = qs.filter(employee_id=employee_id)
+            if not can_manage:
+                self_employee, self_employee_id = _employee_for_actor(
+                    actor, allow_fallback=True
+                )
+                if not self_employee_id:
+                    return JsonResponse({"success": True, "data": []})
+                allowed_ids = _identifier_variants(self_employee_id) or {
+                    str(self_employee_id)
+                }
+                qs = qs.filter(employee_id__in=allowed_ids)
+            elif employee_id:
+                candidate_ids = _identifier_variants(employee_id)
+                if candidate_ids:
+                    qs = qs.filter(employee_id__in=candidate_ids)
+                else:
+                    qs = qs.filter(employee_id=employee_id)
             if status:
                 qs = qs.filter(status=status)
             if type_v:

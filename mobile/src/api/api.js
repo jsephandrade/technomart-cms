@@ -329,12 +329,23 @@ export const loginWithGoogle = async ({ credential }) => {
 // --------------------
 // Feedback API
 // --------------------
-export const sendFeedback = async ({ category, message }) => {
+export const sendFeedback = async ({ category, message, rating }) => {
   try {
-    const response = await axios.post(`${BASE_URL_FEEDBACK}/api/feedback/`, {
-      category,
-      message,
-    });
+    const token = await getValidToken();
+    if (!token) {
+      throw new Error('Login required to send feedback.');
+    }
+    const response = await axios.post(
+      `${BASE_URL_FEEDBACK}/api/feedback/`,
+      {
+        category,
+        message,
+        rating,
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
     return response.data;
   } catch (error) {
     console.error('Error sending feedback:', error.response || error.message);

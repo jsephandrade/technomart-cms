@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { sendFeedback } from '../../api/api';
 
@@ -42,6 +42,7 @@ export default function ShareFeedbackScreen() {
 
   const [text, setText] = useState('');
   const [category, setCategory] = useState('Other');
+  const [rating, setRating] = useState(5);
   const [loading, setLoading] = useState(false);
 
   const remaining = MAX - text.length;
@@ -52,7 +53,7 @@ export default function ShareFeedbackScreen() {
 
     setLoading(true);
     try {
-      await sendFeedback({ category, message: text.trim() });
+      await sendFeedback({ category, message: text.trim(), rating });
       Alert.alert('Thanks!', 'Your feedback was sent. We appreciate it.');
       router.back();
     } catch (err) {
@@ -115,6 +116,28 @@ export default function ShareFeedbackScreen() {
                 />
               ))}
             </View>
+          </View>
+
+          {/* Rating Card */}
+          <View style={[styles.card, styles.visibleCard]}>
+            <Text style={styles.cardTitle}>Rating</Text>
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  onPress={() => setRating(value)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rate ${value} star`}
+                >
+                  <Ionicons
+                    name={value <= rating ? 'star' : 'star-outline'}
+                    size={26}
+                    color={value <= rating ? '#F59E0B' : '#D1D5DB'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.ratingHint}>{rating} out of 5 stars</Text>
           </View>
 
           {/* Feedback Input */}
@@ -218,6 +241,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0f172a',
     marginBottom: 8,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  ratingHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#6B7280',
   },
   grayText: { color: '#6b7280', fontSize: 14 },
   chip: {

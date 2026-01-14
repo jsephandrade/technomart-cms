@@ -4,8 +4,24 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from api.models import AppUser
+from api.views_common import _actor_from_request
 from .models import Feedback
 from .serializers import FeedbackSerializer
+
+def _resolve_feedback_user(actor):
+    if isinstance(actor, AppUser):
+        return actor
+    if isinstance(actor, dict):
+        actor_id = actor.get('id')
+        actor_email = (actor.get('email') or '').lower().strip()
+        if actor_id:
+            user = AppUser.objects.filter(id=actor_id).first()
+            if user:
+                return user
+        if actor_email:
+            return AppUser.objects.filter(email=actor_email).first()
+    return None
 
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
@@ -21,9 +37,18 @@ def feedback_list_create(request):
         return Response(serializer.data)
 
     elif request.method == 'POST':
+        actor, error_response = _actor_from_request(request)
+        if error_response is not None:
+            return error_response
+        feedback_user = _resolve_feedback_user(actor)
+        if feedback_user is None:
+            return Response(
+                {"detail": "Authentication required to submit feedback."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         serializer = FeedbackSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(user=feedback_user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

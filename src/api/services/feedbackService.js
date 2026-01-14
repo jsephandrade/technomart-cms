@@ -5,7 +5,12 @@ function normalize(item) {
   return {
     id: String(item.id),
     customerName:
-      item.customerName || item.name || item.customer_name || 'Anonymous',
+      item.customerName ||
+      item.name ||
+      item.user_name ||
+      item.user?.name ||
+      item.customer_name ||
+      'Anonymous',
     rating: Number(item.rating || 0),
     comment: item.comment || item.message || '',
     // UI expects `date`; mock has `createdAt`
@@ -22,7 +27,12 @@ function normalize(item) {
     // Keep passthrough fields if present
     orderNumber: item.orderNumber || null,
     category: item.category || null,
-    email: item.email || item.customer_email || null,
+    email:
+      item.email ||
+      item.customer_email ||
+      item.user_email ||
+      item.user?.email ||
+      null,
   };
 }
 
@@ -50,6 +60,10 @@ class FeedbackService {
     const payload = {
       category: feedbackData.category || '',
       message: feedbackData.comment || feedbackData.message || '',
+      rating:
+        typeof feedbackData.rating === 'number'
+          ? feedbackData.rating
+          : undefined,
     };
     const res = await apiClient.post('/feedback/', payload);
     return normalize(res?.data || res);

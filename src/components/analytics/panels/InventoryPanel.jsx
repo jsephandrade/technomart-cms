@@ -72,7 +72,7 @@ export default function InventoryPanel() {
           fill = '#f59e0b'; // Low - Orange
           status = 'Low';
         } else if (ratio <= 2.0) {
-          fill = '#f07f13'; // Medium - Orange
+          fill = '#3b82f6'; // Medium - Blue
           status = 'Medium';
         } else {
           fill = '#10b981'; // Healthy - Green
@@ -113,7 +113,7 @@ export default function InventoryPanel() {
     return [
       { name: 'Critical', value: critical, fill: '#dc2626' },
       { name: 'Low', value: low, fill: '#f59e0b' },
-      { name: 'Medium', value: medium, fill: '#f07f13' },
+      { name: 'Medium', value: medium, fill: '#3b82f6' },
       { name: 'Healthy', value: healthy, fill: '#10b981' },
     ];
   }, [inventoryData]);

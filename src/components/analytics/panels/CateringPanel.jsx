@@ -435,12 +435,12 @@ export default function CateringPanel() {
                     >
                       <stop
                         offset="5%"
-                        stopColor="hsl(var(--primary))"
+                        stopColor="hsl(var(--chart-primary))"
                         stopOpacity={0.4}
                       />
                       <stop
                         offset="95%"
-                        stopColor="hsl(var(--primary))"
+                        stopColor="hsl(var(--chart-primary))"
                         stopOpacity={0}
                       />
                     </linearGradient>
@@ -482,7 +482,7 @@ export default function CateringPanel() {
                     type="monotone"
                     dataKey="revenue"
                     name="Revenue"
-                    stroke="hsl(var(--primary))"
+                    stroke="hsl(var(--chart-primary))"
                     strokeWidth={3}
                     fill="url(#revenueAreaGrad)"
                     fillOpacity={1}
@@ -534,12 +534,12 @@ export default function CateringPanel() {
                     >
                       <stop
                         offset="0%"
-                        stopColor="hsl(var(--primary))"
+                        stopColor="hsl(var(--chart-primary))"
                         stopOpacity={1}
                       />
                       <stop
                         offset="100%"
-                        stopColor="hsl(var(--primary))"
+                        stopColor="hsl(var(--chart-primary))"
                         stopOpacity={0.6}
                       />
                     </linearGradient>

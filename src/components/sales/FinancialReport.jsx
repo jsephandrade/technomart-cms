@@ -4,7 +4,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
@@ -16,12 +16,16 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from 'recharts';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) => {
+const FinancialReport = ({
+  dailySalesData,
+  monthlyComparison,
+  peakHoursData,
+}) => {
   const generateFinancialReport = () => {
     const doc = new jsPDF();
     const currentDate = new Date().toLocaleDateString();
@@ -36,7 +40,10 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
     doc.setFontSize(16);
     doc.text('Financial Summary', 20, 50);
 
-    const totalSales = dailySalesData.reduce((acc, sale) => acc + sale.total, 0);
+    const totalSales = dailySalesData.reduce(
+      (acc, sale) => acc + sale.total,
+      0
+    );
     const totalOrders = dailySalesData.length;
     const avgOrderValue = totalSales / totalOrders;
 
@@ -76,9 +83,7 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
         <Card>
           <CardHeader>
             <CardTitle>Daily Sales</CardTitle>
-            <CardDescription>
-              Sales data for the last 7 days
-            </CardDescription>
+            <CardDescription>Sales data for the last 7 days</CardDescription>
           </CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -99,7 +104,7 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
                 <Line
                   type="monotone"
                   dataKey="total"
-                  stroke="hsl(var(--primary))"
+                  stroke="hsl(var(--chart-primary))"
                   activeDot={{
                     r: 8,
                   }}
@@ -113,9 +118,7 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
         <Card>
           <CardHeader>
             <CardTitle>Monthly Performance</CardTitle>
-            <CardDescription>
-              6-month sales and order trends
-            </CardDescription>
+            <CardDescription>6-month sales and order trends</CardDescription>
           </CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -136,7 +139,7 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
                 <Line
                   type="monotone"
                   dataKey="sales"
-                  stroke="hsl(var(--primary))"
+                  stroke="hsl(var(--chart-primary))"
                   strokeWidth={2}
                   name="Sales (₱)"
                 />
@@ -156,9 +159,7 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
       <Card>
         <CardHeader>
           <CardTitle>Peak Hours Analysis</CardTitle>
-          <CardDescription>
-            Busiest times and revenue patterns
-          </CardDescription>
+          <CardDescription>Busiest times and revenue patterns</CardDescription>
         </CardHeader>
         <CardContent className="h-80">
           <ResponsiveContainer width="100%" height="100%">
@@ -179,7 +180,7 @@ const FinancialReport = ({ dailySalesData, monthlyComparison, peakHoursData }) =
               <Line
                 type="monotone"
                 dataKey="sales"
-                stroke="hsl(var(--primary))"
+                stroke="hsl(var(--chart-primary))"
                 strokeWidth={2}
                 name="Sales (₱)"
               />

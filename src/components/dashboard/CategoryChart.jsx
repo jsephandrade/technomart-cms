@@ -40,7 +40,7 @@ const CategoryChart = ({
   // Show empty state if no data
   if (!data || data.length === 0) {
     return (
-      <Card className="border-0 bg-gradient-to-br from-primary/5 to-primary/10 dark:from-primary/20 dark:to-primary/10 hover:shadow-lg transition-all duration-300">
+      <Card className="border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 dark:from-blue-950/20 dark:to-blue-900/10 hover:shadow-lg transition-all duration-300">
         <CardHeader className="pb-4">
           <div className="flex items-start justify-between">
             <div>
@@ -68,7 +68,7 @@ const CategoryChart = ({
   }
 
   return (
-    <Card className="border-0 bg-gradient-to-br from-primary/5 to-primary/10 dark:from-primary/20 dark:to-primary/10 hover:shadow-lg transition-all duration-300">
+    <Card className="border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 dark:from-blue-950/20 dark:to-blue-900/10 hover:shadow-lg transition-all duration-300">
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between">
           <div>
@@ -135,7 +135,7 @@ const CategoryChart = ({
               name={timeRangeLabel}
               radius={[6, 6, 0, 0]}
               maxBarSize={24}
-              fill="hsl(var(--primary))"
+              fill="hsl(var(--chart-primary))"
               isAnimationActive={true}
               animationDuration={800}
               animationEasing="ease-out"
@@ -147,7 +147,7 @@ const CategoryChart = ({
                 style={{
                   fontSize: 10,
                   fontWeight: 600,
-                  fill: 'hsl(var(--primary))',
+                  fill: 'hsl(var(--chart-primary))',
                 }}
               />
             </Bar>

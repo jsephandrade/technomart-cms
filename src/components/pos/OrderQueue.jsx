@@ -786,7 +786,7 @@ const OrderQueue = ({
       case 'in_progress':
       case 'in-progress':
       case 'in_prep':
-        return 'bg-primary/10 text-primary border-primary/20';
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'ready':
       case 'staged':
         return 'bg-green-100 text-green-800 border-green-200';
@@ -1049,7 +1049,7 @@ const OrderQueue = ({
             <div className="flex items-center gap-2">
               <Badge
                 variant="outline"
-                className="bg-primary/10 text-primary border-primary/20"
+                className="bg-blue-100 text-blue-800 border-blue-200"
               >
                 {onlineOrders.length} Orders
               </Badge>

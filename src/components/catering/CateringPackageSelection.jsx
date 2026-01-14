@@ -86,7 +86,7 @@ const CateringPackageSelection = ({
                         <CardDescription>{pkg.description}</CardDescription>
                       ) : null}
                     </div>
-                    <Badge className="bg-primary/10 text-primary border-primary/20">
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">
                       PHP {Number(pkg.pricePerPax || 0).toFixed(2)} / pax
                     </Badge>
                   </div>

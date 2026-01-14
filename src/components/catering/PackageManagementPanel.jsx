@@ -146,7 +146,7 @@ const PackageManagementPanel = ({
                     <Badge
                       variant={pkg.active ? 'default' : 'secondary'}
                       className={`flex items-center gap-1 ${
-                        pkg.active ? 'bg-primary/10 text-primary' : ''
+                        pkg.active ? 'bg-blue-100 text-blue-800' : ''
                       }`}
                     >
                       {pkg.active ? (

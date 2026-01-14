@@ -24,7 +24,7 @@ import {
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const COLORS = ['#f07f13', '#f59e0b', '#fb923c', '#fbbf24', '#10b981'];
+const COLORS = ['#0088fe', '#00c49f', '#ffbb28', '#ff8042', '#8884d8'];
 
 const MenuReport = ({
   topSellingItemsData,
@@ -122,7 +122,7 @@ const MenuReport = ({
                 <Legend />
                 <Bar
                   dataKey="value"
-                  fill="hsl(var(--primary))"
+                  fill="hsl(var(--chart-primary))"
                   name="Revenue (₱)"
                 />
               </BarChart>

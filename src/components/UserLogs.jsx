@@ -179,7 +179,7 @@ const UserLogs = () => {
   const getActionColor = (type) => {
     switch (type) {
       case 'login':
-        return 'bg-primary/10 text-primary';
+        return 'bg-blue-100 text-blue-800';
       case 'security':
         return 'bg-red-100 text-red-800';
       case 'system':

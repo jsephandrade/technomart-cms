@@ -9,9 +9,9 @@
 
 export const CHART_COLORS = {
   // Primary brand colors
-  primary: 'hsl(var(--primary))',
-  primaryLight: 'hsl(var(--primary) / 0.8)',
-  primaryDark: 'hsl(var(--primary) / 1.2)',
+  primary: 'hsl(var(--chart-primary))',
+  primaryLight: 'hsl(var(--chart-primary) / 0.8)',
+  primaryDark: 'hsl(var(--chart-primary))',
 
   // Secondary colors for multi-series charts
   secondary: 'hsl(var(--secondary))',
@@ -21,7 +21,7 @@ export const CHART_COLORS = {
   success: '#10b981', // Green
   warning: '#f59e0b', // Orange
   danger: 'hsl(var(--destructive))', // Red
-  info: 'hsl(var(--primary))', // Primary accent
+  info: 'hsl(var(--chart-primary))', // Chart info blue
 
   // Neutral colors
   muted: 'hsl(var(--muted-foreground))',
@@ -30,14 +30,14 @@ export const CHART_COLORS = {
 
   // Multi-series palette (for category charts)
   palette: [
-    '#f07f13', // Orange
-    '#f59e0b', // Amber
-    '#f97316', // Deep orange
-    '#fb923c', // Soft orange
-    '#fbbf24', // Warm gold
-    '#10b981', // Green
-    '#ec4899', // Pink
+    '#3b82f6', // Blue
     '#8b5cf6', // Purple
+    '#ec4899', // Pink
+    '#f59e0b', // Orange
+    '#10b981', // Green
+    '#06b6d4', // Cyan
+    '#6366f1', // Indigo
+    '#f43f5e', // Rose
   ],
 };
 
@@ -61,7 +61,7 @@ export const CHART_GRADIENTS = {
     ),
   }),
 
-  // Orders gradient (primary theme)
+  // Orders gradient (blue theme)
   orders: (id = 'gradOrders') => ({
     id,
     definition: (

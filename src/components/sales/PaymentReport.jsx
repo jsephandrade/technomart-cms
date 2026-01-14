@@ -19,7 +19,7 @@ import {
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const COLORS = ['#f07f13', '#f59e0b', '#fb923c', '#fbbf24'];
+const COLORS = ['#0088fe', '#00c49f', '#ffbb28', '#ff8042'];
 
 const PaymentReport = ({ paymentMethodData, payments }) => {
   const getTotalAmount = (status = 'all') => {

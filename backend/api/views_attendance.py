@@ -131,6 +131,28 @@ def _resolve_schedule_for_date(employee, record_date):
     )
 
 
+def _calendar_exception_for_date(record_date):
+    if not record_date:
+        return None
+    try:
+        from .models import CalendarException
+    except Exception:
+        return None
+    return CalendarException.objects.filter(date=record_date).first()
+
+
+def _is_no_work_day(record_date):
+    entry = _calendar_exception_for_date(record_date)
+    if not entry:
+        return False
+    kind = (getattr(entry, "kind", "") or "").lower()
+    if kind == "no_work":
+        return True
+    if kind == "holiday" and not getattr(entry, "is_workday_override", False):
+        return True
+    return False
+
+
 def _attendance_status_for_checkin(employee, record_date, check_in_time, fallback="present"):
     if not employee or not record_date or not check_in_time:
         return fallback
@@ -165,6 +187,8 @@ def _auto_mark_absent_if_shift_passed(employee, record_date, now=None):
     except Exception:
         return None
     try:
+        if _is_no_work_day(record_date):
+            return None
         schedule_entry = _resolve_schedule_for_date(employee, record_date)
         if not schedule_entry or not schedule_entry.end_time:
             return None
@@ -573,6 +597,14 @@ def attendance(request):
         d = _parse_date(payload.get("date"))
         if not d:
             return JsonResponse({"success": False, "message": "date is required"}, status=400)
+
+        exception_entry = _calendar_exception_for_date(d)
+        if exception_entry and _is_no_work_day(d):
+            label = "Holiday" if exception_entry.kind == "holiday" else "No work day"
+            return JsonResponse(
+                {"success": False, "message": f"{label} - attendance is disabled"},
+                status=403,
+            )
 
         if not can_manage:
             if emp_id:

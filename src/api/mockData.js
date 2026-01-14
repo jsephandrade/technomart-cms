@@ -105,7 +105,6 @@ export const mockEmployees = [
     email: 'maria@example.com',
     phone: '+63-912-345-6789',
     hireDate: '2023-08-15T00:00:00Z',
-    salary: 18000,
     status: 'active',
   },
 ];

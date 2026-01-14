@@ -98,7 +98,12 @@ const toLocalDateStr = (d) => {
   return `${y}-${m}-${dd}`;
 };
 
-const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
+const AttendanceTimeCard = ({
+  user,
+  className,
+  dailySchedule,
+  calendarException,
+}) => {
   const { updateProfile } = useAuth();
   const subjectEmployeeId = useMemo(() => {
     if (!user) return null;
@@ -216,6 +221,17 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
     () => createManilaDateFromTime(dailySchedule?.endTime, currentTime),
     [dailySchedule, currentTime]
   );
+  const isNoWorkDay = useMemo(() => {
+    if (!calendarException) return false;
+    const kind = String(calendarException.kind || calendarException.type || '')
+      .trim()
+      .toLowerCase();
+    if (kind === 'no_work') return true;
+    if (kind === 'holiday' && !calendarException.isWorkdayOverride) {
+      return true;
+    }
+    return false;
+  }, [calendarException]);
   const attendanceWindowClosed = Boolean(
     dailySchedule?.endTime &&
       shiftEndDate &&
@@ -234,7 +250,8 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
       !dailySchedule ||
       !attendanceWindowClosed ||
       !subjectEmployeeId ||
-      !today
+      !today ||
+      isNoWorkDay
     ) {
       return;
     }
@@ -305,12 +322,17 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
     today,
     updateRecord,
     user?.name,
+    isNoWorkDay,
   ]);
 
   const handleTimeIn = async () => {
     const selectedEmployeeId = subjectEmployeeId;
     if (!selectedEmployeeId) {
       toast.error('Unable to identify user for attendance.');
+      return;
+    }
+    if (isNoWorkDay) {
+      toast.error('Today is a no work day. Attendance is disabled.');
       return;
     }
     if (effectiveRecord?.checkIn) {
@@ -352,6 +374,10 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
     const selectedEmployeeId = subjectEmployeeId;
     if (!selectedEmployeeId) {
       toast.error('Unable to identify user for attendance.');
+      return;
+    }
+    if (isNoWorkDay) {
+      toast.error('Today is a no work day. Attendance is disabled.');
       return;
     }
     if (!effectiveRecord || !effectiveRecord.checkIn) {
@@ -488,6 +514,9 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
 
   const statusConfig = useMemo(() => {
     if (!effectiveRecord) {
+      if (isNoWorkDay) {
+        return { label: 'No work day', className: 'text-amber-600' };
+      }
       return { label: 'Not Clocked In', className: 'text-muted-foreground' };
     }
     if (effectiveRecord.checkIn && !effectiveRecord.checkOut) {
@@ -500,7 +529,7 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
       label: effectiveRecord.status || 'Unknown Status',
       className: 'text-muted-foreground',
     };
-  }, [effectiveRecord]);
+  }, [effectiveRecord, isNoWorkDay]);
 
   const hasTimedInToday = Boolean(effectiveRecord?.checkIn);
   const isClockedIn = Boolean(
@@ -537,7 +566,7 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
             'flex-1 min-w-[140px] border-2 border-emerald-600 bg-emerald-600 text-white transition-colors hover:bg-emerald-600/90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600 disabled:cursor-not-allowed disabled:opacity-60'
           )}
           onClick={handleTimeIn}
-          disabled={hasTimedInToday || attendanceWindowClosed}
+          disabled={hasTimedInToday || attendanceWindowClosed || isNoWorkDay}
         >
           <Clock className="mr-2 h-4 w-4" aria-hidden="true" />
           Time In
@@ -546,12 +575,12 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
           size="lg"
           className={cn(
             'flex-1 min-w-[140px] border-2 bg-red-500 text-white transition-opacity hover:bg-red-500/90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500',
-            !canTimeOut || attendanceWindowClosed
+            !canTimeOut || attendanceWindowClosed || isNoWorkDay
               ? 'cursor-not-allowed opacity-70'
               : 'opacity-100'
           )}
           onClick={handleTimeOut}
-          disabled={!canTimeOut || attendanceWindowClosed}
+          disabled={!canTimeOut || attendanceWindowClosed || isNoWorkDay}
         >
           <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
           Time Out
@@ -559,16 +588,22 @@ const AttendanceTimeCard = ({ user, className, dailySchedule }) => {
       </div>
 
       <div className="space-y-1 text-center text-xs text-muted-foreground">
-        {dailySchedule ? (
+        {isNoWorkDay ? (
+          <p className="text-amber-700">
+            {calendarException?.kind === 'holiday' ? 'Holiday' : 'No work day'}
+            {calendarException?.name ? `: ${calendarException.name}` : ''}.
+            Attendance is disabled.
+          </p>
+        ) : dailySchedule ? (
           <p>
             Scheduled: {dailySchedule.startTime} - {dailySchedule.endTime}
           </p>
         ) : (
           <p>No scheduled shift found for today.</p>
         )}
-        {attendanceWindowClosed ? (
+        {attendanceWindowClosed && !isNoWorkDay ? (
           <p className="text-destructive">
-            Shift window closed — attendance locked and auto recorded.
+            Shift window closed - attendance locked and auto recorded.
           </p>
         ) : null}
       </div>

@@ -6,16 +6,17 @@ checks via helpers in views_common, and JSON responses with { success, data }.
 
 import json
 import uuid
-from datetime import time
+from datetime import date, datetime, time
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.db.models import CharField, F, Value
 from django.db.models.functions import Cast, Coalesce
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from .views_common import _actor_from_request, _has_permission, _paginate, _identifier_variants
 from .utils_employees import resolve_employee_ref
-from .utils_compensation import resolve_compensation
 
 
 DAYS = [
@@ -69,14 +70,32 @@ def _parse_time(val: str):
     return None
 
 
+def _parse_date(val):
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    if isinstance(val, str):
+        raw = val.strip()
+        if not raw:
+            return None
+        parsed = parse_date(raw)
+        if parsed:
+            return parsed
+        parsed_dt = parse_datetime(raw)
+        if parsed_dt:
+            return parsed_dt.date()
+    return None
+
+
 def _safe_emp(e):
-    monthly_salary, daily_rate = resolve_compensation(getattr(e, "position", ""))
     return {
         "id": str(e.id),
         "name": e.name,
         "position": e.position,
-        "monthlySalary": float(monthly_salary or 0),
-        "dailyRate": float(daily_rate or 0),
+        "hireDate": e.hire_date.isoformat() if getattr(e, "hire_date", None) else None,
         "contact": e.contact,
         "status": e.status,
         "createdAt": e.created_at.isoformat() if e.created_at else None,
@@ -318,6 +337,10 @@ def employees_with_schedule(request):
     if not isinstance(schedule_payload, list):
         schedule_payload = []
 
+    hire_date = _parse_date(payload.get("hireDate") or payload.get("hire_date"))
+    if not hire_date:
+        hire_date = timezone.now().date()
+
     valid_rows = []
     for entry in schedule_payload:
         day = entry.get("day")
@@ -332,6 +355,7 @@ def employees_with_schedule(request):
             emp = Employee.objects.create(
                 name=name,
                 position=(payload.get("position") or "").strip(),
+                hire_date=hire_date,
                 contact=(payload.get("contact") or "").strip(),
                 status=(payload.get("status") or "active").lower(),
             )
@@ -385,6 +409,14 @@ def employee_detail(request, emp_id):
             emp.name = str(payload["name"]).strip(); changed = True
         if "position" in payload and payload["position"] is not None:
             emp.position = str(payload["position"]).strip(); changed = True
+        if "hireDate" in payload or "hire_date" in payload:
+            raw = payload.get("hireDate") if "hireDate" in payload else payload.get("hire_date")
+            if raw is None or raw == "":
+                emp.hire_date = None; changed = True
+            else:
+                parsed = _parse_date(raw)
+                if parsed:
+                    emp.hire_date = parsed; changed = True
         if "contact" in payload and payload["contact"] is not None:
             emp.contact = str(payload["contact"]).strip(); changed = True
         if "status" in payload and payload["status"] is not None:

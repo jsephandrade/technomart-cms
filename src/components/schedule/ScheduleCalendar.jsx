@@ -109,6 +109,7 @@ const ScheduleCalendar = ({
   defaultDate,
   onDateSelect,
   className,
+  calendarExceptions = [],
 }) => {
   const resolvedEmployees = useMemo(() => {
     if (Array.isArray(employeeList) && employeeList.length > 0) {
@@ -220,6 +221,16 @@ const ScheduleCalendar = ({
     () => new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }),
     []
   );
+  const manilaDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+    []
+  );
   const dayLabelFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('en-US', {
@@ -245,10 +256,36 @@ const ScheduleCalendar = ({
     : startOfMonth(new Date());
   const currentMonthLabel = monthFormatter.format(currentMonthStart);
 
+  const exceptionByDate = useMemo(() => {
+    const map = new Map();
+    (calendarExceptions || []).forEach((exception) => {
+      const key = String(exception?.date || '').trim();
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, exception);
+      }
+    });
+    return map;
+  }, [calendarExceptions]);
+
   const selectedDateLabel = useMemo(() => {
     if (!selectedDate) return null;
     return fullDateFormatter.format(selectedDate);
   }, [selectedDate, fullDateFormatter]);
+
+  const selectedDateKey = useMemo(() => {
+    if (!selectedDate) return '';
+    try {
+      return manilaDateFormatter.format(selectedDate);
+    } catch {
+      return selectedDate.toISOString().split('T')[0];
+    }
+  }, [manilaDateFormatter, selectedDate]);
+
+  const selectedDateException = useMemo(() => {
+    if (!selectedDateKey) return null;
+    return exceptionByDate.get(selectedDateKey) || null;
+  }, [exceptionByDate, selectedDateKey]);
 
   const calendarDays = useMemo(() => {
     const monthStart = currentMonthStart;
@@ -264,6 +301,13 @@ const ScheduleCalendar = ({
         selectedDate && normalized.getTime() === selectedDate.getTime();
       const isToday = normalized.getTime() === today.getTime();
       const isScheduled = scheduledDayIndices.has(normalized.getDay());
+      let dateKey = '';
+      try {
+        dateKey = manilaDateFormatter.format(normalized);
+      } catch {
+        dateKey = normalized.toISOString().split('T')[0];
+      }
+      const exception = dateKey ? exceptionByDate.get(dateKey) : null;
 
       return {
         date: normalized,
@@ -272,9 +316,17 @@ const ScheduleCalendar = ({
         isSelected,
         isToday,
         isScheduled,
+        exception,
       };
     });
-  }, [currentMonthStart, selectedDate, today, scheduledDayIndices]);
+  }, [
+    currentMonthStart,
+    exceptionByDate,
+    manilaDateFormatter,
+    selectedDate,
+    today,
+    scheduledDayIndices,
+  ]);
 
   return (
     <FeaturePanelCard
@@ -337,6 +389,17 @@ const ScheduleCalendar = ({
               aria-label={dayLabelFormatter.format(day.date)}
             >
               {day.date.getDate()}
+              {day.exception ? (
+                <span
+                  className={cn(
+                    'absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full',
+                    day.exception.kind === 'no_work'
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  )}
+                  aria-hidden="true"
+                />
+              ) : null}
               {day.isScheduled ? (
                 <span
                   className={cn(
@@ -350,7 +413,8 @@ const ScheduleCalendar = ({
         </div>
 
         <p className="mt-2 text-[10px] text-muted-foreground text-center">
-          Dates with a dot indicate at least one scheduled shift.
+          Dots indicate scheduled shifts. Colored markers show holidays or no
+          work days.
         </p>
       </div>
 
@@ -367,6 +431,32 @@ const ScheduleCalendar = ({
               : 'Select a day to review assignments.'}
           </p>
         </div>
+
+        {selectedDateException ? (
+          <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                className={cn(
+                  selectedDateException.kind === 'no_work'
+                    ? 'border border-amber-500/30 bg-amber-500/10 text-amber-700'
+                    : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                )}
+              >
+                {selectedDateException.kind === 'no_work'
+                  ? 'No work day'
+                  : 'Holiday'}
+              </Badge>
+              <span className="font-semibold text-foreground">
+                {selectedDateException.name || 'Calendar exception'}
+              </span>
+            </div>
+            {selectedDateException.isWorkdayOverride ? (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Workday override is enabled for this holiday.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {selectedDayEntries.length > 0 ? (
           <div className="space-y-2">

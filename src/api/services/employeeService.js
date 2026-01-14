@@ -1,22 +1,20 @@
 import apiClient from '../client';
-import { resolveEmployeeCompensation } from '@/lib/employeeCompensation';
-
 class EmployeeService {
   _normalizeEmployee(e = {}) {
-    const normalized = {
+    const normalizeHireDate = (value) => {
+      if (!value) return '';
+      const raw = String(value);
+      return raw.includes('T') ? raw.split('T')[0] : raw;
+    };
+    return {
       id: e.id,
       name: e.name || '',
       position: e.position || '',
+      hireDate: normalizeHireDate(e.hireDate ?? e.hire_date),
       contact: e.contact || '',
       status: (e.status || 'active').toLowerCase(),
       avatar: e.avatar || '/placeholder.svg',
     };
-    const { monthlySalary, dailyRate } = resolveEmployeeCompensation({
-      position: normalized.position,
-      monthlySalary: e.monthlySalary ?? e.monthly_salary ?? e.salary,
-      dailyRate: e.dailyRate ?? e.daily_rate,
-    });
-    return { ...normalized, monthlySalary, dailyRate };
   }
 
   _buildQueryString(params = {}) {
@@ -108,6 +106,7 @@ class EmployeeService {
     const payload = {
       name: employee?.name || '',
       position: employee?.position || '',
+      hireDate: employee?.hireDate || employee?.hire_date || '',
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
     };
@@ -122,6 +121,7 @@ class EmployeeService {
     const payload = {
       name: employee?.name || '',
       position: employee?.position || '',
+      hireDate: employee?.hireDate || employee?.hire_date || '',
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
       schedule: Array.isArray(employee?.schedule) ? employee.schedule : [],

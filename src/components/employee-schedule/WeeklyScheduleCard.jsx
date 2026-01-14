@@ -423,7 +423,7 @@ const WeeklyScheduleCard = ({
                     </div>
                   </div>
                   {!isCollapsed ? (
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       {entries.length ? (
                         entries.map((entry) => renderShiftCard(entry))
                       ) : (

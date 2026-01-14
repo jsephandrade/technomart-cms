@@ -392,7 +392,7 @@ class Employee(models.Model):
     )
     name = models.CharField(max_length=255)
     position = models.CharField(max_length=128, blank=True)
-    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    hire_date = models.DateField(null=True, blank=True)
     contact = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=32, default="active")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -518,6 +518,59 @@ class TeamCompositionException(models.Model):
 
     def __str__(self) -> str:
         return f"{self.day}: {self.role}"
+
+
+# -----------------------------
+# Calendar Exceptions
+# -----------------------------
+
+
+class CalendarException(models.Model):
+    """Calendar-level exceptions such as holidays and no-work days."""
+
+    KIND_HOLIDAY = "holiday"
+    KIND_NO_WORK = "no_work"
+    KIND_CHOICES = [
+        (KIND_HOLIDAY, "Holiday"),
+        (KIND_NO_WORK, "No work day"),
+    ]
+
+    SCOPE_ALL = "all"
+    SCOPE_ROLES = "roles"
+    SCOPE_CHOICES = [
+        (SCOPE_ALL, "All staff"),
+        (SCOPE_ROLES, "Roles only"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    date = models.DateField()
+    name = models.CharField(max_length=255)
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_HOLIDAY)
+    scope = models.CharField(max_length=16, choices=SCOPE_CHOICES, default=SCOPE_ALL)
+    roles = models.CharField(max_length=255, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    is_workday_override = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendar_exceptions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "calendar_exception"
+        indexes = [
+            models.Index(fields=["date"], name="calendar_exc_date_idx"),
+            models.Index(fields=["kind", "date"], name="calendar_exc_kind_date_idx"),
+        ]
+        ordering = ["date", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.date}: {self.name}"
 
 
 # -----------------------------

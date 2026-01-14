@@ -47,10 +47,6 @@ import {
   AlertCircle,
   UserCheck,
 } from 'lucide-react';
-import {
-  formatPhp,
-  resolveEmployeeCompensation,
-} from '@/lib/employeeCompensation';
 
 const roundHours = (value) => Math.round(Number(value || 0) * 10) / 10;
 
@@ -194,14 +190,10 @@ export default function AttendancePanel() {
     const rosterList = employees.map((emp) => {
       const staffHours =
         hoursByStaff.find((entry) => entry.employeeId === emp.id)?.hours ?? 0;
-      const { monthlySalary, dailyRate } = resolveEmployeeCompensation(emp);
-
       return {
         id: emp.id,
         name: emp.name,
         position: emp.position || 'Team Member',
-        monthlySalary,
-        dailyRate,
         status: emp.status,
         weeklyHours: roundHours(staffHours),
         isExternal: false,
@@ -214,8 +206,6 @@ export default function AttendancePanel() {
         id: entry.lookupKey,
         name: entry.name,
         position: entry.position,
-        monthlySalary: null,
-        dailyRate: null,
         status: 'guest',
         weeklyHours: roundHours(entry.hours),
         isExternal: true,
@@ -506,14 +496,13 @@ export default function AttendancePanel() {
                     <TableHead>Staff</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead className="text-right">Weekly Hours</TableHead>
-                    <TableHead className="text-right">Monthly Salary</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {roster.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={4}
+                        colSpan={3}
                         className="text-center text-muted-foreground py-6"
                       >
                         No staff records available
@@ -545,25 +534,6 @@ export default function AttendancePanel() {
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatHoursValue(member.weeklyHours)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {member.monthlySalary !== null &&
-                          member.monthlySalary !== undefined &&
-                          Number.isFinite(Number(member.monthlySalary)) ? (
-                            <div className="space-y-1 text-right">
-                              <div className="font-semibold">
-                                {formatPhp(member.monthlySalary)}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Daily:{' '}
-                                {formatPhp(member.dailyRate, {
-                                  maximumFractionDigits: 2,
-                                })}
-                              </div>
-                            </div>
-                          ) : (
-                            '-'
-                          )}
                         </TableCell>
                       </TableRow>
                     ))

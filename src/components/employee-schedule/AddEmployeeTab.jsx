@@ -36,10 +36,6 @@ import {
   resolveRoleLabel,
 } from '@/lib/canteenRoles';
 import {
-  formatPhp,
-  resolveEmployeeCompensation,
-} from '@/lib/employeeCompensation';
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -244,13 +240,7 @@ const AddEmployeeTab = ({
   const normalizedTeamSearch = teamSearch.trim().toLowerCase();
   const filteredEmployees = normalizedTeamSearch
     ? employees.filter((emp) => {
-        const haystack = [
-          emp.name,
-          emp.position,
-          emp.contact,
-          emp.status,
-          emp.monthlySalary != null ? String(emp.monthlySalary) : '',
-        ]
+        const haystack = [emp.name, emp.position, emp.contact, emp.status]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
@@ -413,9 +403,6 @@ const AddEmployeeTab = ({
                                   emp.position,
                                   emp.contact,
                                   emp.status,
-                                  emp.monthlySalary != null
-                                    ? String(emp.monthlySalary)
-                                    : '',
                                 ]
                                   .filter(Boolean)
                                   .join(' ')}
@@ -708,8 +695,6 @@ const AddEmployeeTab = ({
                   : 'Active';
                 const initials = getInitials(emp.name || '');
                 const roleLabel = String(emp.position || 'No role');
-                const { monthlySalary, dailyRate } =
-                  resolveEmployeeCompensation(emp);
                 const contactLabel = emp.contact || 'N/A';
                 return (
                   <div
@@ -741,16 +726,11 @@ const AddEmployeeTab = ({
                           </span>
                           <span className="text-muted-foreground/60">|</span>
                           <span className="whitespace-nowrap">
-                            Monthly: {formatPhp(monthlySalary)}
-                          </span>
-                          <span className="text-muted-foreground/60">|</span>
-                          <span className="whitespace-nowrap">
-                            Daily:{' '}
-                            {formatPhp(dailyRate, { maximumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-muted-foreground/60">|</span>
-                          <span className="whitespace-nowrap">
                             Contact: {contactLabel}
+                          </span>
+                          <span className="text-muted-foreground/60">|</span>
+                          <span className="whitespace-nowrap">
+                            Hire date: {emp.hireDate || 'Not set'}
                           </span>
                         </div>
                       </div>

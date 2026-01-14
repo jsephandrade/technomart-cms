@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/AuthContext';
 import { useEmployees, useSchedule } from '@/hooks/useEmployees';
+import { useCalendarExceptions } from '@/hooks/useCalendarExceptions';
 import { employeeService } from '@/api/services/employeeService';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -77,6 +78,23 @@ const getManilaDayName = () => {
   }
 };
 
+const getManilaDateString = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+};
+
 const DEFAULT_SCHEDULE_ENTRY = {
   employeeId: '',
   employeeName: '',
@@ -89,6 +107,7 @@ const DEFAULT_EMPLOYEE_FORM = {
   id: '',
   name: '',
   position: '',
+  hireDate: '',
   contact: '',
   status: 'active',
 };
@@ -203,6 +222,13 @@ const EmployeeSchedule = () => {
     refetch: refetchSchedule,
   } = useSchedule({}, { autoFetch: true });
 
+  const {
+    exceptions: calendarExceptions,
+    loading: calendarExceptionsLoading,
+    createException: createCalendarException,
+    deleteException: deleteCalendarException,
+  } = useCalendarExceptions({}, { autoFetch: true });
+
   const resolvedEmployeeId = useMemo(() => {
     if (!user) return null;
     if (user.employeeId) return String(user.employeeId);
@@ -235,6 +261,7 @@ const EmployeeSchedule = () => {
   const normalizedManilaDay = String(getManilaDayName() || '')
     .trim()
     .toLowerCase();
+  const manilaDateKey = getManilaDateString();
   const attendanceEmployeeId = useMemo(() => {
     if (!attendanceUser) return '';
     return String(attendanceUser.employeeId || attendanceUser.id || '').trim();
@@ -279,6 +306,27 @@ const EmployeeSchedule = () => {
     }
     return null;
   }, [attendanceScheduleEntry, isStaffOnly, todayScheduleEntries]);
+  const todayCalendarException = useMemo(() => {
+    if (!calendarExceptions?.length || !manilaDateKey) return null;
+    return (
+      calendarExceptions.find(
+        (exception) => String(exception?.date || '') === manilaDateKey
+      ) || null
+    );
+  }, [calendarExceptions, manilaDateKey]);
+  const isNoWorkDay = useMemo(() => {
+    if (!todayCalendarException) return false;
+    const kind = String(
+      todayCalendarException.kind || todayCalendarException.type || ''
+    )
+      .trim()
+      .toLowerCase();
+    if (kind === 'no_work') return true;
+    if (kind === 'holiday' && !todayCalendarException.isWorkdayOverride) {
+      return true;
+    }
+    return false;
+  }, [todayCalendarException]);
   const hasAssignedShift = useMemo(() => {
     if (!schedule?.length) return false;
     if (isStaffOnly && schedule.length > 0) return true;
@@ -641,6 +689,7 @@ const EmployeeSchedule = () => {
     const payload = {
       name: quickAdd.name,
       position: quickAdd.position,
+      hireDate: new Date().toISOString().slice(0, 10),
       schedule: scheduleEntries,
     };
     try {
@@ -1061,7 +1110,7 @@ const EmployeeSchedule = () => {
 
   const handleUpdateEmployee = async (updates) => {
     if (!canManage) return;
-    const { id, name, position, contact, status } = updates || {};
+    const { id, name, position, hireDate, contact, status } = updates || {};
 
     if (!id) {
       toast.error('Select an employee to update');
@@ -1077,6 +1126,7 @@ const EmployeeSchedule = () => {
       await updateEmployee(id, {
         name: name.trim(),
         position: position.trim(),
+        hireDate: hireDate || '',
         contact: contact?.trim() || '',
         status: status ? String(status).toLowerCase() : 'active',
       });
@@ -1297,6 +1347,7 @@ const EmployeeSchedule = () => {
       id: employee.id,
       name: employee.name || '',
       position: employee.position || '',
+      hireDate: employee.hireDate || '',
       contact: employee.contact || '',
       status: employee.status || 'active',
     });
@@ -1375,6 +1426,7 @@ const EmployeeSchedule = () => {
         id: firstEmployee.id,
         name: firstEmployee.name || '',
         position: firstEmployee.position || '',
+        hireDate: firstEmployee.hireDate || '',
         contact: firstEmployee.contact || '',
         status: firstEmployee.status || 'active',
       });
@@ -1424,7 +1476,25 @@ const EmployeeSchedule = () => {
 
   const schedulePane = (
     <div className="space-y-6">
-      {attendanceUser && !scheduleLoading && !hasAssignedShift ? (
+      {attendanceUser && isNoWorkDay ? (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-amber-700 shadow-sm">
+          <p className="font-semibold text-amber-700">
+            {todayCalendarException?.kind === 'holiday'
+              ? 'Holiday notice'
+              : 'No work day notice'}
+          </p>
+          <p className="text-amber-700/80">
+            {todayCalendarException?.name
+              ? `${todayCalendarException.name}.`
+              : 'Today is marked as a no work day.'}{' '}
+            Daily Time Record controls are disabled.
+          </p>
+        </div>
+      ) : null}
+      {attendanceUser &&
+      !scheduleLoading &&
+      !hasAssignedShift &&
+      !isNoWorkDay ? (
         <div className="rounded-2xl border border-destructive/60 bg-destructive/5 p-4 text-sm text-destructive shadow-sm">
           <p className="font-semibold text-destructive">
             No assigned shift detected
@@ -1442,6 +1512,10 @@ const EmployeeSchedule = () => {
         employeeDirectory={employees}
         schedule={schedule}
         canManage={canManage}
+        calendarExceptions={calendarExceptions}
+        calendarExceptionsLoading={calendarExceptionsLoading}
+        onCreateCalendarException={createCalendarException}
+        onDeleteCalendarException={deleteCalendarException}
         setEditingSchedule={setEditingSchedule}
         handleDeleteSchedule={handleDeleteSchedule}
         lookupEmployeeName={lookupEmployeeName}
@@ -2050,6 +2124,7 @@ const EmployeeSchedule = () => {
             <AttendanceTimeCard
               user={attendanceUser}
               dailySchedule={resolvedAttendanceScheduleEntry}
+              calendarException={todayCalendarException}
             />
           </DialogContent>
         </Dialog>

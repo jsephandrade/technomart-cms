@@ -16,6 +16,7 @@ from . import views_reports as rpt_views
 from . import views_cash as cash_views
 from . import views_diag as diag_views
 from . import views_catering as catering_views
+from . import views_calendar as calendar_views
 from django.urls import path, include
 
 urlpatterns = [
@@ -152,6 +153,12 @@ urlpatterns = [
     ),
     path("schedule/analytics", emp_views.schedule_analytics, name="schedule_analytics"),
     path("schedule/<str:sid>", emp_views.schedule_detail, name="schedule_detail"),
+    path("calendar/exceptions", calendar_views.calendar_exceptions, name="calendar_exceptions"),
+    path(
+        "calendar/exceptions/<uuid:exc_id>",
+        calendar_views.calendar_exception_detail,
+        name="calendar_exception_detail",
+    ),
 
     # Attendance & Leaves
     path("attendance", att_views.attendance, name="attendance"),

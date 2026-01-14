@@ -8,10 +8,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  formatPhp,
-  resolveEmployeeCompensation,
-} from '@/lib/employeeCompensation';
 
 export const StaffSummary = ({ employees, schedule }) => {
   const calculateWeeklyHours = (employeeId) => {
@@ -37,8 +33,6 @@ export const StaffSummary = ({ employees, schedule }) => {
         <div className="space-y-4">
           {employees.map((employee) => {
             const weeklyHours = calculateWeeklyHours(employee.id);
-            const { monthlySalary, dailyRate } =
-              resolveEmployeeCompensation(employee);
             return (
               <div
                 key={employee.id}
@@ -62,12 +56,6 @@ export const StaffSummary = ({ employees, schedule }) => {
                     <Clock className="h-3 w-3 mr-1" />
                     {weeklyHours.toFixed(1)}h/week
                   </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {formatPhp(monthlySalary)} / mo
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatPhp(dailyRate, { maximumFractionDigits: 2 })} / day
-                  </span>
                 </div>
               </div>
             );

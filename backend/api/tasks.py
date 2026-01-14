@@ -558,7 +558,7 @@ def auto_mark_absent_attendance(limit: int = 500):
     Mark employees as absent once their scheduled shift has ended without a time-in.
     """
     try:
-        from .models import AttendanceRecord, LeaveRecord, ScheduleEntry
+        from .models import AttendanceRecord, LeaveRecord, ScheduleEntry, CalendarException
     except Exception as exc:
         logger.error(f"Attendance auto-absent initialization failed: {exc}")
         return 0
@@ -566,6 +566,14 @@ def auto_mark_absent_attendance(limit: int = 500):
     now = timezone.localtime(timezone.now())
     today = now.date()
     day_label = now.strftime("%A")
+
+    exception_entry = CalendarException.objects.filter(date=today).first()
+    if exception_entry:
+        kind = (exception_entry.kind or "").lower()
+        if kind == "no_work" or (
+            kind == "holiday" and not exception_entry.is_workday_override
+        ):
+            return 0
 
     def combine_date_time(record_date, time_value):
         if not record_date or not time_value:

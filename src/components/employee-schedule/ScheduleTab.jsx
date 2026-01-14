@@ -1,6 +1,5 @@
 import React from 'react';
 import WeeklyScheduleCard from '@/components/employee-schedule/WeeklyScheduleCard';
-import CalendarExceptionsCard from '@/components/employee-schedule/CalendarExceptionsCard';
 import ScheduleCalendar from '@/components/schedule/ScheduleCalendar';
 
 const ScheduleTab = ({
@@ -58,17 +57,14 @@ const ScheduleTab = ({
         onEditDaySchedule={onEditDaySchedule}
       />
       <div className="space-y-6 lg:w-full lg:max-w-md lg:justify-self-end">
-        <CalendarExceptionsCard
-          exceptions={calendarExceptions}
-          loading={calendarExceptionsLoading}
-          canManage={canManage}
-          onCreateException={onCreateCalendarException}
-          onDeleteException={onDeleteCalendarException}
-        />
         <ScheduleCalendar
           schedule={schedule}
           employeeList={displayEmployees}
           calendarExceptions={calendarExceptions}
+          calendarExceptionsLoading={calendarExceptionsLoading}
+          canManage={canManage}
+          onCreateCalendarException={onCreateCalendarException}
+          onDeleteCalendarException={onDeleteCalendarException}
           className="w-full max-w-none lg:max-w-sm lg:ml-auto"
         />
       </div>

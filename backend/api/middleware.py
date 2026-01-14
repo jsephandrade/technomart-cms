@@ -140,8 +140,12 @@ class PendingUserGateMiddleware:
         return self.get_response(request)
 
     def _is_public(self, path: str) -> bool:
+        normalized = (path or "/").rstrip("/") or "/"
         for prefix in self.PUBLIC_PATHS:
-            if path.startswith(prefix):
+            prefix_normalized = (prefix or "/").rstrip("/") or "/"
+            if normalized == prefix_normalized:
+                return True
+            if normalized.startswith(f"{prefix_normalized}/"):
                 return True
         return False
 

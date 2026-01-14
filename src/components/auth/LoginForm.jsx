@@ -59,7 +59,7 @@ const LoginForm = ({
     <>
       {info && !error && (
         <div
-          className="p-3 sm:p-4 mb-4 bg-blue-50 text-blue-700 rounded-md text-xs sm:text-sm leading-relaxed"
+          className="p-3 sm:p-4 mb-4 rounded-md text-xs sm:text-sm leading-relaxed bg-primary/10 text-primary"
           role="status"
         >
           {info}

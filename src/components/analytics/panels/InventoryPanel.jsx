@@ -72,7 +72,7 @@ export default function InventoryPanel() {
           fill = '#f59e0b'; // Low - Orange
           status = 'Low';
         } else if (ratio <= 2.0) {
-          fill = '#3b82f6'; // Medium - Blue
+          fill = '#f07f13'; // Medium - Orange
           status = 'Medium';
         } else {
           fill = '#10b981'; // Healthy - Green
@@ -113,7 +113,7 @@ export default function InventoryPanel() {
     return [
       { name: 'Critical', value: critical, fill: '#dc2626' },
       { name: 'Low', value: low, fill: '#f59e0b' },
-      { name: 'Medium', value: medium, fill: '#3b82f6' },
+      { name: 'Medium', value: medium, fill: '#f07f13' },
       { name: 'Healthy', value: healthy, fill: '#10b981' },
     ];
   }, [inventoryData]);
@@ -203,23 +203,23 @@ export default function InventoryPanel() {
       {/* Key Metrics - Individual Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Items Card */}
-        <Card className="relative overflow-hidden border-2 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-50 via-card to-blue-50/30 dark:from-blue-950/20 dark:via-card dark:to-blue-950/10 flex flex-col justify-center min-h-[180px]">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-400/20 to-transparent rounded-full blur-2xl" />
+        <Card className="relative overflow-hidden border-2 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-primary/10 via-card to-primary/5 dark:from-primary/20 dark:via-card dark:to-primary/10 flex flex-col justify-center min-h-[180px]">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl" />
           <CardHeader className="pb-3 pt-3 px-4 relative text-center">
             <div className="flex items-center justify-center mb-2">
-              <div className="bg-blue-500/10 rounded-lg p-2">
-                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="bg-primary/10 rounded-lg p-2">
+                <Package className="h-5 w-5 text-primary" />
               </div>
             </div>
             <CardDescription className="text-xs font-semibold uppercase tracking-wider mb-2">
               Total Items
             </CardDescription>
-            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
+            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
               {totalItems}
             </CardTitle>
             <div className="flex items-center justify-center gap-1 mt-2">
-              <PackageCheck className="h-3 w-3 text-blue-600" />
-              <span className="text-xs text-blue-600 font-medium">
+              <PackageCheck className="h-3 w-3 text-primary" />
+              <span className="text-xs text-primary font-medium">
                 In inventory
               </span>
             </div>
@@ -330,7 +330,7 @@ export default function InventoryPanel() {
                 Low
               </div>
               <div className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
                 Medium
               </div>
               <div className="flex items-center gap-1">

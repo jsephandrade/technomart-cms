@@ -23,7 +23,9 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
               <Banknote className="h-5 w-5 text-green-600" />
               <div>
                 <p className="font-medium">Cash</p>
-                <p className="text-xs text-muted-foreground">Physical currency</p>
+                <p className="text-xs text-muted-foreground">
+                  Physical currency
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -32,7 +34,9 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
               </span>
               <Switch
                 checked={methodActive.cash}
-                onCheckedChange={(v) => setMethodActive((prev) => ({ ...prev, cash: v }))}
+                onCheckedChange={(v) =>
+                  setMethodActive((prev) => ({ ...prev, cash: v }))
+                }
                 aria-label="Toggle cash method"
               />
             </div>
@@ -40,10 +44,12 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
 
           <div className="flex justify-between items-center border p-3 rounded-md">
             <div className="flex items-center gap-3">
-              <CreditCard className="h-5 w-5 text-blue-600" />
+              <CreditCard className="h-5 w-5 text-primary" />
               <div>
                 <p className="font-medium">Credit/Debit Cards</p>
-                <p className="text-xs text-muted-foreground">Visa, Mastercard, Amex</p>
+                <p className="text-xs text-muted-foreground">
+                  Visa, Mastercard, Amex
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -52,7 +58,9 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
               </span>
               <Switch
                 checked={methodActive.card}
-                onCheckedChange={(v) => setMethodActive((prev) => ({ ...prev, card: v }))}
+                onCheckedChange={(v) =>
+                  setMethodActive((prev) => ({ ...prev, card: v }))
+                }
                 aria-label="Toggle card method"
               />
             </div>
@@ -63,7 +71,9 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
               <Smartphone className="h-5 w-5 text-purple-600" />
               <div>
                 <p className="font-medium">Mobile Payments</p>
-                <p className="text-xs text-muted-foreground">Apple Pay, Google Pay</p>
+                <p className="text-xs text-muted-foreground">
+                  Apple Pay, Google Pay
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -72,7 +82,9 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
               </span>
               <Switch
                 checked={methodActive.mobile}
-                onCheckedChange={(v) => setMethodActive((prev) => ({ ...prev, mobile: v }))}
+                onCheckedChange={(v) =>
+                  setMethodActive((prev) => ({ ...prev, mobile: v }))
+                }
                 aria-label="Toggle mobile method"
               />
             </div>
@@ -84,4 +96,3 @@ const PaymentMethodsCard = ({ methodActive, setMethodActive }) => {
 };
 
 export default PaymentMethodsCard;
-

@@ -338,7 +338,7 @@ const Notifications = () => {
                           <Bell className="h-5 w-5 text-orange-500" />
                         )}
                         {notification.type === 'info' && (
-                          <Bell className="h-5 w-5 text-blue-500" />
+                          <Bell className="h-5 w-5 text-primary" />
                         )}
                         {notification.type === 'success' && (
                           <CheckCircle className="h-5 w-5 text-green-500" />

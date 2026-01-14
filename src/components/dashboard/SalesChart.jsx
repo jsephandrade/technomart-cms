@@ -37,7 +37,7 @@ const SalesChart = ({
   const showComparison = timeRange === 'today';
 
   return (
-    <Card className="border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 dark:from-blue-950/20 dark:to-blue-900/10 hover:shadow-lg transition-all duration-300">
+    <Card className="border-0 bg-gradient-to-br from-primary/5 to-primary/10 dark:from-primary/20 dark:to-primary/10 hover:shadow-lg transition-all duration-300">
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between">
           <div>
@@ -111,7 +111,7 @@ const SalesChart = ({
               }}
               iconType="line"
             />
-            {/* Current period sales - Blue area chart with gradient */}
+            {/* Current period sales - Primary area chart with gradient */}
             <Area
               type="monotone"
               dataKey="today"

@@ -198,23 +198,23 @@ export default function SalesPanel() {
         </Card>
 
         {/* Monthly Sales Card */}
-        <Card className="relative overflow-hidden border-2 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-50 via-card to-blue-50/30 dark:from-blue-950/20 dark:via-card dark:to-blue-950/10 flex flex-col justify-center min-h-[150px]">
-          <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-blue-400/20 to-transparent rounded-full blur-2xl" />
+        <Card className="relative overflow-hidden border-2 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-primary/10 via-card to-primary/5 dark:from-primary/20 dark:via-card dark:to-primary/10 flex flex-col justify-center min-h-[150px]">
+          <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl" />
           <CardHeader className="pb-2 pt-2 px-3 relative text-center">
             <div className="flex items-center justify-center mb-2">
-              <div className="bg-blue-500/10 rounded-lg p-2">
-                <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="bg-primary/10 rounded-lg p-2">
+                <Calendar className="h-5 w-5 text-primary" />
               </div>
             </div>
             <CardDescription className="text-[11px] font-semibold uppercase tracking-wider mb-2">
               Monthly Sales
             </CardDescription>
-            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
               {currency(dashboardStats?.monthlySales || 0)}
             </CardTitle>
             <div className="flex items-center justify-center gap-1 mt-2">
-              <TrendingUp className="h-3 w-3 text-blue-600" />
-              <span className="text-xs text-blue-600 font-medium">
+              <TrendingUp className="h-3 w-3 text-primary" />
+              <span className="text-xs text-primary font-medium">
                 This month
               </span>
             </div>

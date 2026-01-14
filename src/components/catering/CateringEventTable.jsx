@@ -50,7 +50,7 @@ export const CateringEventTable = ({
 
     if (depositPaid || paymentStatus === 'partial') {
       return (
-        <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+        <Badge className="bg-primary/10 text-primary border-primary/20">
           <Wallet className="h-3 w-3 mr-1" />
           Partially Paid
         </Badge>

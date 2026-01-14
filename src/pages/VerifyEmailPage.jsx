@@ -59,7 +59,7 @@ const VerifyEmailPage = () => {
                 status === 'success'
                   ? 'bg-green-50 text-green-700'
                   : status === 'verifying'
-                    ? 'bg-blue-50 text-blue-700'
+                    ? 'bg-primary/10 text-primary'
                     : 'bg-yellow-50 text-yellow-700'
               }`}
             >

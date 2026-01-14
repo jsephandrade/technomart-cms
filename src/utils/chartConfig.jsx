@@ -21,7 +21,7 @@ export const CHART_COLORS = {
   success: '#10b981', // Green
   warning: '#f59e0b', // Orange
   danger: 'hsl(var(--destructive))', // Red
-  info: '#3b82f6', // Blue
+  info: 'hsl(var(--primary))', // Primary accent
 
   // Neutral colors
   muted: 'hsl(var(--muted-foreground))',
@@ -30,14 +30,14 @@ export const CHART_COLORS = {
 
   // Multi-series palette (for category charts)
   palette: [
-    '#3b82f6', // Blue
-    '#8b5cf6', // Purple
-    '#ec4899', // Pink
-    '#f59e0b', // Orange
+    '#f07f13', // Orange
+    '#f59e0b', // Amber
+    '#f97316', // Deep orange
+    '#fb923c', // Soft orange
+    '#fbbf24', // Warm gold
     '#10b981', // Green
-    '#06b6d4', // Cyan
-    '#6366f1', // Indigo
-    '#f43f5e', // Rose
+    '#ec4899', // Pink
+    '#8b5cf6', // Purple
   ],
 };
 
@@ -52,12 +52,16 @@ export const CHART_GRADIENTS = {
     definition: (
       <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
         <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.8} />
-        <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0.05} />
+        <stop
+          offset="95%"
+          stopColor={CHART_COLORS.primary}
+          stopOpacity={0.05}
+        />
       </linearGradient>
     ),
   }),
 
-  // Orders gradient (blue theme)
+  // Orders gradient (primary theme)
   orders: (id = 'gradOrders') => ({
     id,
     definition: (
@@ -74,7 +78,11 @@ export const CHART_GRADIENTS = {
     definition: (
       <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
         <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.8} />
-        <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0.05} />
+        <stop
+          offset="95%"
+          stopColor={CHART_COLORS.success}
+          stopOpacity={0.05}
+        />
       </linearGradient>
     ),
   }),
@@ -233,14 +241,16 @@ export const formatHours = (value) => {
 /**
  * Professional tooltip for currency data
  */
-export const CustomCurrencyTooltip = ({ active, payload, label, labelFormatter }) => {
+export const CustomCurrencyTooltip = ({
+  active,
+  payload,
+  label,
+  labelFormatter,
+}) => {
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div
-      style={CHART_STYLES.tooltip.contentStyle}
-      className="custom-tooltip"
-    >
+    <div style={CHART_STYLES.tooltip.contentStyle} className="custom-tooltip">
       <p style={CHART_STYLES.tooltip.labelStyle}>
         {labelFormatter ? labelFormatter(label) : label}
       </p>
@@ -263,14 +273,17 @@ export const CustomCurrencyTooltip = ({ active, payload, label, labelFormatter }
 /**
  * Professional tooltip for numeric data
  */
-export const CustomNumericTooltip = ({ active, payload, label, labelFormatter, valueFormatter }) => {
+export const CustomNumericTooltip = ({
+  active,
+  payload,
+  label,
+  labelFormatter,
+  valueFormatter,
+}) => {
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div
-      style={CHART_STYLES.tooltip.contentStyle}
-      className="custom-tooltip"
-    >
+    <div style={CHART_STYLES.tooltip.contentStyle} className="custom-tooltip">
       <p style={CHART_STYLES.tooltip.labelStyle}>
         {labelFormatter ? labelFormatter(label) : label}
       </p>
@@ -284,7 +297,9 @@ export const CustomNumericTooltip = ({ active, payload, label, labelFormatter, v
         >
           <span className="font-medium">{entry.name}:</span>{' '}
           <span className="font-semibold">
-            {valueFormatter ? valueFormatter(entry.value) : formatNumber(entry.value)}
+            {valueFormatter
+              ? valueFormatter(entry.value)
+              : formatNumber(entry.value)}
           </span>
         </p>
       ))}
@@ -303,10 +318,7 @@ export const CustomPercentTooltip = ({ active, payload }) => {
   const percentage = ((data.value / total) * 100).toFixed(1);
 
   return (
-    <div
-      style={CHART_STYLES.tooltip.contentStyle}
-      className="custom-tooltip"
-    >
+    <div style={CHART_STYLES.tooltip.contentStyle} className="custom-tooltip">
       <p style={CHART_STYLES.tooltip.labelStyle}>{data.name}</p>
       <p style={CHART_STYLES.tooltip.itemStyle}>
         <span className="font-medium">Count:</span>{' '}
@@ -431,10 +443,12 @@ export const REFERENCE_LINES = {
  * Generate chart data for export
  */
 export const prepareChartDataForExport = (data, columns) => {
-  return data.map(row => {
+  return data.map((row) => {
     const exportRow = {};
-    columns.forEach(col => {
-      exportRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key];
+    columns.forEach((col) => {
+      exportRow[col.label] = col.format
+        ? col.format(row[col.key])
+        : row[col.key];
     });
     return exportRow;
   });

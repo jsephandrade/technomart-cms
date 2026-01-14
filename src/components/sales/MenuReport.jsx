@@ -4,7 +4,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
@@ -19,14 +19,18 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from 'recharts';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+const COLORS = ['#f07f13', '#f59e0b', '#fb923c', '#fbbf24', '#10b981'];
 
-const MenuReport = ({ topSellingItemsData, lowestSellingItemsData, menuItems }) => {
+const MenuReport = ({
+  topSellingItemsData,
+  lowestSellingItemsData,
+  menuItems,
+}) => {
   const generateMenuReport = () => {
     const doc = new jsPDF();
     const currentDate = new Date().toLocaleDateString();
@@ -149,7 +153,10 @@ const MenuReport = ({ topSellingItemsData, lowestSellingItemsData, menuItems }) 
                   dataKey="value"
                 >
                   {topSellingItemsData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -178,12 +185,7 @@ const MenuReport = ({ topSellingItemsData, lowestSellingItemsData, menuItems }) 
               }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="name"
-                angle={-45}
-                textAnchor="end"
-                height={100}
-              />
+              <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
               <YAxis />
               <Tooltip />
               <Legend />

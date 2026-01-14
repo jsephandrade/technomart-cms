@@ -357,11 +357,11 @@ const PaymentModal = ({
           </div>
 
           {/* Information Alert */}
-          <div className="flex gap-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
-            <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 text-sm text-blue-900">
+          <div className="flex gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <div className="flex-1 text-sm text-primary">
               <p className="font-medium mb-1">Payment Confirmation</p>
-              <p className="text-blue-700">
+              <p className="text-primary/80">
                 {paymentMethod === 'cash'
                   ? 'Please prepare the exact amount. A receipt will be provided upon payment.'
                   : 'You will be redirected to complete the payment securely.'}

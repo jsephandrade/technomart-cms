@@ -319,23 +319,23 @@ export default function CateringPanel() {
         </Card>
 
         {/* Total Events Card */}
-        <Card className="relative overflow-hidden border-2 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-50 via-card to-blue-50/30 dark:from-blue-950/20 dark:via-card dark:to-blue-950/10 flex flex-col justify-center min-h-[180px]">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-400/20 to-transparent rounded-full blur-2xl" />
+        <Card className="relative overflow-hidden border-2 shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-primary/10 via-card to-primary/5 dark:from-primary/20 dark:via-card dark:to-primary/10 flex flex-col justify-center min-h-[180px]">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl" />
           <CardHeader className="pb-3 pt-3 px-4 relative text-center">
             <div className="flex items-center justify-center mb-2">
-              <div className="bg-blue-500/10 rounded-lg p-2">
-                <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="bg-primary/10 rounded-lg p-2">
+                <Calendar className="h-5 w-5 text-primary" />
               </div>
             </div>
             <CardDescription className="text-xs font-semibold uppercase tracking-wider mb-2">
               Total Events
             </CardDescription>
-            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
+            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
               {stats.totalEvents}
             </CardTitle>
             <div className="flex items-center justify-center gap-1 mt-2">
-              <Users className="h-3 w-3 text-blue-600" />
-              <span className="text-xs text-blue-600 font-medium">
+              <Users className="h-3 w-3 text-primary" />
+              <span className="text-xs text-primary font-medium">
                 All bookings
               </span>
             </div>
@@ -496,11 +496,11 @@ export default function CateringPanel() {
 
         {/* Events by Status - Enhanced */}
         <Card className="relative overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all duration-300">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-400/10 to-transparent rounded-full blur-3xl" />
+          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-3xl" />
           <CardHeader className="pb-3 relative">
             <div className="flex items-center gap-2 mb-1">
-              <div className="bg-blue-500/10 rounded-lg p-2">
-                <Calendar className="h-4 w-4 text-blue-600" />
+              <div className="bg-primary/10 rounded-lg p-2">
+                <Calendar className="h-4 w-4 text-primary" />
               </div>
               <CardTitle className="text-base font-bold">
                 Events by Status

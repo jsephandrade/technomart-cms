@@ -145,19 +145,6 @@ export const mockCateringOrders = [
   },
 ];
 
-export const mockFeedback = [
-  {
-    id: '1',
-    customerName: 'Juan Dela Cruz',
-    rating: 5,
-    comment: 'Excellent food and service!',
-    orderNumber: 'W-045',
-    category: 'food_quality',
-    status: 'new',
-    createdAt: '2024-01-29T12:30:00Z',
-  },
-];
-
 export const mockSalesAnalytics = {
   totalRevenue: 385692.5,
   totalOrders: 2847,

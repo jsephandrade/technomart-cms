@@ -195,6 +195,10 @@ export default function AccountProfile() {
     router.push({ pathname: '/face-scan', params: { mode: 'register' } });
   }, [isGuest, router]);
 
+  const handleShareFeedback = useCallback(() => {
+    router.push('/screens/Feedback');
+  }, [router]);
+
   // --- Logout ---
   const handleLogout = () => {
     Alert.alert('Confirm Logout', 'Are you sure you want to log out?', [
@@ -544,6 +548,21 @@ export default function AccountProfile() {
               <Ionicons name="checkmark" size={14} color="#fff" />
             </View>
           ) : null}
+          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.infoCard} onPress={handleShareFeedback}>
+          <View style={styles.infoIconWrap}>
+            <Ionicons
+              name="chatbubble-ellipses-outline"
+              size={18}
+              color="#F97316"
+            />
+          </View>
+          <View style={styles.infoBody}>
+            <Text style={styles.infoLabel}>Share Feedback</Text>
+            <Text style={styles.infoValue}>Tell us about your experience</Text>
+          </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
 

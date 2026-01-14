@@ -1109,6 +1109,10 @@ def _safe_order(o, with_items=True):
             o.auto_advance_duration_seconds or AUTO_ADVANCE_DEFAULT_SECONDS
         ),
     }
+    if getattr(o, "payment_status", None):
+        payment_status = str(o.payment_status).lower().strip()
+        data["paymentStatus"] = payment_status
+        data["isPaid"] = payment_status == "paid"
     try:
         from .models import PaymentTransaction
 

@@ -14,17 +14,24 @@ import {
   ActivityIndicator,
   Easing,
   useWindowDimensions,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useFonts,
   Roboto_400Regular,
   Roboto_700Bold,
 } from '@expo-google-fonts/roboto';
+import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { confirmPayment, getCreditPoints, USER_CACHE_KEY } from '../../api/api';
+import {
+  confirmPayment,
+  getCreditPoints,
+  submitPaymentProof,
+  USER_CACHE_KEY,
+} from '../../api/api';
 
 const PARTY_DURATION_MS = 2600;
 const PARTY_PIECE_COUNT = 18;
@@ -36,9 +43,11 @@ const PARTY_COLORS = [
   '#38BDF8',
   '#FB7185',
 ];
-const GCASH_CHECKOUT_URL =
-  'https://checkout-staging.xendit.co/od/technomart-gcashpayment';
-
+const GCASH_RECEIVER_NAME =
+  process.env.EXPO_PUBLIC_GCASH_RECEIVER_NAME || 'TechnoMart';
+const GCASH_RECEIVER_NUMBER =
+  process.env.EXPO_PUBLIC_GCASH_RECEIVER_NUMBER || '09XXXXXXXXX';
+const GCASH_QR_IMAGE = require('../../../assets/choices/GCash-QR.jpg');
 const createPartyPieces = () =>
   Array.from({ length: PARTY_PIECE_COUNT }, (_, index) => {
     const leftPct = ((index * 37) % 90) / 100 + 0.05;
@@ -92,6 +101,11 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(false);
   const [creditPoints, setCreditPoints] = useState(0);
   const [isGuest, setIsGuest] = useState(false);
+  const [proofModalOpen, setProofModalOpen] = useState(false);
+  const [proofImage, setProofImage] = useState(null);
+  const [proofReference, setProofReference] = useState('');
+  const [proofSubmitting, setProofSubmitting] = useState(false);
+  const [proofError, setProofError] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const partyPieces = useRef(createPartyPieces()).current;
   const partyTimerRef = useRef(null);
@@ -208,6 +222,89 @@ export default function PaymentPage() {
     }, 4000);
   };
 
+  const handleCopyNumber = async () => {
+    if (!GCASH_RECEIVER_NUMBER) return;
+    await Clipboard.setStringAsync(GCASH_RECEIVER_NUMBER);
+    Alert.alert('Copied', 'GCash number copied to clipboard.');
+  };
+
+  const resolveImagePickerMediaTypes = () =>
+    ImagePicker?.MediaType?.Images || ImagePicker?.MediaTypeOptions?.Images;
+
+  const handlePickProofImage = async () => {
+    setProofError('');
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission required',
+          'Allow photo library access to upload payment proof.'
+        );
+        return;
+      }
+      const mediaTypes = resolveImagePickerMediaTypes();
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes,
+        quality: 0.85,
+      });
+      if (result.canceled) return;
+      const asset = result.assets?.[0];
+      if (!asset?.uri) return;
+      setProofImage({
+        uri: asset.uri,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+      });
+    } catch (err) {
+      console.warn('Failed to pick proof image', err);
+      Alert.alert('Error', 'Unable to open image picker.');
+    }
+  };
+
+  const handleSubmitProof = async () => {
+    const targetId = orderNumber || resolvedCheckoutId || displayOrderNumber;
+    if (!targetId) {
+      Alert.alert('Error', 'Order reference is missing.');
+      return;
+    }
+    if (!proofImage?.uri) {
+      setProofError('Please upload your payment screenshot.');
+      return;
+    }
+    setProofSubmitting(true);
+    setProofError('');
+    try {
+      const response = await submitPaymentProof(targetId, {
+        image: proofImage,
+        referenceNumber: proofReference,
+      });
+      if (response?.success) {
+        setProofModalOpen(false);
+        setProofImage(null);
+        setProofReference('');
+        Alert.alert(
+          'Payment submitted',
+          'Your proof has been received and is pending verification.'
+        );
+        router.push({
+          pathname: '/order-tracking',
+          params: { orderId: displayOrderNumber || targetId },
+        });
+      } else {
+        setProofError(response?.message || 'Failed to submit payment proof.');
+      }
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to submit payment proof.';
+      setProofError(message);
+    } finally {
+      setProofSubmitting(false);
+    }
+  };
+
   const handlePaymentSelect = async (method) => {
     if (!resolvedCheckoutId) {
       Alert.alert('Error', 'Checkout session is missing.');
@@ -217,36 +314,6 @@ export default function PaymentPage() {
     setSelectedPayment(normalizedMethod);
 
     if (normalizedMethod === 'gcash') {
-      try {
-        const supported = await Linking.canOpenURL(GCASH_CHECKOUT_URL);
-        if (!supported) {
-          Alert.alert(
-            'Unable to open GCash checkout',
-            'Please try again or choose another payment method.'
-          );
-          return;
-        }
-        await Linking.openURL(GCASH_CHECKOUT_URL);
-        setLoading(true);
-
-        // Polling after GCash payment
-        setTimeout(async () => {
-          const res = await confirmPayment(
-            resolvedCheckoutId,
-            normalizedMethod
-          );
-          setLoading(false);
-          if (res.success) {
-            handlePaymentSuccess(res.order_number);
-          } else {
-            Alert.alert('Payment Failed', res.message);
-          }
-        }, 6000);
-      } catch (err) {
-        console.log(err);
-        setLoading(false);
-        Alert.alert('Error', 'Something went wrong with GCash payment.');
-      }
       return;
     }
 
@@ -306,7 +373,7 @@ export default function PaymentPage() {
     {
       key: 'gcash',
       title: 'Pay with GCash',
-      subtitle: 'Complete payment via the Xendit GCash checkout.',
+      subtitle: 'Scan the QR and upload payment proof.',
       icon: require('../../../assets/gcash.png'),
     },
     {
@@ -454,6 +521,60 @@ export default function PaymentPage() {
           );
         })}
 
+        {selectedPayment === 'gcash' && (
+          <View style={styles.gcashCard}>
+            <Text style={styles.gcashTitle}>GCash Payment</Text>
+            <Text style={styles.gcashSubtitle}>
+              Scan the QR or send the exact amount to the receiver below.
+            </Text>
+            <View style={styles.gcashQrWrap}>
+              <Image source={GCASH_QR_IMAGE} style={styles.gcashQr} />
+            </View>
+            <View style={styles.gcashRow}>
+              <Text style={styles.gcashLabel}>Receiver</Text>
+              <Text style={styles.gcashValue}>{GCASH_RECEIVER_NAME}</Text>
+            </View>
+            <View style={styles.gcashRow}>
+              <Text style={styles.gcashLabel}>GCash Number</Text>
+              <View style={styles.gcashValueRow}>
+                <Text style={styles.gcashValue}>{GCASH_RECEIVER_NUMBER}</Text>
+                <TouchableOpacity
+                  style={styles.copyButton}
+                  onPress={handleCopyNumber}
+                >
+                  <Ionicons name="copy-outline" size={16} color="#ea580c" />
+                  <Text style={styles.copyButtonText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.gcashRow}>
+              <Text style={styles.gcashLabel}>Order ID</Text>
+              <Text style={styles.gcashValue}>
+                {displayOrderNumber || 'Pending'}
+              </Text>
+            </View>
+            <View style={styles.gcashRow}>
+              <Text style={styles.gcashLabel}>Exact Amount</Text>
+              <Text style={styles.gcashValue}>
+                {formatCurrency(totalAmount)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.proofButton}
+              onPress={() => {
+                setProofModalOpen(true);
+                setProofError('');
+              }}
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+              <Text style={styles.proofButtonText}>I already paid</Text>
+            </TouchableOpacity>
+            <Text style={styles.gcashHint}>
+              Upload your payment screenshot for manual verification.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.pointsCard}>
           <View style={styles.pointsInfo}>
             <Text style={styles.pointsTitle}>Use Points</Text>
@@ -494,6 +615,77 @@ export default function PaymentPage() {
           </View>
         )}
       </ScrollView>
+
+      {/* Payment Proof Modal */}
+      <Modal
+        transparent
+        visible={proofModalOpen}
+        animationType="slide"
+        onRequestClose={() => setProofModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.proofModal}>
+            <Text style={styles.proofTitle}>Upload Payment Proof</Text>
+            <Text style={styles.proofSubtitle}>
+              Order #{displayOrderNumber || 'Pending'} -{' '}
+              {formatCurrency(totalAmount)}
+            </Text>
+            <TouchableOpacity
+              style={styles.proofPicker}
+              onPress={handlePickProofImage}
+              disabled={proofSubmitting}
+            >
+              {proofImage?.uri ? (
+                <Image
+                  source={{ uri: proofImage.uri }}
+                  style={styles.proofPreview}
+                />
+              ) : (
+                <View style={styles.proofPlaceholder}>
+                  <Ionicons name="image-outline" size={34} color="#9ca3af" />
+                  <Text style={styles.proofPlaceholderText}>
+                    Tap to upload screenshot
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={styles.proofField}>
+              <Text style={styles.proofLabel}>Reference Number (optional)</Text>
+              <TextInput
+                style={styles.proofInput}
+                value={proofReference}
+                onChangeText={setProofReference}
+                placeholder="e.g. 1234567890"
+                editable={!proofSubmitting}
+                keyboardType="number-pad"
+              />
+            </View>
+            {proofError ? (
+              <Text style={styles.proofError}>{proofError}</Text>
+            ) : null}
+            <View style={styles.proofActions}>
+              <TouchableOpacity
+                style={styles.proofCancel}
+                onPress={() => setProofModalOpen(false)}
+                disabled={proofSubmitting}
+              >
+                <Text style={styles.proofCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.proofSubmit}
+                onPress={handleSubmitProof}
+                disabled={proofSubmitting}
+              >
+                {proofSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.proofSubmitText}>Submit Proof</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Success Modal */}
       <Modal transparent visible={showSuccess}>
@@ -665,6 +857,96 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontFamily: 'Roboto_400Regular',
   },
+  gcashCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#fed7aa',
+    marginBottom: 16,
+  },
+  gcashTitle: {
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  gcashSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  gcashQrWrap: {
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gcashQr: {
+    width: 220,
+    height: 220,
+    resizeMode: 'contain',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fde7d2',
+    backgroundColor: '#fff',
+  },
+  gcashRow: {
+    marginTop: 12,
+  },
+  gcashLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  gcashValue: {
+    marginTop: 4,
+    fontSize: 15,
+    color: '#111827',
+    fontFamily: 'Roboto_700Bold',
+  },
+  gcashValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff7ed',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  copyButtonText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#ea580c',
+    fontFamily: 'Roboto_700Bold',
+  },
+  proofButton: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f97316',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  proofButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#fff',
+    fontFamily: 'Roboto_700Bold',
+  },
+  gcashHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: '#9a3412',
+    fontFamily: 'Roboto_400Regular',
+  },
   pointsCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -729,6 +1011,104 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: 'Roboto_700Bold',
     fontSize: 16,
+  },
+  proofModal: {
+    width: '88%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+  },
+  proofTitle: {
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  proofSubtitle: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  proofPicker: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  proofPreview: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  proofPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    backgroundColor: '#f9fafb',
+  },
+  proofPlaceholderText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#9ca3af',
+    fontFamily: 'Roboto_400Regular',
+  },
+  proofField: {
+    marginTop: 14,
+  },
+  proofLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Roboto_400Regular',
+  },
+  proofInput: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#111827',
+    fontFamily: 'Roboto_400Regular',
+  },
+  proofError: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#b91c1c',
+    fontFamily: 'Roboto_700Bold',
+  },
+  proofActions: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  proofCancel: {
+    flex: 1,
+    marginRight: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  proofCancelText: {
+    color: '#6b7280',
+    fontFamily: 'Roboto_700Bold',
+    fontSize: 14,
+  },
+  proofSubmit: {
+    flex: 1,
+    marginLeft: 8,
+    borderRadius: 10,
+    backgroundColor: '#f97316',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  proofSubmitText: {
+    color: '#fff',
+    fontFamily: 'Roboto_700Bold',
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,

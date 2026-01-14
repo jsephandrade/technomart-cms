@@ -16,4 +16,8 @@ urlpatterns = [
     path('orders/<str:order_number>/gcash_qr/', views.fetch_gcash_qr, name='fetch-gcash-qr'),
     path('orders/<str:order_number>/gcash_link/', views.gcash_link, name='gcash-link'),
     path('orders/<str:order_number>/confirm_payment/', views.confirm_payment, name='confirm-payment'),
+    path('orders/<str:order_number>/payment-proof/', views.submit_payment_proof, name='payment-proof-submit'),
+    path('payments/proofs/', views.list_payment_proofs, name='payment-proof-list'),
+    path('payments/proofs/<uuid:proof_id>/verify/', views.verify_payment_proof, name='payment-proof-verify'),
+    path('payments/proofs/<uuid:proof_id>/reject/', views.reject_payment_proof, name='payment-proof-reject'),
 ]

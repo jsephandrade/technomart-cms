@@ -564,29 +564,6 @@ export const createOrder = async (payload) => {
   }
 };
 
-// --------------------
-// Fetch GCash QR
-// --------------------
-export const fetchGcashQR = async (checkoutId) => {
-  try {
-    const token = await getValidToken(); // get valid token if needed
-    if (!token) throw new Error('No valid token found. Please log in again.');
-
-    const res = await api.get(`/orders/${checkoutId}/gcash_qr/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    // expected response: { success: true, qr_url: '...', total_amount: ... }
-    return res.data;
-  } catch (err) {
-    console.error('fetchGcashQR error:', err.response?.data || err.message);
-    return {
-      success: false,
-      message: err.response?.data?.message || err.message,
-    };
-  }
-};
-
 const changePassword = async () => {
   try {
     const token = await getValidToken();
@@ -822,6 +799,61 @@ export const confirmPayment = async (checkoutId, method) => {
   }
 };
 
+const resolveMimeType = (uri, fallback = 'image/jpeg') => {
+  const lowered = String(uri || '').toLowerCase();
+  if (lowered.endsWith('.png')) return 'image/png';
+  if (lowered.endsWith('.webp')) return 'image/webp';
+  if (lowered.endsWith('.heic')) return 'image/heic';
+  return fallback;
+};
+
+export const submitPaymentProof = async (
+  orderId,
+  { image, referenceNumber }
+) => {
+  if (!image?.uri) {
+    return { success: false, message: 'Payment proof image is required.' };
+  }
+  const formData = new FormData();
+  const fileName =
+    image.fileName || image.name || `payment-proof-${Date.now()}.jpg`;
+  const mimeType = image.mimeType || resolveMimeType(image.uri);
+  formData.append('proof_image', {
+    uri: image.uri,
+    name: fileName,
+    type: mimeType,
+  });
+  if (referenceNumber) {
+    formData.append('reference_number', String(referenceNumber));
+  }
+
+  try {
+    const res = await api.post(`/orders/${orderId}/payment-proof/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  } catch (err) {
+    console.log('submitPaymentProof error:', err.response?.data || err.message);
+    return {
+      success: false,
+      message: err.response?.data?.message || err.message,
+    };
+  }
+};
+
+export const fetchPaymentProofs = async () => {
+  try {
+    const res = await api.get('/payments/proofs/');
+    return res.data;
+  } catch (err) {
+    console.log('fetchPaymentProofs error:', err.response?.data || err.message);
+    return {
+      success: false,
+      message: err.response?.data?.message || err.message,
+    };
+  }
+};
+
 export const fetchOrderStatus = async (orderId) => {
   try {
     const token = await getValidToken();
@@ -872,15 +904,6 @@ export const fetchFeedback = async () => {
       err.response?.data || err.message
     );
     return [];
-  }
-};
-export const getGcashLink = async (checkoutId) => {
-  try {
-    const res = await api.get(`/orders/${checkoutId}/gcash_link/`);
-    return res.data; // expected: { success: true, payment_url: 'gcash://...' }
-  } catch (err) {
-    console.log('getGcashLink error:', err.response?.data || err.message);
-    throw err;
   }
 };
 // api.js

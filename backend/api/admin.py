@@ -1,10 +1,11 @@
 from django.contrib import admin, messages
 from django.utils import timezone
+from django.utils.html import format_html
 from django.urls import path, reverse
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django import forms
 
-from .models import AppUser, AccessRequest, MenuItem
+from .models import AppUser, AccessRequest, MenuItem, PaymentProof
 from .emails import (
     email_user_approved,
     email_user_rejected,
@@ -162,3 +163,37 @@ class MenuItemAdmin(admin.ModelAdmin):
     list_filter = ("available", "category")
     search_fields = ("name", "description", "category")
     ordering = ("name",)
+
+
+@admin.register(PaymentProof)
+class PaymentProofAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order_number",
+        "status",
+        "amount",
+        "submitted_by",
+        "created_at",
+    )
+    list_filter = ("status", "created_at")
+    search_fields = ("order__order_number", "reference_number", "submitted_by__email")
+    readonly_fields = ("created_at", "updated_at", "proof_preview")
+    ordering = ("-created_at",)
+
+    def order_number(self, obj):
+        return getattr(obj.order, "order_number", "")
+
+    order_number.short_description = "Order #"
+
+    def proof_preview(self, obj):
+        if not obj.proof_image:
+            return ""
+        try:
+            return format_html(
+                '<img src="{}" alt="proof" style="max-height:160px;border-radius:6px;border:1px solid #ddd;" />',
+                obj.proof_image.url,
+            )
+        except Exception:
+            return "(image)"
+
+    proof_preview.short_description = "Proof"

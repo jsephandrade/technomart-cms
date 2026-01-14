@@ -753,6 +753,61 @@ class PaymentTransaction(models.Model):
         ]
 
 
+def _payment_proof_upload_path(instance, filename):
+    base, ext = os.path.splitext(filename or "")
+    ext = ext.lower() if ext else ".jpg"
+    return f"payment_proofs/{instance.order_id}/{uuid4().hex}{ext}"
+
+
+class PaymentProof(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_VERIFIED = "verified"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_VERIFIED, "Verified"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    order = models.ForeignKey(
+        "Order",
+        on_delete=models.CASCADE,
+        related_name="payment_proofs",
+    )
+    submitted_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_proofs",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reference_number = models.CharField(max_length=64, blank=True)
+    proof_image = models.ImageField(upload_to=_payment_proof_upload_path)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    reviewed_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_proofs_reviewed",
+    )
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    reviewed_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "payment_proof"
+        indexes = [
+            models.Index(fields=["order", "status"]),
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+
 class PaymentMethodConfig(models.Model):
     id = models.SmallIntegerField(primary_key=True, default=1, editable=False)
     cash_enabled = models.BooleanField(default=True)
@@ -1338,6 +1393,16 @@ class Order(models.Model):
         (STATUS_VOIDED, "Voided"),
         (STATUS_REFUNDED, "Refunded"),
     ]
+    PAYMENT_UNPAID = "unpaid"
+    PAYMENT_PENDING = "pending"
+    PAYMENT_PAID = "paid"
+    PAYMENT_REJECTED = "rejected"
+    PAYMENT_STATUS_CHOICES = [
+        (PAYMENT_UNPAID, "Unpaid"),
+        (PAYMENT_PENDING, "Pending Verification"),
+        (PAYMENT_PAID, "Paid"),
+        (PAYMENT_REJECTED, "Rejected"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     order_number = models.CharField(max_length=32, unique=True)
@@ -1348,6 +1413,9 @@ class Order(models.Model):
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=16, blank=True)  # cash/card/mobile
+    payment_status = models.CharField(
+        max_length=16, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_UNPAID
+    )
     placed_by = models.ForeignKey('AppUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     completed_at = models.DateTimeField(blank=True, null=True)
     promised_time = models.DateTimeField(blank=True, null=True)

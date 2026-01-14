@@ -61,6 +61,7 @@ class PendingUserGateMiddleware:
         "/api/auth/login",
         "/api/auth/logout",
         "/api/auth/register",
+        "/api/payments/proofs",
         "/api/auth/google",
         "/api/auth/verify-email",
         "/api/auth/resend-verification",
@@ -96,6 +97,8 @@ class PendingUserGateMiddleware:
         if path.startswith("/api/feedback"):
             return self.get_response(request)
         if path.startswith("/api/orders/"):
+            return self.get_response(request)
+        if path.startswith("/api/payments/proofs"):
             return self.get_response(request)
 
         # Only enforce for API routes

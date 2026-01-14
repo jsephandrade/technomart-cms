@@ -145,6 +145,13 @@ const getOrderChannel = (order) => {
   return 'walk-in';
 };
 
+const getOrderKey = (order) => {
+  if (!order || typeof order !== 'object') return '';
+  return String(
+    order.id || order.orderNumber || order.order_number || order.orderId || ''
+  );
+};
+
 const normalizePaymentMethod = (value) =>
   String(value || '')
     .trim()
@@ -309,6 +316,7 @@ const isOrderPaid = (order) => {
     'due',
     'failed',
     'declined',
+    'rejected',
     'void',
     'voided',
   ]);
@@ -321,6 +329,9 @@ const isOrderPaid = (order) => {
   const channel = getOrderChannel(order);
   const method = getPaymentMethod(order);
   if (channel !== 'walk-in' && isCashMethod(method)) {
+    return false;
+  }
+  if (isGcashMethod(method)) {
     return false;
   }
 
@@ -454,6 +465,10 @@ const OrderQueue = ({
   const { can } = useAuth();
   const [statusUpdating, setStatusUpdating] = useState({});
   const [paymentUpdating, setPaymentUpdating] = useState({});
+  const [proofLoading, setProofLoading] = useState({});
+  const [paymentProofs, setPaymentProofs] = useState({});
+  const [activeProof, setActiveProof] = useState(null);
+  const [proofZoomUrl, setProofZoomUrl] = useState('');
   const [checkedItems, setCheckedItems] = useState(() => getOrderChecklist());
   const [cancelledDetail, setCancelledDetail] = useState(null);
   const autoFlowInFlightRef = useRef(new Set());
@@ -497,7 +512,9 @@ const OrderQueue = ({
       if (isOrderPaid(order)) return true;
       const channel = getOrderChannel(order);
       const method = getPaymentMethod(order);
-      return channel !== 'walk-in' && isCashMethod(method);
+      return (
+        channel !== 'walk-in' && (isCashMethod(method) || isGcashMethod(method))
+      );
     });
     return [...filtered].sort(
       (a, b) => getPickupTimestamp(a) - getPickupTimestamp(b)
@@ -645,6 +662,100 @@ const OrderQueue = ({
       }
     },
     [refreshQueue]
+  );
+
+  const fetchPaymentProof = useCallback(
+    async (order) => {
+      const orderKey = getOrderKey(order);
+      if (!orderKey) return null;
+      if (paymentProofs[orderKey]) {
+        return paymentProofs[orderKey];
+      }
+      setProofLoading((prev) => ({ ...prev, [orderKey]: true }));
+      try {
+        const params = {};
+        if (order?.id) {
+          params.orderId = order.id;
+        } else if (order?.orderNumber || order?.order_number) {
+          params.orderNumber = order.orderNumber || order.order_number;
+        }
+        const response = await orderService.getPaymentProofs(params);
+        if (response?.success === false) {
+          throw new Error(response?.message || 'Failed to load payment proof.');
+        }
+        const proofs = Array.isArray(response?.data) ? response.data : [];
+        const proof = proofs[0] || null;
+        if (proof) {
+          setPaymentProofs((prev) => ({ ...prev, [orderKey]: proof }));
+        }
+        return proof;
+      } catch (err) {
+        const message =
+          err?.message ||
+          err?.details?.message ||
+          'Failed to load payment proof.';
+        toast.error(message);
+        return null;
+      } finally {
+        setProofLoading((prev) => ({ ...prev, [orderKey]: false }));
+      }
+    },
+    [paymentProofs]
+  );
+
+  const handleSeeProof = useCallback(
+    async (order) => {
+      const proof = await fetchPaymentProof(order);
+      if (!proof) {
+        toast.error('Payment proof not found.');
+        return;
+      }
+      setActiveProof({ ...proof, order });
+    },
+    [fetchPaymentProof]
+  );
+
+  const handleVerifyPaymentProof = useCallback(
+    async (order) => {
+      if (!order?.id) return;
+      const orderKey = getOrderKey(order);
+      setPaymentUpdating((prev) => ({ ...prev, [order.id]: true }));
+      try {
+        const proof = await fetchPaymentProof(order);
+        if (!proof?.id) {
+          throw new Error('No payment proof submitted yet.');
+        }
+        if (normalizeStatus(proof.status) !== 'pending') {
+          throw new Error('Payment proof is already reviewed.');
+        }
+        const response = await orderService.verifyPaymentProof(proof.id);
+        if (!response?.success) {
+          throw new Error(response?.message || 'Failed to verify payment.');
+        }
+        const updatedProof = response?.data || {
+          ...proof,
+          status: 'verified',
+        };
+        setPaymentProofs((prev) => ({ ...prev, [orderKey]: updatedProof }));
+        const label =
+          formatOrderNumber(order.orderNumber) || order.orderNumber || order.id;
+        toast.success('Payment Verified', {
+          description: `Order #${label} marked as paid.`,
+        });
+        if (typeof refreshQueue === 'function') {
+          await refreshQueue();
+        }
+      } catch (err) {
+        const message =
+          err?.message || err?.details?.message || 'Failed to verify payment.';
+        toast.error('Payment Failed', {
+          description: message,
+        });
+      } finally {
+        setPaymentUpdating((prev) => ({ ...prev, [order.id]: false }));
+      }
+    },
+    [fetchPaymentProof, refreshQueue]
   );
 
   const handleStartPreparing = useCallback(
@@ -1090,22 +1201,37 @@ const OrderQueue = ({
                 const paymentStatus = getPaymentStatus(order);
                 const isPaid = isOrderPaid(order);
                 const isGcash = isGcashMethod(paymentMethod);
+                const orderKey = getOrderKey(order);
+                const paymentProof = paymentProofs[orderKey];
+                const normalizedPaymentStatus = normalizeStatus(paymentStatus);
+                const isRejectedPayment = [
+                  'rejected',
+                  'failed',
+                  'declined',
+                  'void',
+                  'voided',
+                ].includes(normalizedPaymentStatus);
+                const proofStatus = normalizeStatus(paymentProof?.status);
+                const proofFinalized =
+                  Boolean(proofStatus) && proofStatus !== 'pending';
                 const showPayment =
                   (channel !== 'walk-in' && isCashMethod(paymentMethod)) ||
                   isGcash;
-                const showMarkPaid =
+                const showCashMarkPaid =
                   showPayment &&
                   !isPaid &&
                   can('payment.process') &&
                   isCashMethod(paymentMethod);
-                const paymentLabel = isGcash
+                const showGcashProof =
+                  showPayment && isGcash && can('payment.process');
+                const showGcashMarkPaid = showGcashProof && !isPaid;
+                const paymentLabel = isPaid
                   ? 'Paid'
-                  : isPaid
-                    ? 'Paid'
-                    : formatPaymentStatusLabel(paymentStatus);
-                const paymentBadgeClasses =
-                  isGcash || isPaid
-                    ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                  : formatPaymentStatusLabel(paymentStatus);
+                const paymentBadgeClasses = isPaid
+                  ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                  : isRejectedPayment
+                    ? 'border-red-200 bg-red-100 text-red-800'
                     : 'border-amber-200 bg-amber-100 text-amber-800';
                 const paymentMethodLabel =
                   formatPaymentMethodLabel(paymentMethod) || 'Cash';
@@ -1161,7 +1287,7 @@ const OrderQueue = ({
                           >
                             {paymentLabel}
                           </Badge>
-                          {showMarkPaid && (
+                          {showCashMarkPaid && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -1178,6 +1304,50 @@ const OrderQueue = ({
                                 'Mark Paid'
                               )}
                             </Button>
+                          )}
+                          {showGcashProof && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2"
+                                disabled={proofLoading[orderKey]}
+                                onClick={() => handleSeeProof(order)}
+                              >
+                                {proofLoading[orderKey] ? (
+                                  <>
+                                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                    Loading
+                                  </>
+                                ) : (
+                                  'See proof'
+                                )}
+                              </Button>
+                              {showGcashMarkPaid && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2"
+                                  disabled={
+                                    paymentUpdating[order.id] ||
+                                    proofLoading[orderKey] ||
+                                    proofFinalized
+                                  }
+                                  onClick={() =>
+                                    handleVerifyPaymentProof(order)
+                                  }
+                                >
+                                  {paymentUpdating[order.id] ? (
+                                    <>
+                                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                      Updating
+                                    </>
+                                  ) : (
+                                    'Mark Paid'
+                                  )}
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -1426,6 +1596,158 @@ const OrderQueue = ({
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(activeProof)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveProof(null);
+            setProofZoomUrl('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[720px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BadgeDollarSign className="h-5 w-5 text-emerald-600" />
+              Payment Proof for Order #
+              {formatOrderNumber(
+                activeProof?.orderNumber || activeProof?.order?.orderNumber
+              ) ||
+                activeProof?.orderNumber ||
+                activeProof?.order?.orderNumber ||
+                activeProof?.orderId ||
+                'N/A'}
+            </DialogTitle>
+            <DialogDescription>
+              Review the uploaded GCash payment proof.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 text-sm">
+            <div className="rounded-lg border bg-slate-50/70 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex items-start gap-3">
+                  <User className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Customer
+                    </p>
+                    <p className="font-medium">
+                      {activeProof?.order?.customerName ||
+                        activeProof?.order?.customer_name ||
+                        'Customer'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <BadgeDollarSign className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Amount
+                    </p>
+                    <p className="font-medium">
+                      ₱{Number(activeProof?.amount || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CreditCard className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Status
+                    </p>
+                    <p className="font-medium">
+                      {formatPaymentStatusLabel(activeProof?.status)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Clock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Submitted
+                    </p>
+                    <p className="font-medium">
+                      {formatDateTime(activeProof?.submittedAt)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 sm:col-span-2">
+                  <ListOrdered className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      Reference No.
+                    </p>
+                    <p className="font-medium">
+                      {activeProof?.referenceNumber || 'Not provided'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/30 p-3">
+              {activeProof?.proofImageUrl ? (
+                <>
+                  <button
+                    type="button"
+                    className="w-full"
+                    onClick={() => setProofZoomUrl(activeProof.proofImageUrl)}
+                  >
+                    <img
+                      src={activeProof.proofImageUrl}
+                      alt="Payment proof"
+                      className="w-full max-h-[420px] rounded-md border bg-white object-contain cursor-zoom-in"
+                    />
+                  </button>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Click the image to view it full size.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No proof image uploaded yet.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setActiveProof(null)}
+            >
+              <X className="h-4 w-4" />
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(proofZoomUrl)}
+        onOpenChange={(open) => {
+          if (!open) setProofZoomUrl('');
+        }}
+      >
+        <DialogContent className="max-w-[95vw] w-full h-[95vh] p-4">
+          <DialogHeader>
+            <DialogTitle>Payment Proof</DialogTitle>
+            <DialogDescription>Full-size preview</DialogDescription>
+          </DialogHeader>
+          <div className="flex h-full items-center justify-center">
+            {proofZoomUrl ? (
+              <img
+                src={proofZoomUrl}
+                alt="Payment proof full size"
+                className="max-h-[80vh] w-auto object-contain"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(cancelledDetail)}

@@ -704,6 +704,34 @@ class OrderService {
     return normalizeApiResult(res);
   }
 
+  async getPaymentProofs(params = {}) {
+    if (shouldUseMocks()) {
+      await mockDelay(300);
+      return { success: true, data: [] };
+    }
+    const query = new URLSearchParams(params).toString();
+    const res = await apiClient.get(
+      `/payments/proofs${query ? `?${query}` : ''}`
+    );
+    if (res && typeof res === 'object' && 'data' in res) {
+      return {
+        ...res,
+        data: Array.isArray(res.data) ? res.data : [],
+      };
+    }
+    return { success: true, data: Array.isArray(res) ? res : [] };
+  }
+
+  async verifyPaymentProof(proofId, payload = {}) {
+    if (!proofId) {
+      throw new Error('Payment proof ID is required');
+    }
+    return apiClient.post(
+      `/payments/proofs/${encodeURIComponent(proofId)}/verify/`,
+      payload
+    );
+  }
+
   async processPayment(orderId, paymentData) {
     return apiClient.post(
       `/orders/${encodeURIComponent(orderId)}/payment`,

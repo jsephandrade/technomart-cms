@@ -779,6 +779,7 @@ def _auto_cancel_no_show_orders(now_ts, limit=50):
                     update_fields.extend(auto_fields)
                 update_fields = list(dict.fromkeys(update_fields))
                 order.save(update_fields=update_fields)
+                _restore_pax_for_order(order, reason="pickup_window_expired", now_ts=now_ts)
 
                 try:
                     recalc_order_counters(order)
@@ -864,6 +865,85 @@ def _extract_ingredient_requirements(raw):
         qty = max(1, qty)
         requirements.append((str(item_id), qty))
     return requirements
+
+
+def _normalize_pax_deductions(raw):
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        normalized = {}
+        for key, value in raw.items():
+            try:
+                qty = int(value)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            normalized[str(key)] = qty
+        return normalized
+    if isinstance(raw, list):
+        normalized = {}
+        for entry in raw:
+            item_id = None
+            qty_raw = None
+            if isinstance(entry, dict):
+                item_id = (
+                    entry.get("menuItemId")
+                    or entry.get("menu_item_id")
+                    or entry.get("itemId")
+                    or entry.get("id")
+                )
+                qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count")
+            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                item_id, qty_raw = entry[0], entry[1]
+            if not item_id:
+                continue
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            key = str(item_id)
+            normalized[key] = normalized.get(key, 0) + qty
+        return normalized
+    return {}
+
+
+def _restore_pax_for_order(order, *, reason="", now_ts=None):
+    if not order:
+        return False
+    try:
+        from .models import Order, MenuItem
+    except Exception:
+        return False
+    try:
+        with transaction.atomic():
+            locked = Order.objects.select_for_update().filter(id=order.id).first()
+            if not locked:
+                return False
+            if canonical_status(locked.status) != "cancelled":
+                return False
+            meta = locked.meta or {}
+            if meta.get("pax_restored") or not meta.get("pax_deductions"):
+                return False
+            deductions = _normalize_pax_deductions(meta.get("pax_deductions"))
+            if not deductions:
+                return False
+            for menu_item_id, qty in deductions.items():
+                MenuItem.objects.filter(id=menu_item_id).update(
+                    pax_per_preparation=F("pax_per_preparation") + qty
+                )
+            meta["pax_restored"] = True
+            meta["pax_restored_at"] = (now_ts or dj_tz.now()).isoformat()
+            if reason:
+                meta["pax_restore_reason"] = reason
+            locked.meta = meta
+            locked.save(update_fields=["meta", "updated_at"])
+            return True
+    except Exception:
+        logger.exception("Failed to restore pax for cancelled order")
+        return False
 
 
 def _safe_item(i):
@@ -1112,14 +1192,17 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
                     continue
                 totals[str(menu_item.id)] += qty
             if not totals:
-                return
+                return {}
             for menu_item_id, qty in totals.items():
+                if qty <= 0:
+                    continue
                 MenuItem.objects.filter(id=menu_item_id).update(
                     pax_per_preparation=Greatest(
                         Value(0),
                         F("pax_per_preparation") - qty,
                     )
                 )
+            return dict(totals)
 
         station_lookup, station_list = _load_station_lookup()
         active_item_states = list(ITEM_ACTIVE_STATES)
@@ -1312,7 +1395,14 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
 
         recalc_order_counters(o, created_items)
         try:
-            apply_pax_deductions(line_blueprints)
+            pax_deductions = apply_pax_deductions(line_blueprints)
+            if pax_deductions:
+                meta = o.meta or {}
+                meta["pax_deductions"] = pax_deductions
+                meta["pax_deducted"] = True
+                meta["pax_deducted_at"] = dj_tz.now().isoformat()
+                o.meta = meta
+                o.save(update_fields=["meta", "updated_at"])
         except Exception:
             logger.exception("Failed to deduct pax per preparation")
 
@@ -2339,6 +2429,11 @@ def order_status(request, oid):
             o.save(update_fields=update_fields)
         else:
             o.save(update_fields=["updated_at"])
+
+        if canonical_status(o.status) == "cancelled":
+            _restore_pax_for_order(
+                o, reason=cancel_reason or "cancelled", now_ts=dj_tz.now()
+            )
 
         if status_changed:
             new_canonical = canonical_status(o.status)

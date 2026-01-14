@@ -358,16 +358,17 @@ def auto_expire_no_show_orders(limit: int = 50):
     try:
         from .models import Order, AppUser
         from .views_common import _revoke_all_refresh_tokens
-        from .views_orders import (
-            canonical_status,
-            _clear_auto_flow,
-            _is_walk_in_channel,
-            _is_guest_user,
-            _safe_order,
-            record_order_event,
-            recalc_order_counters,
-            publish_event,
-        )
+            from .views_orders import (
+                canonical_status,
+                _clear_auto_flow,
+                _is_walk_in_channel,
+                _is_guest_user,
+                _restore_pax_for_order,
+                _safe_order,
+                record_order_event,
+                recalc_order_counters,
+                publish_event,
+            )
     except Exception as exc:
         logger.error(f"No-show auto cancel initialization failed: {exc}")
         return 0
@@ -432,6 +433,9 @@ def auto_expire_no_show_orders(limit: int = 50):
                     update_fields.extend(auto_fields)
                 update_fields = list(dict.fromkeys(update_fields))
                 order.save(update_fields=update_fields)
+                _restore_pax_for_order(
+                    order, reason="pickup_window_expired", now_ts=now_ts
+                )
 
                 try:
                     recalc_order_counters(order)

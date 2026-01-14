@@ -1,5 +1,5 @@
 // ComboMeals.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
 import { useCart } from '../../../context/CartContext';
 import { fetchMenuItems } from '../../../api/api';
 import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
+import { subscribeMenuRefresh } from '../../../utils/menuRefresh';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 40) / 2;
@@ -144,39 +145,47 @@ export default function ComboMeals() {
     Roboto_700Bold,
   });
 
-  useEffect(() => {
-    const loadComboMeals = async () => {
-      try {
-        const items = await fetchMenuItems();
-        const imageById = new Map();
-        (items || []).forEach((entry) => {
-          if (!entry || entry.id === undefined || entry.id === null) return;
-          const src = resolveImageSrc(entry);
-          if (src) imageById.set(String(entry.id), src);
-        });
+  const loadComboMeals = useCallback(async ({ silent = false } = {}) => {
+    try {
+      if (!silent) setLoading(true);
+      const items = await fetchMenuItems();
+      const imageById = new Map();
+      (items || []).forEach((entry) => {
+        if (!entry || entry.id === undefined || entry.id === null) return;
+        const src = resolveImageSrc(entry);
+        if (src) imageById.set(String(entry.id), src);
+      });
 
-        const combos = (items || [])
-          .filter((entry) => isComboMeal(entry))
-          .map((entry) => {
-            const collageSources = resolveComboImages(entry, imageById).slice(
-              0,
-              3
-            );
-            return { ...entry, collageSources };
-          })
-          .filter((entry) => entry.collageSources.length === 3);
+      const combos = (items || [])
+        .filter((entry) => isComboMeal(entry))
+        .map((entry) => {
+          const collageSources = resolveComboImages(entry, imageById).slice(
+            0,
+            3
+          );
+          return { ...entry, collageSources };
+        })
+        .filter((entry) => entry.collageSources.length === 3);
 
-        setComboMeals(combos);
-      } catch (error) {
-        console.error('Error fetching combo meals:', error);
-        setComboMeals([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadComboMeals();
+      setComboMeals(combos);
+    } catch (error) {
+      console.error('Error fetching combo meals:', error);
+      setComboMeals([]);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadComboMeals();
+  }, [loadComboMeals]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadComboMeals({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadComboMeals]);
 
   if (!fontsLoaded || loading) {
     return (

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,6 +23,7 @@ import { fetchMenuItems, USER_CACHE_KEY } from '../api/api';
 import { useCart } from '../context/CartContext';
 import { resolveImageSource } from '../utils/image';
 import { getPaxRemaining, isPaxAvailable } from '../utils/pax';
+import { subscribeMenuRefresh } from '../utils/menuRefresh';
 
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -29,6 +36,7 @@ export default function SearchScreen() {
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('customer');
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     const getUserRole = async () => {
@@ -50,20 +58,30 @@ export default function SearchScreen() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const loadMenuItems = async () => {
-      setLoading(true);
-      const items = await fetchMenuItems();
-      if (active) {
-        setMenuItems(items || []);
-        setLoading(false);
-      }
-    };
-    loadMenuItems();
     return () => {
-      active = false;
+      isMountedRef.current = false;
     };
   }, []);
+
+  const loadMenuItems = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    const items = await fetchMenuItems();
+    if (isMountedRef.current) {
+      setMenuItems(items || []);
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMenuItems();
+  }, [loadMenuItems]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadMenuItems({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadMenuItems]);
 
   useEffect(() => {
     const normalized = query.trim().toLowerCase();

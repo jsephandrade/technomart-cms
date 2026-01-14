@@ -30,6 +30,7 @@ import { useCart } from '../../context/CartContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { resolveImageSource } from '../../utils/image';
 import { getPaxRemaining, isPaxAvailable } from '../../utils/pax';
+import { subscribeMenuRefresh } from '../../utils/menuRefresh';
 
 const MENU_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const COLLAGE_GAP = 4;
@@ -203,7 +204,7 @@ export default function HomeDashboardScreen() {
     getUserRole();
   }, []);
 
-  const loadMenuItems = async ({ silent = false } = {}) => {
+  const loadMenuItems = useCallback(async ({ silent = false } = {}) => {
     const shouldUpdateLoading = !hasLoadedMenuRef.current && !silent;
     try {
       if (shouldUpdateLoading) {
@@ -219,11 +220,14 @@ export default function HomeDashboardScreen() {
         setLoading(false);
       }
     }
-  };
+  }, []);
 
-  const loadAllData = async ({ silent = false } = {}) => {
-    await loadMenuItems({ silent });
-  };
+  const loadAllData = useCallback(
+    async ({ silent = false } = {}) => {
+      await loadMenuItems({ silent });
+    },
+    [loadMenuItems]
+  );
 
   useEffect(() => {
     loadAllData();
@@ -232,7 +236,14 @@ export default function HomeDashboardScreen() {
       MENU_REFRESH_INTERVAL_MS
     );
     return () => clearInterval(interval);
-  }, []);
+  }, [loadAllData]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadMenuItems({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadMenuItems]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);

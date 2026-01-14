@@ -1,5 +1,5 @@
 // Meals.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { useCart } from '../../../context/CartContext';
 import { fetchMenuItems } from '../../../api/api';
 import { resolveImageSource } from '../../../utils/image';
 import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
+import { subscribeMenuRefresh } from '../../../utils/menuRefresh';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 40) / 2;
@@ -37,12 +38,9 @@ export default function ComboMeals() {
     Roboto_700Bold,
   });
 
-  useEffect(() => {
-    loadComboMeals();
-  }, []);
-
-  const loadComboMeals = async () => {
+  const loadComboMeals = useCallback(async ({ silent = false } = {}) => {
     try {
+      if (!silent) setLoading(true);
       const items = await fetchMenuItems();
       const filtered = items.filter((item) => {
         const category = String(
@@ -58,9 +56,20 @@ export default function ComboMeals() {
     } catch (error) {
       console.error('Error fetching meals:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadComboMeals();
+  }, [loadComboMeals]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadComboMeals({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadComboMeals]);
 
   if (!fontsLoaded || loading) {
     return (

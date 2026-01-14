@@ -28,6 +28,7 @@ import {
   fetchCateringEvents,
   updateCateringEventPayment,
 } from '../../api/api';
+import { subscribeMenuRefresh } from '../../utils/menuRefresh';
 
 /* ---------------------------
    Convert "5:32 PM" → "17:32"
@@ -287,6 +288,15 @@ export default function CateringTab() {
     );
   }, [packages, scheduleForm.selectedPackageId]);
 
+  const refreshMenuItems = useCallback(async () => {
+    try {
+      const items = await fetchMenuItems();
+      setMenuItems(items && Array.isArray(items) ? items : []);
+    } catch (err) {
+      console.error('Error fetching menu items:', err);
+    }
+  }, []);
+
   /* ------------------ Load Data ------------------ */
   const loadData = useCallback(async () => {
     try {
@@ -305,8 +315,7 @@ export default function CateringTab() {
       const clientName = parsed.name?.trim() || '';
       setScheduleForm((prev) => ({ ...prev, client: clientName }));
 
-      const items = await fetchMenuItems();
-      setMenuItems(items && Array.isArray(items) ? items : []);
+      await refreshMenuItems();
 
       const packageList = await fetchCateringPackages();
       setPackages(packageList && Array.isArray(packageList) ? packageList : []);
@@ -345,11 +354,18 @@ export default function CateringTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshMenuItems]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      refreshMenuItems();
+    });
+    return unsubscribe;
+  }, [refreshMenuItems]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

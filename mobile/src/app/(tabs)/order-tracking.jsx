@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Roboto_700Bold } from '@expo-google-fonts/roboto';
 import { cancelOrder, fetchMenuItems, fetchUserOrders } from '../../api/api';
 import { resolveImageSource } from '../../utils/image';
+import { subscribeMenuRefresh } from '../../utils/menuRefresh';
 
 const SUPPORT_EMAIL = 'josephformentera2@gmail.com';
 const COLLAGE_GAP = 3;
@@ -472,59 +479,69 @@ export default function OrderTrackingScreen() {
     return map;
   }, [menuItems]);
 
-  const loadData = async ({ silent = false, includeMenu = true } = {}) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-    if (!silent) setLoading(true);
-    try {
-      const [orderData, menuData] = await Promise.all([
-        fetchUserOrders(),
-        includeMenu
-          ? fetchMenuItems().catch((err) => {
-              console.error('Failed to fetch menu items:', err);
-              return [];
-            })
-          : Promise.resolve(null),
-      ]);
-      const orders = Array.isArray(orderData) ? orderData : [];
-      if (includeMenu) {
-        const menus = Array.isArray(menuData) ? menuData : [];
-        setMenuItems(menus);
-      }
-      const sorted = [...orders].sort((a, b) => {
-        const dateA = new Date(resolveOrderDate(a)).getTime() || 0;
-        const dateB = new Date(resolveOrderDate(b)).getTime() || 0;
-        return dateB - dateA;
-      });
-      const current = [];
-      const previous = [];
-      sorted.forEach((order) => {
-        if (isPreviousStatus(order?.status)) {
-          previous.push(order);
-        } else {
-          current.push(order);
+  const loadData = useCallback(
+    async ({ silent = false, includeMenu = true } = {}) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      if (!silent) setLoading(true);
+      try {
+        const [orderData, menuData] = await Promise.all([
+          fetchUserOrders(),
+          includeMenu
+            ? fetchMenuItems().catch((err) => {
+                console.error('Failed to fetch menu items:', err);
+                return [];
+              })
+            : Promise.resolve(null),
+        ]);
+        const orders = Array.isArray(orderData) ? orderData : [];
+        if (includeMenu) {
+          const menus = Array.isArray(menuData) ? menuData : [];
+          setMenuItems(menus);
         }
-      });
-      setCurrentOrders(current);
-      setPreviousOrders(previous);
-    } catch (err) {
-      console.error('Failed to fetch orders:', err);
-    } finally {
-      if (!silent) setLoading(false);
-      isFetchingRef.current = false;
-    }
-  };
+        const sorted = [...orders].sort((a, b) => {
+          const dateA = new Date(resolveOrderDate(a)).getTime() || 0;
+          const dateB = new Date(resolveOrderDate(b)).getTime() || 0;
+          return dateB - dateA;
+        });
+        const current = [];
+        const previous = [];
+        sorted.forEach((order) => {
+          if (isPreviousStatus(order?.status)) {
+            previous.push(order);
+          } else {
+            current.push(order);
+          }
+        });
+        setCurrentOrders(current);
+        setPreviousOrders(previous);
+      } catch (err) {
+        console.error('Failed to fetch orders:', err);
+      } finally {
+        if (!silent) setLoading(false);
+        isFetchingRef.current = false;
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadData({ silent: true, includeMenu: true });
+    });
+    return unsubscribe;
+  }, [loadData]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
       loadData({ silent: true, includeMenu: false });
     }, ORDER_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [loadData]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -596,7 +613,7 @@ export default function OrderTrackingScreen() {
     const result = await cancelOrder(orderNumber);
     if (result?.success) {
       handleCloseModal();
-      loadData({ silent: true, includeMenu: false });
+      loadData({ silent: true, includeMenu: true });
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import { resolveImageSource } from '../../../utils/image';
 import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
+import { subscribeMenuRefresh } from '../../../utils/menuRefresh';
 
 export default function CategoryScreen() {
   const { category } = useLocalSearchParams();
@@ -25,9 +26,10 @@ export default function CategoryScreen() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState(null);
 
-  useEffect(() => {
-    const load = async () => {
+  const loadCategory = useCallback(
+    async ({ silent = false } = {}) => {
       try {
+        if (!silent) setLoading(true);
         const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
         const userData = entries[0][1] || entries[1][1];
         const parsed = userData ? JSON.parse(userData) : null;
@@ -41,11 +43,22 @@ export default function CategoryScreen() {
       } catch (err) {
         console.error('Error loading category items', err);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
-    };
-    load();
-  }, [category]);
+    },
+    [category]
+  );
+
+  useEffect(() => {
+    loadCategory();
+  }, [loadCategory]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadCategory({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadCategory]);
 
   const isCatering = category === 'Catering';
 

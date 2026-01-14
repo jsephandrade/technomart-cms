@@ -7,6 +7,7 @@ import {
   BASE_URL_FEEDBACK as CONFIG_BASE_URL_FEEDBACK,
   BASE_URL_MENU as CONFIG_BASE_URL_MENU,
 } from './config';
+import { notifyMenuRefresh } from '../utils/menuRefresh';
 
 // --------------------
 // Constants
@@ -640,6 +641,11 @@ export const cancelOrder = async (order) => {
             });
 
             Alert.alert('Success', 'Order canceled successfully!');
+            notifyMenuRefresh({
+              source: 'order.cancelled',
+              orderNumber,
+              timestamp: new Date().toISOString(),
+            });
             resolve({ success: true });
           } catch (err) {
             console.error(

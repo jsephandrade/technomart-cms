@@ -42,6 +42,7 @@ const POS = () => {
   const [cancelledOrders, setCancelledOrders] = useState([]);
   const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(false);
   const displayContainerRef = useRef(null);
+  const lastCancelledAtRef = useRef(null);
 
   // Get data and business logic from custom hooks
   const { categories, orderQueue, setOrderQueue } = usePOSData();
@@ -92,6 +93,43 @@ const POS = () => {
     }
   };
 
+  const notifyMenuRefresh = useCallback((detail) => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('menu.items.updated', { detail: detail || null })
+        );
+      }
+    } catch {}
+  }, []);
+
+  const parseTimestamp = useCallback((value) => {
+    if (!value) return 0;
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }, []);
+
+  const getLatestCancelledTimestamp = useCallback(
+    (orders) => {
+      if (!Array.isArray(orders) || orders.length === 0) return 0;
+      let latest = 0;
+      orders.forEach((order) => {
+        const raw =
+          order?.cancelledAt ||
+          order?.cancelled_at ||
+          order?.meta?.cancelled_at ||
+          order?.meta?.cancelledAt ||
+          order?.updatedAt ||
+          order?.updated_at ||
+          null;
+        const ts = parseTimestamp(raw);
+        if (ts > latest) latest = ts;
+      });
+      return latest;
+    },
+    [parseTimestamp]
+  );
+
   const refreshQueue = useCallback(async () => {
     try {
       const res = await orderService.getOrderQueue();
@@ -114,13 +152,25 @@ const POS = () => {
       });
       const data = Array.isArray(res?.data) ? res.data : [];
       setCancelledOrders(data);
+      const latestCancelledAt = getLatestCancelledTimestamp(data);
+      if (latestCancelledAt) {
+        if (lastCancelledAtRef.current === null) {
+          lastCancelledAtRef.current = latestCancelledAt;
+        } else if (latestCancelledAt > lastCancelledAtRef.current) {
+          lastCancelledAtRef.current = latestCancelledAt;
+          notifyMenuRefresh({
+            source: 'order.cancelled',
+            latestCancelledAt: new Date(latestCancelledAt).toISOString(),
+          });
+        }
+      }
       return data;
     } catch (e) {
       console.error(e);
     }
     setCancelledOrders([]);
     return [];
-  }, []);
+  }, [getLatestCancelledTimestamp, notifyMenuRefresh]);
 
   const handleProcessPayment = (paymentDetails) => {
     const orderSnapshot = (currentOrder || []).map((item) => ({

@@ -27,7 +27,6 @@ from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone as dj_tz
 import uuid
-from menu.models import MenuItem  # adjust import to your menu app
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
@@ -848,7 +847,6 @@ def list_orders(request):
         })
 
     return Response({"success": True, "orders": orders_data})
-from menu.models import MenuItem  # make sure this is your menu_item model
 from api.models import Offer, AppUser
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

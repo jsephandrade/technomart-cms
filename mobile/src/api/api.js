@@ -807,7 +807,15 @@ export const confirmPayment = async (checkoutId, method) => {
     const response = await api.post(`/orders/${checkoutId}/confirm_payment/`, {
       method,
     });
-    return response.data;
+    const payload = response.data;
+    if (payload?.success) {
+      notifyMenuRefresh({
+        source: 'order.confirmed',
+        orderNumber: payload.order_number || payload.orderNumber || checkoutId,
+        timestamp: Date.now(),
+      });
+    }
+    return payload;
   } catch (err) {
     console.log('confirmPayment error:', err.response?.data || err.message);
     throw err;

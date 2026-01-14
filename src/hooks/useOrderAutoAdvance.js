@@ -6,8 +6,9 @@ import orderService from '@/api/services/orderService';
  * Global background service for auto-advancing orders
  * Runs independently of the current page/component
  */
-const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
+const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
 const ADVANCE_LOCK_TIMEOUT_MS = 10000; // Clear stuck locks after 10 seconds
+const RATE_LIMIT_BACKOFF_MS = 15000;
 
 const normalizeStatus = (value) => {
   if (!value) return '';
@@ -114,6 +115,7 @@ export const useOrderAutoAdvance = () => {
   const intervalRef = useRef(null);
   const isProcessingRef = useRef(false);
   const haltedRef = useRef(false);
+  const backoffUntilRef = useRef(0);
 
   const processOrders = useCallback(async () => {
     // Skip if not authenticated or no permission
@@ -128,6 +130,9 @@ export const useOrderAutoAdvance = () => {
 
     try {
       isProcessingRef.current = true;
+      if (Date.now() < backoffUntilRef.current) {
+        return;
+      }
 
       // Fetch current order queue
       const result = await orderService.getOrderQueue();
@@ -235,6 +240,10 @@ export const useOrderAutoAdvance = () => {
         error?.response?.status ??
         error?.details?.status ??
         null;
+      if (status === 429) {
+        backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        return;
+      }
       if (status === 401) {
         haltedRef.current = true;
         if (intervalRef.current) {

@@ -684,6 +684,144 @@ ITEM_ACTIVE_STATES = {
 }
 
 
+def _coerce_int(value, fallback):
+    try:
+        parsed = int(value)
+        return parsed
+    except Exception:
+        return fallback
+
+
+def _get_pickup_windows():
+    pickup_window = max(
+        1, _coerce_int(getattr(settings, "ORDER_PICKUP_WINDOW_MINUTES", 30), 30)
+    )
+    grace_window = max(
+        0, _coerce_int(getattr(settings, "ORDER_PICKUP_GRACE_MINUTES", 15), 15)
+    )
+    return pickup_window, grace_window
+
+
+def _resolve_promised_time(order):
+    if getattr(order, "promised_time", None):
+        return order.promised_time
+    if getattr(order, "created_at", None) and getattr(order, "quoted_minutes", 0):
+        try:
+            return order.created_at + timedelta(minutes=int(order.quoted_minutes or 0))
+        except Exception:
+            return None
+    return None
+
+
+def _auto_cancel_no_show_orders(now_ts, limit=50):
+    try:
+        from .models import Order
+    except Exception:
+        return 0
+
+    pickup_window, grace_window = _get_pickup_windows()
+    cutoff = now_ts - timedelta(minutes=pickup_window + grace_window)
+
+    candidate_ids = list(
+        Order.objects.filter(
+            promised_time__isnull=False,
+            promised_time__lte=cutoff,
+            status__in={"ready", "staged", "handoff"},
+        )
+        .exclude(status__in={"completed", "cancelled", "voided", "refunded"})
+        .values_list("id", flat=True)[: max(1, int(limit or 50))]
+    )
+
+    processed = 0
+
+    for order_id in candidate_ids:
+        try:
+            with transaction.atomic():
+                order = (
+                    Order.objects.select_for_update()
+                    .select_related("placed_by")
+                    .get(id=order_id)
+                )
+
+                if canonical_status(order.status) not in {"staged", "handoff"}:
+                    continue
+                if _is_walk_in_channel(order.channel) or _is_walk_in_channel(
+                    order.order_type
+                ):
+                    continue
+
+                meta = order.meta or {}
+                if meta.get("no_show_processed"):
+                    continue
+
+                promised_time = _resolve_promised_time(order)
+                if not promised_time:
+                    continue
+                due_at = promised_time + timedelta(
+                    minutes=pickup_window + grace_window
+                )
+                if due_at > now_ts:
+                    continue
+
+                previous_status = order.status
+                order.status = "cancelled"
+                meta["no_show_processed"] = True
+                meta["no_show_processed_at"] = now_ts.isoformat()
+                meta["no_show_reason"] = "pickup_window_expired"
+                meta["cancel_reason"] = "pickup_window_expired"
+                meta["cancelled_at"] = now_ts.isoformat()
+                meta["cancelled_source"] = "system"
+                order.meta = meta
+
+                update_fields = ["status", "meta", "updated_at"]
+                auto_fields = _clear_auto_flow(order, reason="no_show")
+                if auto_fields:
+                    update_fields.extend(auto_fields)
+                update_fields = list(dict.fromkeys(update_fields))
+                order.save(update_fields=update_fields)
+
+                try:
+                    recalc_order_counters(order)
+                except Exception:
+                    pass
+
+                record_order_event(
+                    order,
+                    event_type="order.no_show",
+                    from_state=canonical_status(previous_status),
+                    to_state=canonical_status(order.status),
+                    actor=None,
+                    payload={
+                        "previousStatus": previous_status,
+                        "pickupWindowMinutes": pickup_window,
+                        "graceMinutes": grace_window,
+                    },
+                )
+
+                order_payload = _safe_order(order)
+                publish_event(
+                    "order.status_changed",
+                    {
+                        "order": order_payload,
+                        "status": canonical_status(order.status),
+                        "reason": "no_show",
+                    },
+                    roles={"admin", "manager", "staff"},
+                    user_ids=[
+                        str(order.placed_by_id)
+                    ]
+                    if getattr(order, "placed_by_id", None)
+                    else None,
+                )
+
+                processed += 1
+        except Exception:
+            logger.exception("Failed to auto cancel no-show order from queue")
+            continue
+
+    return processed
+
+
 def _parse_uuid(val):
     try:
         if not val:
@@ -1338,6 +1476,7 @@ def order_queue(request):
         station_lookup, stations = _load_station_lookup()
         active_statuses = set(ORDER_ACTIVE_STATUSES)
         now_ts = dj_tz.now()
+        _auto_cancel_no_show_orders(now_ts, limit=100)
 
         qs = (
             Order.objects.filter(status__in=active_statuses)

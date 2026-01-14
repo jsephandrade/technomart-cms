@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import cateringService from '@/api/services/cateringService';
 import { menuService } from '@/api/services/menuService';
 import { useAuth } from '@/components/AuthContext';
+import { useMenuPaxRealtime } from '@/hooks/useMenuPaxRealtime';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Menu as MenuIcon, Package, PlusCircle } from 'lucide-react';
@@ -36,6 +37,7 @@ const stripUnsupportedFields = (item = {}) => {
 
 const MenuManagement = () => {
   const { can } = useAuth();
+  useMenuPaxRealtime();
   const {
     items,
     createMenuItem,

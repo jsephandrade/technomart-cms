@@ -917,6 +917,10 @@ def _restore_pax_for_order(order, *, reason="", now_ts=None):
         from .models import Order, MenuItem
     except Exception:
         return False
+
+    restored = False
+    restored_items = None
+    restored_quantities = None
     try:
         with transaction.atomic():
             locked = Order.objects.select_for_update().filter(id=order.id).first()
@@ -940,10 +944,29 @@ def _restore_pax_for_order(order, *, reason="", now_ts=None):
                 meta["pax_restore_reason"] = reason
             locked.meta = meta
             locked.save(update_fields=["meta", "updated_at"])
-            return True
+            restored = True
+            restored_items = list(deductions.keys())
+            restored_quantities = deductions
     except Exception:
         logger.exception("Failed to restore pax for cancelled order")
         return False
+
+    if restored and restored_items:
+        try:
+            publish_event(
+                "menu.pax.restored",
+                {
+                    "orderId": str(order.id),
+                    "orderNumber": getattr(order, "order_number", "") or "",
+                    "itemIds": restored_items,
+                    "quantities": restored_quantities or {},
+                    "reason": reason or "",
+                },
+                roles={"admin", "manager", "staff"},
+            )
+        except Exception:
+            logger.exception("Failed to publish pax restore event")
+    return restored
 
 
 def _safe_item(i):
@@ -1403,6 +1426,19 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
                 meta["pax_deducted_at"] = dj_tz.now().isoformat()
                 o.meta = meta
                 o.save(update_fields=["meta", "updated_at"])
+                try:
+                    publish_event(
+                        "menu.pax.updated",
+                        {
+                            "orderId": str(o.id),
+                            "orderNumber": o.order_number,
+                            "itemIds": list(pax_deductions.keys()),
+                            "quantities": pax_deductions,
+                        },
+                        roles={"admin", "manager", "staff"},
+                    )
+                except Exception:
+                    logger.exception("Failed to publish pax update event")
         except Exception:
             logger.exception("Failed to deduct pax per preparation")
 

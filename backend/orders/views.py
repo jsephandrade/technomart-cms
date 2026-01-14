@@ -3,6 +3,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from decimal import Decimal, ROUND_DOWN
 from .utils import map_order_status  # if you put it in utils.py
+import json
+import logging
+from collections import defaultdict
 
 from rest_framework import status
 from api.models import Order, OrderItem
@@ -12,9 +15,12 @@ from decimal import Decimal
 
 from django.http import JsonResponse
 from django.db import transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 from django.utils.dateparse import parse_datetime
 from django.shortcuts import get_object_or_404
 from api.models import Order, OrderItem, MenuItem, PaymentTransaction, CheckoutSession
+from api.events import publish_event
 from .serializers import OrderSerializer
 from notifications.models import Notification
 from decimal import Decimal
@@ -25,6 +31,8 @@ from menu.models import MenuItem  # adjust import to your menu app
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
+logger = logging.getLogger(__name__)
+
 PAYMENT_CASH_ALIASES = {
     "cash",
     "counter",
@@ -34,6 +42,186 @@ PAYMENT_CASH_ALIASES = {
     "cod",
 }
 LOYALTY_META_KEY = "loyaltyAwarded"
+
+
+def _extract_ingredient_requirements(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+    requirements = []
+    for entry in raw:
+        if not entry:
+            continue
+        qty = 1
+        if isinstance(entry, dict):
+            item_id = (
+                entry.get("id")
+                or entry.get("menuItemId")
+                or entry.get("itemId")
+                or entry.get("menu_item_id")
+            )
+            qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count") or 1
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                qty = 1
+        else:
+            item_id = entry
+        if not item_id:
+            continue
+        qty = max(1, qty)
+        requirements.append((str(item_id), qty))
+    return requirements
+
+
+def _normalize_pax_deductions(raw):
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        normalized = {}
+        for key, value in raw.items():
+            try:
+                qty = int(value)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            normalized[str(key)] = qty
+        return normalized
+    if isinstance(raw, list):
+        normalized = {}
+        for entry in raw:
+            item_id = None
+            qty_raw = None
+            if isinstance(entry, dict):
+                item_id = (
+                    entry.get("menuItemId")
+                    or entry.get("menu_item_id")
+                    or entry.get("itemId")
+                    or entry.get("id")
+                )
+                qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count")
+            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                item_id, qty_raw = entry[0], entry[1]
+            if not item_id:
+                continue
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            key = str(item_id)
+            normalized[key] = normalized.get(key, 0) + qty
+        return normalized
+    return {}
+
+
+def _apply_pax_deductions(items):
+    if not isinstance(items, list) or not items:
+        return {}
+    totals = defaultdict(int)
+    for entry in items:
+        if not entry or not isinstance(entry, dict):
+            continue
+        menu_item_id = (
+            entry.get("menu_item_id")
+            or entry.get("menuItemId")
+            or entry.get("itemId")
+            or entry.get("id")
+        )
+        qty_raw = entry.get("quantity") or entry.get("qty") or 0
+        try:
+            qty = int(qty_raw)
+        except Exception:
+            qty = 0
+        if not menu_item_id or qty <= 0:
+            continue
+        menu_item = MenuItem.objects.filter(id=menu_item_id).first()
+        if not menu_item:
+            continue
+        requirements = _extract_ingredient_requirements(
+            getattr(menu_item, "ingredients", []) or []
+        )
+        if requirements:
+            for ingredient_id, multiplier in requirements:
+                if ingredient_id == str(menu_item.id):
+                    continue
+                totals[ingredient_id] += qty * max(1, int(multiplier or 1))
+            continue
+        totals[str(menu_item.id)] += qty
+
+    if not totals:
+        return {}
+    for menu_item_id, qty in totals.items():
+        if qty <= 0:
+            continue
+        MenuItem.objects.filter(id=menu_item_id).update(
+            pax_per_preparation=Greatest(
+                Value(0),
+                F("pax_per_preparation") - qty,
+            )
+        )
+    return dict(totals)
+
+
+def _restore_pax_for_order(order, *, reason="", now_ts=None):
+    if not order:
+        return False
+    restored = False
+    restored_items = None
+    restored_quantities = None
+    try:
+        with transaction.atomic():
+            locked = Order.objects.select_for_update().filter(id=order.id).first()
+            if not locked:
+                return False
+            status_value = str(getattr(locked, "status", "")).strip().lower()
+            if status_value != "cancelled":
+                return False
+            meta = locked.meta or {}
+            if meta.get("pax_restored") or not meta.get("pax_deductions"):
+                return False
+            deductions = _normalize_pax_deductions(meta.get("pax_deductions"))
+            if not deductions:
+                return False
+            for menu_item_id, qty in deductions.items():
+                MenuItem.objects.filter(id=menu_item_id).update(
+                    pax_per_preparation=F("pax_per_preparation") + qty
+                )
+            meta["pax_restored"] = True
+            meta["pax_restored_at"] = (now_ts or dj_tz.now()).isoformat()
+            if reason:
+                meta["pax_restore_reason"] = reason
+            locked.meta = meta
+            locked.save(update_fields=["meta", "updated_at"])
+            restored = True
+            restored_items = list(deductions.keys())
+            restored_quantities = deductions
+    except Exception:
+        logger.exception("Failed to restore pax for cancelled order")
+        return False
+
+    if restored and restored_items:
+        try:
+            publish_event(
+                "menu.pax.restored",
+                {
+                    "orderId": str(order.id),
+                    "orderNumber": getattr(order, "order_number", "") or "",
+                    "itemIds": restored_items,
+                    "quantities": restored_quantities or {},
+                    "reason": reason or "",
+                },
+                roles={"admin", "manager", "staff"},
+            )
+        except Exception:
+            logger.exception("Failed to publish pax restore event")
+    return restored
 
 
 def _normalize_payment_method(value):
@@ -297,6 +485,10 @@ def cancel_order(request, order_number):
     if 'updated_at' not in update_fields:
         update_fields.append('updated_at')
     order.save(update_fields=update_fields)
+    try:
+        _restore_pax_for_order(order, reason=meta.get("cancel_reason") or "user_cancelled")
+    except Exception:
+        logger.exception("Failed to restore pax after cancellation")
     return JsonResponse({'message': f'Order {order_number} cancelled successfully.'})
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -548,6 +740,31 @@ def confirm_payment(request, order_number):
                 size=item.get("size"),
                 customize=item.get("customize"),
             )
+
+        try:
+            pax_deductions = _apply_pax_deductions(items)
+            if pax_deductions:
+                meta = order.meta or {}
+                meta["pax_deductions"] = pax_deductions
+                meta["pax_deducted"] = True
+                meta["pax_deducted_at"] = dj_tz.now().isoformat()
+                order.meta = meta
+                order.save(update_fields=["meta", "updated_at"])
+                try:
+                    publish_event(
+                        "menu.pax.updated",
+                        {
+                            "orderId": str(order.id),
+                            "orderNumber": order.order_number,
+                            "itemIds": list(pax_deductions.keys()),
+                            "quantities": pax_deductions,
+                        },
+                        roles={"admin", "manager", "staff"},
+                    )
+                except Exception:
+                    logger.exception("Failed to publish pax update event")
+        except Exception:
+            logger.exception("Failed to deduct pax per preparation")
 
         order.payment_method = method
         order.save(update_fields=["payment_method"])

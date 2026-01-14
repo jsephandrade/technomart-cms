@@ -11,6 +11,7 @@ import OrderHistoryModal from '@/components/pos/OrderHistoryModal';
 import { usePOSData, EMPTY_QUEUE_STATE } from '@/hooks/usePOSData';
 import { usePOSLogic } from '@/hooks/usePOSLogic';
 import { useOrderHistory } from '@/hooks/useOrderManagement';
+import { useMenuPaxRealtime } from '@/hooks/useMenuPaxRealtime';
 import { orderService } from '@/api/services/orderService';
 import { deductPax } from '@/lib/paxTracker';
 import {
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 
 const POS = () => {
+  useMenuPaxRealtime();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);

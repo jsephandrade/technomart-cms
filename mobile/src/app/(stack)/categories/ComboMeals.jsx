@@ -20,6 +20,7 @@ import {
 } from '@expo-google-fonts/roboto';
 import { useCart } from '../../../context/CartContext';
 import { fetchMenuItems } from '../../../api/api';
+import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 40) / 2;

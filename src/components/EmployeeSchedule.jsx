@@ -431,6 +431,8 @@ const EmployeeSchedule = () => {
     name: '',
     position: '',
     hireDate: '',
+    userId: '',
+    contact: '',
     repeatDays: ['Monday'],
     startTime: '08:00',
     endTime: '16:00',
@@ -626,6 +628,10 @@ const EmployeeSchedule = () => {
       toast.error('Staff member is required');
       return;
     }
+    if (!quickAdd.userId) {
+      toast.error('Select a staff member to link');
+      return;
+    }
     if (roleTargetsLoading) {
       toast.info('Loading team composition targets. Please try again.');
       return;
@@ -691,6 +697,8 @@ const EmployeeSchedule = () => {
       name: quickAdd.name,
       position: quickAdd.position,
       hireDate: quickAdd.hireDate,
+      userId: quickAdd.userId,
+      contact: quickAdd.contact,
       schedule: scheduleEntries,
     };
     try {
@@ -700,6 +708,8 @@ const EmployeeSchedule = () => {
         name: '',
         position: '',
         hireDate: '',
+        userId: '',
+        contact: '',
         repeatDays: ['Monday'],
         startTime: '08:00',
         endTime: '16:00',

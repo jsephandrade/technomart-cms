@@ -91,6 +91,7 @@ def _parse_date(val):
 
 
 def _safe_emp(e):
+    user = getattr(e, "user", None)
     return {
         "id": str(e.id),
         "name": e.name,
@@ -98,6 +99,11 @@ def _safe_emp(e):
         "hireDate": e.hire_date.isoformat() if getattr(e, "hire_date", None) else None,
         "contact": e.contact,
         "status": e.status,
+        "userId": str(user.id) if user else None,
+        "userName": getattr(user, "name", None) if user else None,
+        "userEmail": getattr(user, "email", None) if user else None,
+        "userRole": getattr(user, "role", None) if user else None,
+        "userStatus": getattr(user, "status", None) if user else None,
         "createdAt": e.created_at.isoformat() if e.created_at else None,
         "updatedAt": e.updated_at.isoformat() if e.updated_at else None,
     }
@@ -250,7 +256,7 @@ def employees(request):
             limit = request.GET.get("limit", 50)
 
             # Query only explicitly created employees (no auto-sync)
-            qs = Employee.objects.all()
+            qs = Employee.objects.select_related("user").all()
             # Confidentiality: Staff should only see themselves
             role_l = (getattr(actor, "role", "") or "").lower()
             if role_l not in {"admin", "manager"} and not _has_permission(actor, "employees.manage"):
@@ -333,13 +339,14 @@ def employees_with_schedule(request):
     if not name:
         return JsonResponse({"success": False, "message": "Name is required"}, status=400)
 
+    raw_user_id = payload.get("userId") or payload.get("user_id") or payload.get("user")
+    contact = (payload.get("contact") or "").strip()
     schedule_payload = payload.get("schedule") or []
     if not isinstance(schedule_payload, list):
         schedule_payload = []
 
-    hire_date = _parse_date(payload.get("hireDate") or payload.get("hire_date"))
-    if not hire_date:
-        hire_date = timezone.now().date()
+    raw_hire_date = payload.get("hireDate") if "hireDate" in payload else payload.get("hire_date")
+    hire_date = _parse_date(raw_hire_date)
 
     valid_rows = []
     for entry in schedule_payload:
@@ -350,15 +357,58 @@ def employees_with_schedule(request):
             valid_rows.append({"day": day, "start_time": st, "end_time": et})
 
     try:
-        from .models import Employee, ScheduleEntry
-        with transaction.atomic():
-            emp = Employee.objects.create(
-                name=name,
-                position=(payload.get("position") or "").strip(),
-                hire_date=hire_date,
-                contact=(payload.get("contact") or "").strip(),
-                status=(payload.get("status") or "active").lower(),
+        from .models import AppUser, Employee, ScheduleEntry
+        user = None
+        parsed_user_id = _parse_uuid(raw_user_id)
+        if parsed_user_id:
+            user = AppUser.objects.filter(id=parsed_user_id).first()
+        existing = None
+        if user:
+            existing = (
+                Employee.objects.select_related("user")
+                .filter(user_id=user.id)
+                .first()
             )
+        if not existing and contact:
+            existing = (
+                Employee.objects.select_related("user")
+                .filter(contact__iexact=contact)
+                .first()
+            )
+        if existing and user and existing.user_id and existing.user_id != user.id:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Employee already linked to a different user",
+                },
+                status=409,
+            )
+        with transaction.atomic():
+            if existing:
+                emp = existing
+                if user and not emp.user_id:
+                    emp.user = user
+                position = (payload.get("position") or "").strip()
+                status_value = (payload.get("status") or "").lower().strip()
+                emp.name = name
+                if position:
+                    emp.position = position
+                if hire_date:
+                    emp.hire_date = hire_date
+                if contact:
+                    emp.contact = contact
+                if status_value:
+                    emp.status = status_value
+                emp.save()
+            else:
+                emp = Employee.objects.create(
+                    name=name,
+                    position=(payload.get("position") or "").strip(),
+                    hire_date=hire_date or timezone.now().date(),
+                    contact=contact,
+                    status=(payload.get("status") or "active").lower(),
+                    user=user if user else None,
+                )
             created_schedule = []
             for row in valid_rows:
                 entry = ScheduleEntry.objects.create(
@@ -385,7 +435,7 @@ def employee_detail(request, emp_id):
         return err
     try:
         from .models import Employee
-        emp = Employee.objects.filter(id=emp_id).first()
+        emp = Employee.objects.select_related("user").filter(id=emp_id).first()
         if not emp:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
         if request.method == "GET":

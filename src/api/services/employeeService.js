@@ -14,6 +14,11 @@ class EmployeeService {
       contact: e.contact || '',
       status: (e.status || 'active').toLowerCase(),
       avatar: e.avatar || '/placeholder.svg',
+      userId: e.userId || e.user_id || '',
+      userName: e.userName || e.user_name || e.user?.name || '',
+      userEmail: e.userEmail || e.user_email || e.user?.email || '',
+      userRole: e.userRole || e.user_role || e.user?.role || '',
+      userStatus: e.userStatus || e.user_status || e.user?.status || '',
     };
   }
 
@@ -124,6 +129,7 @@ class EmployeeService {
       hireDate: employee?.hireDate || employee?.hire_date || '',
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
+      userId: employee?.userId || employee?.user_id || '',
       schedule: Array.isArray(employee?.schedule) ? employee.schedule : [],
     };
     const res = await apiClient.post('/employees/with-schedule', payload, {

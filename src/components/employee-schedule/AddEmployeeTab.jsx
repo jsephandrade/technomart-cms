@@ -282,6 +282,8 @@ const AddEmployeeTab = ({
         name: '',
         position: '',
         hireDate: '',
+        userId: '',
+        contact: '',
       }));
       return;
     }
@@ -293,6 +295,8 @@ const AddEmployeeTab = ({
         setQuickAdd((prev) => ({
           ...prev,
           name: match.name || prev.name,
+          userId: match.id || prev.userId,
+          contact: match.email || prev.contact || '',
           position:
             resolveRoleLabel(roleLabel || match.role, roleOptions) ||
             prev.position,

@@ -127,7 +127,7 @@ const isStaffEligible = (user) => {
   return values.some((value) => value === 'staff' || value === 'manager');
 };
 
-const isPendingUser = (user) => {
+const isActiveUser = (user) => {
   const status =
     user?.status ||
     user?.statusName ||
@@ -135,7 +135,7 @@ const isPendingUser = (user) => {
     user?.userStatus ||
     user?.user_status ||
     '';
-  return String(status).trim().toLowerCase() === 'pending';
+  return String(status).trim().toLowerCase() === 'active';
 };
 
 const AddEmployeeTab = ({
@@ -210,7 +210,7 @@ const AddEmployeeTab = ({
   }, [users, currentUser]);
   const staffUsers = useMemo(
     () =>
-      appUsers.filter((user) => isStaffEligible(user) && !isPendingUser(user)),
+      appUsers.filter((user) => isStaffEligible(user) && isActiveUser(user)),
     [appUsers]
   );
   const roleOptions = useMemo(() => {

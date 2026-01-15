@@ -127,6 +127,17 @@ const isStaffEligible = (user) => {
   return values.some((value) => value === 'staff' || value === 'manager');
 };
 
+const isPendingUser = (user) => {
+  const status =
+    user?.status ||
+    user?.statusName ||
+    user?.status_name ||
+    user?.userStatus ||
+    user?.user_status ||
+    '';
+  return String(status).trim().toLowerCase() === 'pending';
+};
+
 const AddEmployeeTab = ({
   quickAdd,
   setQuickAdd,
@@ -198,7 +209,8 @@ const AddEmployeeTab = ({
     return Array.from(map.values());
   }, [users, currentUser]);
   const staffUsers = useMemo(
-    () => appUsers.filter((user) => isStaffEligible(user)),
+    () =>
+      appUsers.filter((user) => isStaffEligible(user) && !isPendingUser(user)),
     [appUsers]
   );
   const roleOptions = useMemo(() => {
@@ -252,14 +264,6 @@ const AddEmployeeTab = ({
       return 'Start with blank profile';
     }
     const [type, id] = copyFromSelection.split(':');
-    if (type === 'employee') {
-      const match = employees.find((emp) => emp.id === id);
-      if (match) {
-        return `${match.name || 'Unnamed employee'} · ${
-          match.position || 'No role'
-        }`;
-      }
-    }
     if (type === 'user') {
       const match = staffUsers.find((user) => user.id === id);
       if (match) {
@@ -268,7 +272,7 @@ const AddEmployeeTab = ({
       }
     }
     return 'Start with blank profile';
-  }, [copyFromSelection, employees, staffUsers]);
+  }, [copyFromSelection, staffUsers]);
 
   const handleCopyFromChange = (value) => {
     setCopyFromSelection(value);
@@ -281,17 +285,7 @@ const AddEmployeeTab = ({
       return;
     }
     const [type, id] = value.split(':');
-    if (type === 'employee') {
-      const match = employees.find((emp) => emp.id === id);
-      if (match) {
-        setQuickAdd((prev) => ({
-          ...prev,
-          name: match.name || prev.name,
-          position:
-            resolveRoleLabel(match.position, roleOptions) || prev.position,
-        }));
-      }
-    } else if (type === 'user') {
+    if (type === 'user') {
       const match = staffUsers.find((user) => user.id === id);
       if (match) {
         const roleLabel = match.role || resolvePrimaryRole(match);
@@ -366,7 +360,7 @@ const AddEmployeeTab = ({
                   align="start"
                 >
                   <Command>
-                    <CommandInput placeholder="Search employees or staff..." />
+                    <CommandInput placeholder="Search staff..." />
                     <CommandList className="max-h-64 overflow-y-auto">
                       <CommandEmpty>No matches found.</CommandEmpty>
                       <CommandGroup heading="Quick start">
@@ -386,52 +380,6 @@ const AddEmployeeTab = ({
                           />
                           Start with blank profile
                         </CommandItem>
-                      </CommandGroup>
-                      <CommandSeparator />
-                      <CommandGroup
-                        heading={`Existing employees (${employees.length})`}
-                      >
-                        {employees.length ? (
-                          employees.map((emp) => {
-                            const value = `employee:${emp.id}`;
-                            const selected = copyFromSelection === value;
-                            return (
-                              <CommandItem
-                                key={emp.id}
-                                value={[
-                                  emp.name,
-                                  emp.position,
-                                  emp.contact,
-                                  emp.status,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' ')}
-                                onSelect={() => {
-                                  handleCopyFromChange(value);
-                                  setCopyFromOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    selected ? 'opacity-100' : 'opacity-0'
-                                  )}
-                                  aria-hidden="true"
-                                />
-                                <span className="truncate">
-                                  {emp.name || 'Unnamed employee'}
-                                </span>
-                                <span className="ml-auto text-xs text-muted-foreground">
-                                  {emp.position || 'No role'}
-                                </span>
-                              </CommandItem>
-                            );
-                          })
-                        ) : (
-                          <CommandItem disabled>
-                            No employees available
-                          </CommandItem>
-                        )}
                       </CommandGroup>
                       <CommandSeparator />
                       <CommandGroup

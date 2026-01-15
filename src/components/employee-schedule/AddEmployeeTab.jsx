@@ -281,6 +281,7 @@ const AddEmployeeTab = ({
         ...prev,
         name: '',
         position: '',
+        hireDate: '',
       }));
       return;
     }
@@ -430,13 +431,18 @@ const AddEmployeeTab = ({
               </Popover>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">Name *</Label>
+              <Label className="text-xs uppercase tracking-wide">
+                Hire date
+              </Label>
               <Input
-                value={quickAdd.name}
+                type="date"
+                value={quickAdd.hireDate || ''}
                 onChange={(e) =>
-                  setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
+                  setQuickAdd((prev) => ({
+                    ...prev,
+                    hireDate: e.target.value,
+                  }))
                 }
-                placeholder="Jane Smith"
               />
             </div>
             <div className="space-y-1">

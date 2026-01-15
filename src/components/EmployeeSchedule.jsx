@@ -430,6 +430,7 @@ const EmployeeSchedule = () => {
   const [quickAdd, setQuickAdd] = useState({
     name: '',
     position: '',
+    hireDate: '',
     repeatDays: ['Monday'],
     startTime: '08:00',
     endTime: '16:00',
@@ -622,7 +623,7 @@ const EmployeeSchedule = () => {
   const handleQuickAdd = async () => {
     if (!canManage) return;
     if (!quickAdd.name.trim()) {
-      toast.error('Name is required');
+      toast.error('Staff member is required');
       return;
     }
     if (roleTargetsLoading) {
@@ -689,7 +690,7 @@ const EmployeeSchedule = () => {
     const payload = {
       name: quickAdd.name,
       position: quickAdd.position,
-      hireDate: new Date().toISOString().slice(0, 10),
+      hireDate: quickAdd.hireDate,
       schedule: scheduleEntries,
     };
     try {
@@ -698,6 +699,7 @@ const EmployeeSchedule = () => {
       setQuickAdd({
         name: '',
         position: '',
+        hireDate: '',
         repeatDays: ['Monday'],
         startTime: '08:00',
         endTime: '16:00',

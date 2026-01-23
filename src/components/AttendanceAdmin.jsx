@@ -72,6 +72,7 @@ export default function AttendanceAdmin() {
   const { hasAnyRole, user } = useAuth();
   const isManager = hasAnyRole(['admin', 'manager']);
   const isAdmin = hasAnyRole(['admin']);
+  const isManagerOnly = hasAnyRole(['manager']) && !isAdmin;
   const {
     records,
     loading,
@@ -93,6 +94,25 @@ export default function AttendanceAdmin() {
   const [addForm, setAddForm] = useState(DEFAULT_ADD_FORM);
   const [addSaving, setAddSaving] = useState(false);
   const [employeeSelectOpen, setEmployeeSelectOpen] = useState(false);
+  const selfEmployeeId = useMemo(() => {
+    if (user?.employeeId) return String(user.employeeId);
+    const email = (user?.email || '').trim().toLowerCase();
+    const name = (user?.name || '').trim().toLowerCase();
+    let found = null;
+    if (email) {
+      found =
+        (employees || []).find(
+          (emp) => (emp.contact || '').trim().toLowerCase() === email
+        ) || null;
+    }
+    if (!found && name) {
+      found =
+        (employees || []).find(
+          (emp) => (emp.name || '').trim().toLowerCase() === name
+        ) || null;
+    }
+    return found?.id ? String(found.id) : null;
+  }, [employees, user?.employeeId, user?.email, user?.name]);
 
   const selectableEmployees = useMemo(() => {
     const userEmail = (user?.email || '').trim().toLowerCase();
@@ -286,58 +306,75 @@ export default function AttendanceAdmin() {
                   </TableCell>
                 </TableRow>
               )}
-              {(records || []).map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{r.date}</TableCell>
-                  <TableCell>{r.employeeName || r.employeeId}</TableCell>
-                  <TableCell>{r.checkIn || '-'}</TableCell>
-                  <TableCell>{r.checkOut || '-'}</TableCell>
-                  <TableCell className="capitalize">
-                    <Badge
-                      variant="outline"
-                      className={
-                        r.status === 'present'
-                          ? 'border-green-300 text-green-700'
-                          : r.status === 'late'
-                            ? 'border-amber-300 text-amber-700'
-                            : r.status === 'absent'
-                              ? 'border-red-300 text-red-700'
-                              : ''
-                      }
-                    >
-                      {r.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[240px] truncate">
-                    {r.notes || '-'}
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditing({ ...r })}
-                    >
-                      <EditIcon className="h-3.5 w-3.5" />
-                    </Button>
-                    {isAdmin ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            await deleteRecord(r.id);
-                            toast.success('Deleted');
-                          } catch {
-                            toast.error('Failed to delete');
-                          }
-                        }}
+              {(records || []).map((r) => {
+                const recordEmployeeId = r?.employeeId
+                  ? String(r.employeeId)
+                  : '';
+                const isSelfRecord =
+                  isManagerOnly &&
+                  selfEmployeeId &&
+                  recordEmployeeId === selfEmployeeId;
+                return (
+                  <TableRow key={r.id}>
+                    <TableCell>{r.date}</TableCell>
+                    <TableCell>{r.employeeName || r.employeeId}</TableCell>
+                    <TableCell>{r.checkIn || '-'}</TableCell>
+                    <TableCell>{r.checkOut || '-'}</TableCell>
+                    <TableCell className="capitalize">
+                      <Badge
+                        variant="outline"
+                        className={
+                          r.status === 'present'
+                            ? 'border-green-300 text-green-700'
+                            : r.status === 'late'
+                              ? 'border-amber-300 text-amber-700'
+                              : r.status === 'absent'
+                                ? 'border-red-300 text-red-700'
+                                : ''
+                        }
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {r.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[240px] truncate">
+                      {r.notes || '-'}
+                    </TableCell>
+                    <TableCell className="text-right space-x-2">
+                      {isSelfRecord ? (
+                        <span className="text-xs text-muted-foreground">
+                          Awaiting peer review
+                        </span>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditing({ ...r })}
+                          >
+                            <EditIcon className="h-3.5 w-3.5" />
+                          </Button>
+                          {isAdmin ? (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await deleteRecord(r.id);
+                                  toast.success('Deleted');
+                                } catch {
+                                  toast.error('Failed to delete');
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                        </>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           {loading && (

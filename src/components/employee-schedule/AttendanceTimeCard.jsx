@@ -63,14 +63,6 @@ const getManilaNow = () =>
     })
   );
 
-const formatTimeForRecord = (date) => {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
-    date.getSeconds()
-  )}`;
-};
-
 const createManilaDateFromTime = (timeStr, referenceDate) => {
   if (!timeStr) return null;
   const segments = timeStr.split(':');
@@ -238,11 +230,11 @@ const AttendanceTimeCard = ({
       currentTime.getTime() > shiftEndDate.getTime()
   );
   const autoAbsentRef = useRef(false);
-  const autoLateRef = useRef(false);
+  const autoClockOutRef = useRef(false);
 
   useEffect(() => {
     autoAbsentRef.current = false;
-    autoLateRef.current = false;
+    autoClockOutRef.current = false;
   }, [dailySchedule, today]);
 
   useEffect(() => {
@@ -255,7 +247,6 @@ const AttendanceTimeCard = ({
     ) {
       return;
     }
-    const shiftEndTimeValue = formatTimeForRecord(shiftEndDate);
     const markAbsent = async () => {
       try {
         await createRecord({
@@ -270,16 +261,19 @@ const AttendanceTimeCard = ({
         autoAbsentRef.current = false;
       }
     };
-    const markLate = async () => {
+    const markAbsentNoClockOut = async () => {
       if (!effectiveRecord) return;
       const hasRemoteId =
         Boolean(effectiveRecord.id) &&
         !String(effectiveRecord.id).startsWith('local-');
+      const checkInValue =
+        effectiveRecord.checkIn && String(effectiveRecord.checkIn).includes(':')
+          ? effectiveRecord.checkIn
+          : null;
       try {
         if (hasRemoteId) {
           await updateRecord(effectiveRecord.id, {
-            status: 'late',
-            checkOut: shiftEndTimeValue || nowTime(),
+            status: 'absent',
             notes: 'Shift window closed without clock-out',
           });
         } else {
@@ -287,15 +281,14 @@ const AttendanceTimeCard = ({
             employeeId: subjectEmployeeId,
             employeeName: user?.name || '',
             date: today,
-            status: 'late',
-            checkIn: effectiveRecord.checkIn,
-            checkOut: shiftEndTimeValue || nowTime(),
+            status: 'absent',
+            checkIn: checkInValue,
             notes: 'Shift window closed without clock-out',
           });
         }
       } catch (error) {
-        console.error('Auto-mark late failed', error);
-        autoLateRef.current = false;
+        console.error('Auto-mark absent failed', error);
+        autoClockOutRef.current = false;
       }
     };
     if (!effectiveRecord?.checkIn && !autoAbsentRef.current) {
@@ -306,18 +299,16 @@ const AttendanceTimeCard = ({
     if (
       effectiveRecord?.checkIn &&
       !effectiveRecord?.checkOut &&
-      !autoLateRef.current
+      !autoClockOutRef.current
     ) {
-      autoLateRef.current = true;
-      markLate();
+      autoClockOutRef.current = true;
+      markAbsentNoClockOut();
     }
   }, [
     attendanceWindowClosed,
     createRecord,
     dailySchedule,
     effectiveRecord,
-    nowTime,
-    shiftEndDate,
     subjectEmployeeId,
     today,
     updateRecord,
@@ -518,6 +509,9 @@ const AttendanceTimeCard = ({
         return { label: 'No work day', className: 'text-amber-600' };
       }
       return { label: 'Not Clocked In', className: 'text-muted-foreground' };
+    }
+    if (effectiveRecord.status === 'absent') {
+      return { label: 'Absent', className: 'text-red-600' };
     }
     if (effectiveRecord.checkIn && !effectiveRecord.checkOut) {
       return { label: 'Clocked In', className: 'text-emerald-600' };

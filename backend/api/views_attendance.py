@@ -98,6 +98,18 @@ def _actor_role(actor):
     return (getattr(actor, "role", "") or "").lower()
 
 
+def _is_manager_self(actor, employee_id):
+    if _actor_role(actor) != "manager":
+        return False
+    if not employee_id:
+        return False
+    _, actor_emp_id = resolve_employee_ref(actor, allow_fallback=True)
+    if not actor_emp_id:
+        return False
+    allowed = _identifier_variants(actor_emp_id) or {str(actor_emp_id)}
+    return str(employee_id) in allowed
+
+
 def _employee_role_match(employee):
     position = (getattr(employee, "position", "") or "").strip()
     if position:
@@ -200,10 +212,24 @@ def _auto_mark_absent_if_shift_passed(employee, record_date, now=None):
             employee=employee, date=record_date
         ).first()
         if existing:
-            if not existing.check_in and existing.status != "absent":
-                existing.status = "absent"
-                existing.notes = existing.notes or "Shift window closed without clock-in"
-                existing.save(update_fields=["status", "notes", "updated_at"])
+            update_fields = []
+            if existing.check_in and not existing.check_out:
+                if existing.status != "absent":
+                    existing.status = "absent"
+                    update_fields.append("status")
+                if not existing.notes:
+                    existing.notes = "Shift window closed without clock-out"
+                    update_fields.append("notes")
+            elif not existing.check_in:
+                if existing.status != "absent":
+                    existing.status = "absent"
+                    update_fields.append("status")
+                if not existing.notes:
+                    existing.notes = "Shift window closed without clock-in"
+                    update_fields.append("notes")
+            if update_fields:
+                update_fields.append("updated_at")
+                existing.save(update_fields=update_fields)
             return existing
         return AttendanceRecord.objects.create(
             employee=employee,
@@ -640,10 +666,13 @@ def attendance(request):
                 emp = self_employee
                 emp_id = str(self_employee_id)
 
+        manager_self = can_manage and _is_manager_self(actor, emp_id)
+        can_manage_target = can_manage and not manager_self
+
         ci = _parse_time(payload.get("checkIn")) if payload.get("checkIn") else None
         co = _parse_time(payload.get("checkOut")) if payload.get("checkOut") else None
         status = (payload.get("status") or "present").lower()
-        if not can_manage:
+        if not can_manage_target:
             status = _attendance_status_for_checkin(emp, d, ci, "present")
         notes = payload.get("notes") or ""
 
@@ -662,7 +691,7 @@ def attendance(request):
             if created:
                 return JsonResponse({"success": True, "data": _safe_att(rec)})
 
-            if not can_manage:
+            if not can_manage_target:
                 updated = False
                 if ci and not rec.check_in:
                     rec.check_in = ci
@@ -713,14 +742,16 @@ def attendance_detail(request, rid):
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
 
         can_manage = _has_permission(actor, "attendance.manage")
-        if not can_manage:
+        manager_self = can_manage and _is_manager_self(actor, rec.employee_id)
+        can_manage_target = can_manage and not manager_self
+        if not can_manage_target:
             self_employee, self_employee_id = _employee_for_actor(actor, allow_fallback=True)
             allowed = _identifier_variants(self_employee_id)
             if not self_employee_id or str(rec.employee_id) not in allowed:
                 return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
         if request.method == "DELETE":
-            if not can_manage:
+            if not can_manage_target:
                 return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
             rec.delete()
             return JsonResponse({"success": True})
@@ -730,7 +761,7 @@ def attendance_detail(request, rid):
         except Exception:
             payload = {}
 
-        if can_manage:
+        if can_manage_target:
             if "employeeId" in payload and payload["employeeId"]:
                 e = Employee.objects.filter(id=payload["employeeId"]).first()
                 if not e:

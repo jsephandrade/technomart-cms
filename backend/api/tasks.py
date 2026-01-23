@@ -358,17 +358,17 @@ def auto_expire_no_show_orders(limit: int = 50):
     try:
         from .models import Order, AppUser
         from .views_common import _revoke_all_refresh_tokens
-            from .views_orders import (
-                canonical_status,
-                _clear_auto_flow,
-                _is_walk_in_channel,
-                _is_guest_user,
-                _restore_pax_for_order,
-                _safe_order,
-                record_order_event,
-                recalc_order_counters,
-                publish_event,
-            )
+        from .views_orders import (
+            canonical_status,
+            _clear_auto_flow,
+            _is_walk_in_channel,
+            _is_guest_user,
+            _restore_pax_for_order,
+            _safe_order,
+            record_order_event,
+            recalc_order_counters,
+            publish_event,
+        )
     except Exception as exc:
         logger.error(f"No-show auto cancel initialization failed: {exc}")
         return 0
@@ -559,7 +559,7 @@ def auto_unlock_no_show_accounts(limit: int = 200):
 @shared_task
 def auto_mark_absent_attendance(limit: int = 500):
     """
-    Mark employees as absent once their scheduled shift has ended without a time-in.
+    Mark employees as absent once their scheduled shift has ended without a time-in or time-out.
     """
     try:
         from .models import AttendanceRecord, LeaveRecord, ScheduleEntry, CalendarException
@@ -650,15 +650,24 @@ def auto_mark_absent_attendance(limit: int = 500):
     processed = 0
     for emp_id in target_ids:
         record = existing_by_employee.get(emp_id)
-        if record and record.check_in:
-            continue
         if record:
+            if record.check_in and record.check_out:
+                continue
+            note = (
+                "Shift window closed without clock-out"
+                if record.check_in
+                else "Shift window closed without clock-in"
+            )
+            update_fields = []
             if record.status != AttendanceRecord.STATUS_ABSENT:
                 record.status = AttendanceRecord.STATUS_ABSENT
-                record.notes = (
-                    record.notes or "Shift window closed without clock-in"
-                )
-                record.save(update_fields=["status", "notes", "updated_at"])
+                update_fields.append("status")
+            if not record.notes:
+                record.notes = note
+                update_fields.append("notes")
+            if update_fields:
+                update_fields.append("updated_at")
+                record.save(update_fields=update_fields)
                 processed += 1
             continue
         AttendanceRecord.objects.create(

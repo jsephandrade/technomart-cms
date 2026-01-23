@@ -135,7 +135,7 @@ const CategoryChart = ({
               name={timeRangeLabel}
               radius={[6, 6, 0, 0]}
               maxBarSize={24}
-              fill="hsl(var(--primary))"
+              fill="hsl(var(--chart-primary))"
               isAnimationActive={true}
               animationDuration={800}
               animationEasing="ease-out"
@@ -147,7 +147,7 @@ const CategoryChart = ({
                 style={{
                   fontSize: 10,
                   fontWeight: 600,
-                  fill: 'hsl(var(--primary))',
+                  fill: 'hsl(var(--chart-primary))',
                 }}
               />
             </Bar>

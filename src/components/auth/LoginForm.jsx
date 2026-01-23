@@ -30,6 +30,7 @@ const LoginForm = ({
   email,
   password,
   pending,
+  info,
   error,
   emailError,
   passwordError,
@@ -56,6 +57,14 @@ const LoginForm = ({
 
   return (
     <>
+      {info && !error && (
+        <div
+          className="p-3 sm:p-4 mb-4 rounded-md text-xs sm:text-sm leading-relaxed bg-primary/10 text-primary"
+          role="status"
+        >
+          {info}
+        </div>
+      )}
       {error && (
         <div
           className="p-3 sm:p-4 mb-4 bg-red-50 text-red-700 rounded-md text-xs sm:text-sm leading-relaxed"
@@ -206,6 +215,7 @@ LoginForm.propTypes = {
   email: PropTypes.string.isRequired,
   password: PropTypes.string.isRequired,
   pending: PropTypes.bool,
+  info: PropTypes.string,
   error: PropTypes.string,
   emailError: PropTypes.string,
   passwordError: PropTypes.string,

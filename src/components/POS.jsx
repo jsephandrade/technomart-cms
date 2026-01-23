@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import MenuSelection from '@/components/pos/MenuSelection';
 import CurrentOrder from '@/components/pos/CurrentOrder';
 import OrderQueue from '@/components/pos/OrderQueue';
@@ -10,7 +11,9 @@ import OrderHistoryModal from '@/components/pos/OrderHistoryModal';
 import { usePOSData, EMPTY_QUEUE_STATE } from '@/hooks/usePOSData';
 import { usePOSLogic } from '@/hooks/usePOSLogic';
 import { useOrderHistory } from '@/hooks/useOrderManagement';
+import { useMenuPaxRealtime } from '@/hooks/useMenuPaxRealtime';
 import { orderService } from '@/api/services/orderService';
+import { deductPax } from '@/lib/paxTracker';
 import {
   Sheet,
   SheetContent,
@@ -19,9 +22,16 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { formatOrderNumber } from '@/lib/utils';
-import { ListOrdered, Monitor, ShoppingCart } from 'lucide-react';
+import {
+  ListOrdered,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  ShoppingCart,
+} from 'lucide-react';
 
 const POS = () => {
+  useMenuPaxRealtime();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
@@ -31,6 +41,10 @@ const POS = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('pos');
   const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
+  const [cancelledOrders, setCancelledOrders] = useState([]);
+  const [isDisplayFullscreen, setIsDisplayFullscreen] = useState(false);
+  const displayContainerRef = useRef(null);
+  const lastCancelledAtRef = useRef(null);
 
   // Get data and business logic from custom hooks
   const { categories, orderQueue, setOrderQueue } = usePOSData();
@@ -81,6 +95,43 @@ const POS = () => {
     }
   };
 
+  const notifyMenuRefresh = useCallback((detail) => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('menu.items.updated', { detail: detail || null })
+        );
+      }
+    } catch {}
+  }, []);
+
+  const parseTimestamp = useCallback((value) => {
+    if (!value) return 0;
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }, []);
+
+  const getLatestCancelledTimestamp = useCallback(
+    (orders) => {
+      if (!Array.isArray(orders) || orders.length === 0) return 0;
+      let latest = 0;
+      orders.forEach((order) => {
+        const raw =
+          order?.cancelledAt ||
+          order?.cancelled_at ||
+          order?.meta?.cancelled_at ||
+          order?.meta?.cancelledAt ||
+          order?.updatedAt ||
+          order?.updated_at ||
+          null;
+        const ts = parseTimestamp(raw);
+        if (ts > latest) latest = ts;
+      });
+      return latest;
+    },
+    [parseTimestamp]
+  );
+
   const refreshQueue = useCallback(async () => {
     try {
       const res = await orderService.getOrderQueue();
@@ -95,7 +146,41 @@ const POS = () => {
     return EMPTY_QUEUE_STATE;
   }, [setOrderQueue]);
 
+  const refreshCancelledOrders = useCallback(async () => {
+    try {
+      const res = await orderService.getOrders({
+        status: 'cancelled',
+        limit: 50,
+      });
+      const data = Array.isArray(res?.data) ? res.data : [];
+      setCancelledOrders(data);
+      const latestCancelledAt = getLatestCancelledTimestamp(data);
+      if (latestCancelledAt) {
+        if (lastCancelledAtRef.current === null) {
+          lastCancelledAtRef.current = latestCancelledAt;
+        } else if (latestCancelledAt > lastCancelledAtRef.current) {
+          lastCancelledAtRef.current = latestCancelledAt;
+          notifyMenuRefresh({
+            source: 'order.cancelled',
+            latestCancelledAt: new Date(latestCancelledAt).toISOString(),
+          });
+        }
+      }
+      return data;
+    } catch (e) {
+      console.error(e);
+    }
+    setCancelledOrders([]);
+    return [];
+  }, [getLatestCancelledTimestamp, notifyMenuRefresh]);
+
   const handleProcessPayment = (paymentDetails) => {
+    const orderSnapshot = (currentOrder || []).map((item) => ({
+      menuItemId: item.menuItemId || item.id,
+      quantity: item.quantity || 0,
+      ingredients:
+        item.ingredients || item.ingredientIds || item.ingredient_ids,
+    }));
     const { accepted, promise } = processPaymentInBackground(paymentDetails);
     if (!accepted) {
       return false;
@@ -119,6 +204,7 @@ const POS = () => {
       });
     }
 
+    deductPax(orderSnapshot);
     return true;
   };
 
@@ -135,6 +221,7 @@ const POS = () => {
     try {
       await orderService.updateOrderStatus(orderId, newStatus);
       await refreshQueue();
+      await refreshCancelledOrders();
       return true;
     } catch (e) {
       console.error(e);
@@ -174,7 +261,7 @@ const POS = () => {
     let cancelled = false;
     const tick = async () => {
       try {
-        await refreshQueue();
+        await Promise.all([refreshQueue(), refreshCancelledOrders()]);
       } catch {
       } finally {
         if (!cancelled) timer = setTimeout(tick, 5000);
@@ -185,7 +272,35 @@ const POS = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [refreshQueue]);
+  }, [refreshQueue, refreshCancelledOrders]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsDisplayFullscreen(
+        document.fullscreenElement === displayContainerRef.current
+      );
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () =>
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleToggleDisplayFullscreen = useCallback(async () => {
+    const container = displayContainerRef.current;
+    if (!container) return;
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (container.requestFullscreen) {
+        await container.requestFullscreen();
+      }
+    } catch (error) {
+      console.error('Unable to toggle fullscreen mode.', error);
+    }
+  }, []);
+
+  const hideTabsList = isDisplayFullscreen && activeTab === 'display';
 
   return (
     <div className="space-y-4">
@@ -194,20 +309,22 @@ const POS = () => {
         onValueChange={(value) => setActiveTab(value)}
         className="w-full"
       >
-        <TabsList className="w-full grid grid-cols-3">
-          <TabsTrigger value="pos" className="gap-2">
-            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Point of Sale</span>
-          </TabsTrigger>
-          <TabsTrigger value="queue" className="gap-2">
-            <ListOrdered className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Order Queue</span>
-          </TabsTrigger>
-          <TabsTrigger value="display" className="gap-2">
-            <Monitor className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Claim Monitor</span>
-          </TabsTrigger>
-        </TabsList>
+        {!hideTabsList && (
+          <TabsList className="w-full grid grid-cols-3">
+            <TabsTrigger value="pos" className="gap-2">
+              <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Point of Sale</span>
+            </TabsTrigger>
+            <TabsTrigger value="queue" className="gap-2">
+              <ListOrdered className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Order Queue</span>
+            </TabsTrigger>
+            <TabsTrigger value="display" className="gap-2">
+              <Monitor className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Claim Monitor</span>
+            </TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="pos">
           <div
@@ -248,6 +365,7 @@ const POS = () => {
         <TabsContent value="queue">
           <OrderQueue
             orderQueue={orderQueue}
+            cancelledOrders={cancelledOrders}
             refreshQueue={refreshQueue}
             updateOrderStatus={updateOrderStatus}
             updateOrderItemState={updateOrderItemState}
@@ -256,7 +374,36 @@ const POS = () => {
         </TabsContent>
 
         <TabsContent value="display">
-          <CustomerDisplay queue={orderQueue} />
+          <div
+            ref={displayContainerRef}
+            className={`relative flex flex-col gap-3 ${
+              isDisplayFullscreen ? 'min-h-[100dvh] bg-background p-4' : ''
+            }`}
+          >
+            <div className="flex items-center justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full border border-border/60 bg-background/80"
+                onClick={handleToggleDisplayFullscreen}
+                aria-label={
+                  isDisplayFullscreen
+                    ? 'Exit claim monitor fullscreen'
+                    : 'Enter claim monitor fullscreen'
+                }
+              >
+                {isDisplayFullscreen ? (
+                  <Minimize2 className="h-4 w-4" />
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <div className="flex-1">
+              <CustomerDisplay queue={orderQueue} />
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

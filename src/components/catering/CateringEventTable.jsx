@@ -145,7 +145,7 @@ export const CateringEventTable = ({
                         <ClipboardCheck className="mr-2 h-4 w-4" /> View Details
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onMenuItems(event)}>
-                        <Utensils className="mr-2 h-4 w-4" /> Menu Items
+                        <Utensils className="mr-2 h-4 w-4" /> Select Package
                       </DropdownMenuItem>
                       {showRescheduleAction && (
                         <DropdownMenuItem

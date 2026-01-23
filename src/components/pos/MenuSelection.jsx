@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   ShoppingCart,
 } from 'lucide-react';
+import { usePaxForItem } from '@/hooks/usePaxTracker';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 
 const resolveImageSrc = (item) => {
@@ -128,13 +129,29 @@ const MenuSelection = ({
     return map;
   }, [categories]);
 
-  const ItemCard = ({ item, showCategoryBadge = false }) => {
+  const ItemCard = ({ item }) => {
     const imageSrc = resolveImageSrc(item);
     const ingredientIds = resolveIngredientIds(item);
     const ingredientImages = resolveIngredientImages(item, imageById);
     const [brokenImages, setBrokenImages] = useState({});
     const categoryLabel = item.categoryName || item.category || '';
-    const isUnavailable = item.available === false;
+    const paxInfo = usePaxForItem(item.id);
+    const hasEstimatedPax =
+      paxInfo && typeof paxInfo.estimated === 'number' && paxInfo.estimated > 0;
+    const estimatedPax = hasEstimatedPax
+      ? Math.max(0, Math.floor(paxInfo.estimated))
+      : null;
+    const remainingPax =
+      hasEstimatedPax && typeof paxInfo.remaining === 'number'
+        ? Math.max(0, Math.floor(paxInfo.remaining))
+        : null;
+    const paxRemainingValue =
+      remainingPax !== null ? remainingPax : estimatedPax;
+    const isUnavailable =
+      item.available === false ||
+      (paxRemainingValue !== null && paxRemainingValue <= 0);
+    const showCategoryLabel = Boolean(categoryLabel);
+    const showPaxBadge = hasEstimatedPax && paxRemainingValue !== null;
 
     const markBroken = (src) => {
       if (!src) return;
@@ -272,16 +289,26 @@ const MenuSelection = ({
                   ₱{Number(item.price).toFixed(2)}
                 </span>
               </div>
-              {showCategoryBadge && categoryLabel ? (
-                <div className="mt-2">
-                  <Badge
-                    variant="outline"
-                    className="rounded-full px-3 py-1 text-[9px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent sm:text-[10px]"
-                  >
-                    {categoryLabel}
-                  </Badge>
+              {(showCategoryLabel || showPaxBadge) && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {showCategoryLabel && (
+                    <Badge
+                      variant="outline"
+                      className="rounded-full px-3 py-1 text-[9px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent sm:text-[10px]"
+                    >
+                      {categoryLabel}
+                    </Badge>
+                  )}
+                  {showPaxBadge && (
+                    <Badge
+                      variant="outline"
+                      className="rounded-full px-3 py-1 text-[9px] font-medium bg-[#E0F2FF] text-[#1F5E99] border-transparent sm:text-[10px]"
+                    >
+                      {`${paxRemainingValue} pax`}
+                    </Badge>
+                  )}
                 </div>
-              ) : null}
+              )}
             </div>
           </CardContent>
 
@@ -293,14 +320,6 @@ const MenuSelection = ({
                     ? 'Currently unavailable'
                     : 'Tap to add to order'}
                 </span>
-                {!showCategoryBadge && categoryLabel ? (
-                  <Badge
-                    variant="outline"
-                    className="max-w-[7rem] rounded-full px-2 py-[2px] text-[9px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent sm:text-[10px]"
-                  >
-                    <span className="block truncate">{categoryLabel}</span>
-                  </Badge>
-                ) : null}
               </div>
             </div>
           </CardFooter>
@@ -379,7 +398,6 @@ const MenuSelection = ({
                     <ItemCard
                       key={`${item.categoryName}-${item.id}`}
                       item={item}
-                      showCategoryBadge
                     />
                   ))
                 ) : (
@@ -420,8 +438,6 @@ const MenuSelection = ({
                   const categoryItems = Array.isArray(category.items)
                     ? category.items
                     : [];
-                  const showBadge =
-                    category.id === 'all' || category.id === 'All';
                   return (
                     <TabsContent
                       key={category.id}
@@ -431,11 +447,7 @@ const MenuSelection = ({
                       <div className="grid grid-cols-1 justify-center gap-4 p-3 sm:grid-cols-[repeat(auto-fit,minmax(10.75rem,10.75rem))] sm:gap-3 md:justify-start md:gap-4 lg:gap-5">
                         {categoryItems.length > 0 ? (
                           categoryItems.map((item) => (
-                            <ItemCard
-                              key={item.id}
-                              item={item}
-                              showCategoryBadge={showBadge}
-                            />
+                            <ItemCard key={item.id} item={item} />
                           ))
                         ) : (
                           <div className="col-span-full py-12 text-center">

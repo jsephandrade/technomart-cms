@@ -119,6 +119,7 @@ def _now_iso():
 
 MENU_ITEMS = []
 USERS = []
+ROLE_VALUES = {"admin", "manager", "staff", "faculty", "customer"}
 
 
 def _paginate(list_data, page, limit):
@@ -167,7 +168,7 @@ def _identifier_variants(value):
 def _safe_user_from_db(db_user):
     # Normalize role to the supported set; map legacy/unknown roles to 'staff'
     role = (getattr(db_user, "role", "") or "").lower()
-    if role not in {"admin", "manager", "staff"}:
+    if role not in ROLE_VALUES:
         role = "staff"
 
     # Look up linked Employee record to include employeeId
@@ -477,6 +478,32 @@ def _has_permission(user_or_dict, perm_code: str) -> bool:
     return "all" in perms or perm_code in perms
 
 
+def _maybe_unlock_no_show_user(user):
+    if not user or not hasattr(user, "no_show_locked_until"):
+        return None
+    locked_until = getattr(user, "no_show_locked_until", None)
+    if not locked_until:
+        return None
+    now_ts = dj_timezone.now()
+    if locked_until > now_ts:
+        return locked_until
+    update_fields = []
+    if (getattr(user, "status", "") or "").lower() == "deactivated":
+        user.status = "active"
+        update_fields.append("status")
+    if getattr(user, "is_active", True) is False:
+        user.is_active = True
+        update_fields.append("is_active")
+    user.no_show_locked_until = None
+    update_fields.append("no_show_locked_until")
+    update_fields.append("updated_at")
+    try:
+        user.save(update_fields=update_fields)
+    except Exception:
+        pass
+    return None
+
+
 def _actor_from_token(token: str):
     """Decode JWT tokens issued by either our custom signer or SimpleJWT.
 
@@ -531,6 +558,12 @@ def _actor_from_token(token: str):
         if not actor and email:
             actor = AppUser.objects.filter(email=email).first()
         if actor:
+            locked_until = _maybe_unlock_no_show_user(actor)
+            if locked_until:
+                return None
+            status_l = (getattr(actor, "status", "") or "").lower()
+            if status_l == "deactivated" or getattr(actor, "is_active", True) is False:
+                return None
             return actor
     except Exception:
         pass
@@ -813,11 +846,25 @@ def _decode_verify_token_ignore_exp(token: str):
 def _extract_dataurl_image(data_url: str):
     if not data_url:
         return None, None
-    m = re.match(r"^data:([^;]+);base64,(.*)$", data_url)
+    m = re.match(r"^data:([^;]+);base64,(.*)$", data_url, re.DOTALL)
     if not m:
-        return None, None
+        # Fallback: accept raw base64 without data URL prefix
+        cleaned = re.sub(r"\s+", "", str(data_url))
+        if not cleaned:
+            return None, None
+        padding = len(cleaned) % 4
+        if padding:
+            cleaned += "=" * (4 - padding)
+        try:
+            binary = base64.b64decode(cleaned)
+            return None, binary
+        except Exception:
+            return None, None
     mime = m.group(1)
-    b64 = m.group(2)
+    b64 = re.sub(r"\s+", "", m.group(2))
+    padding = len(b64) % 4
+    if padding:
+        b64 += "=" * (4 - padding)
     try:
         binary = base64.b64decode(b64)
         return mime, binary

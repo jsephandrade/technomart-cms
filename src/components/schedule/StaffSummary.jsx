@@ -1,11 +1,11 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -14,7 +14,7 @@ export const StaffSummary = ({ employees, schedule }) => {
     const employeeSchedule = schedule.filter(
       (s) => s.employeeId === employeeId
     );
-    
+
     return employeeSchedule.reduce((total, entry) => {
       const start = new Date(`2023-01-01 ${entry.startTime}`);
       const end = new Date(`2023-01-01 ${entry.endTime}`);
@@ -56,9 +56,6 @@ export const StaffSummary = ({ employees, schedule }) => {
                     <Clock className="h-3 w-3 mr-1" />
                     {weeklyHours.toFixed(1)}h/week
                   </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    ${employee.hourlyRate}/hr
-                  </span>
                 </div>
               </div>
             );

@@ -5,13 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import userService from '@/api/services/userService';
-import {
-  Search,
-  UserRound,
-  Briefcase,
-  BadgePercent,
-  PhoneCall,
-} from 'lucide-react';
+import { Search, UserRound, Briefcase, PhoneCall } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +35,7 @@ const DEFAULT_FORM = {
   userId: '',
   name: '',
   position: '',
-  hourlyRate: '0',
+  hireDate: '',
   contact: '',
   status: 'active',
 };
@@ -143,10 +137,7 @@ const EmployeeDirectoryPanel = ({
       userId: employee.userId || '',
       name: employee.name || '',
       position: employee.position || '',
-      hourlyRate:
-        employee.hourlyRate === null || employee.hourlyRate === undefined
-          ? '0'
-          : String(employee.hourlyRate),
+      hireDate: employee.hireDate || '',
       contact: employee.contact || '',
       status: employee.status || 'active',
     });
@@ -278,9 +269,11 @@ const EmployeeDirectoryPanel = ({
       <TableRow key={employee.id}>
         <TableCell className="font-semibold">{employee.name}</TableCell>
         <TableCell className="text-muted-foreground">
-          {employee.position || '—'}
+          {employee.position || 'N/A'}
         </TableCell>
-        <TableCell>₱{Number(employee.hourlyRate || 0).toFixed(2)}</TableCell>
+        <TableCell>
+          {employee.hireDate ? String(employee.hireDate) : 'Not set'}
+        </TableCell>
         <TableCell>
           <Badge
             className={
@@ -417,7 +410,7 @@ const EmployeeDirectoryPanel = ({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Hourly Rate</TableHead>
+              <TableHead>Hire Date</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[140px]">Actions</TableHead>
             </TableRow>
@@ -511,39 +504,31 @@ const EmployeeDirectoryPanel = ({
                 />
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="employee-hourly">Hourly rate (PHP)</Label>
-                <div className="relative">
-                  <BadgePercent className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="employee-hourly"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formState.hourlyRate}
-                    onChange={(event) =>
-                      handleFormChange('hourlyRate', event.target.value)
-                    }
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="employee-status">Status</Label>
-                <Select
-                  value={formState.status}
-                  onValueChange={(value) => handleFormChange('status', value)}
-                >
-                  <SelectTrigger id="employee-status" className="pl-9">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-hire-date">Hire date</Label>
+              <Input
+                id="employee-hire-date"
+                type="date"
+                value={formState.hireDate || ''}
+                onChange={(event) =>
+                  handleFormChange('hireDate', event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-status">Status</Label>
+              <Select
+                value={formState.status}
+                onValueChange={(value) => handleFormChange('status', value)}
+              >
+                <SelectTrigger id="employee-status" className="pl-9">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="employee-contact">Contact details</Label>

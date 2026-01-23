@@ -311,7 +311,7 @@ const CustomerDisplay = ({ queue }) => {
               accent="text-amber-600 dark:text-amber-300"
               orders={preparingOrders}
               emptyText="No orders currently in preparation."
-              className="w-full bg-blue-500/10 dark:bg-blue-500/20"
+              className="w-full bg-primary/10 dark:bg-primary/20"
               expandedIds={expandedIds}
               onToggle={handleToggle}
               completedItems={completedItems}

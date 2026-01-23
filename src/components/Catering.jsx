@@ -276,7 +276,7 @@ const Catering = () => {
         contactName: formValues.contactName,
         contactPhone: formValues.contactPhone,
         notes: formValues.notes,
-        estimatedTotal: 0, // Will be calculated from menu items
+        estimatedTotal: 0, // Will be calculated from catering package
       };
       const res = await cateringService.createEvent(payload);
       if (!res?.success) {

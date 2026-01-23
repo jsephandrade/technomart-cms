@@ -6,10 +6,24 @@ const mockDelay = (ms = 500) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 class NotificationsService {
-  async list(limit = 50) {
+  normalizeParams(paramsOrLimit) {
+    if (typeof paramsOrLimit === 'number') {
+      return { limit: paramsOrLimit };
+    }
+    if (!paramsOrLimit) return {};
+    return paramsOrLimit;
+  }
+
+  async list(paramsOrLimit = 50) {
+    const paramsInput = this.normalizeParams(paramsOrLimit);
+    const limit = paramsInput.limit ?? 50;
+    const scope = paramsInput.scope;
+    const read = paramsInput.read;
     try {
       const params = new URLSearchParams();
       params.set('limit', String(limit));
+      if (scope) params.set('scope', String(scope));
+      if (read !== undefined && read !== null) params.set('read', String(read));
       const res = await apiClient.get(`/notifications?${params.toString()}`);
       if (res && res.success) return res;
       throw new Error('Unexpected response');
@@ -26,18 +40,39 @@ class NotificationsService {
       return { success: true, data: list };
     }
   }
-  async getUnreadCount() {
-    await mockDelay(200);
-    const count = (mockNotifications || []).filter(
-      (n) => !n.isRead && !n.read
-    ).length;
-    return { success: true, data: { unreadCount: count } };
+  async getUnreadCount(paramsOrLimit) {
+    const paramsInput = this.normalizeParams(paramsOrLimit);
+    const scope = paramsInput.scope;
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', '1');
+      params.set('read', 'false');
+      if (scope) params.set('scope', String(scope));
+      const res = await apiClient.get(`/notifications?${params.toString()}`);
+      if (res && res.success) {
+        const total =
+          res?.pagination?.total ??
+          (Array.isArray(res?.data) ? res.data.length : 0);
+        return { success: true, data: { unreadCount: total } };
+      }
+      throw new Error('Unexpected response');
+    } catch {
+      await mockDelay(200);
+      const count = (mockNotifications || []).filter(
+        (n) => !n.isRead && !n.read
+      ).length;
+      return { success: true, data: { unreadCount: count } };
+    }
   }
 
-  async getRecent(limit = 5) {
+  async getRecent(paramsOrLimit = 5) {
+    const paramsInput = this.normalizeParams(paramsOrLimit);
+    const limit = paramsInput.limit ?? 5;
+    const scope = paramsInput.scope;
     try {
       const params = new URLSearchParams();
       params.set('limit', String(limit));
+      if (scope) params.set('scope', String(scope));
       const res = await apiClient.get(`/notifications?${params.toString()}`);
       if (res && res.success) return res;
       throw new Error('Unexpected response');
@@ -52,6 +87,26 @@ class NotificationsService {
         read: Boolean(n.isRead || n.read),
       }));
       return { success: true, data: list };
+    }
+  }
+
+  async create(payload = {}) {
+    try {
+      const res = await apiClient.post('/notifications', payload);
+      if (res && res.success) return res;
+      return res || { success: true, data: payload };
+    } catch {
+      await mockDelay(150);
+      const created = {
+        id: Date.now().toString(),
+        title: payload?.title || 'Notification',
+        message: payload?.message || '',
+        type: payload?.type || 'info',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      mockNotifications.unshift(created);
+      return { success: true, data: created };
     }
   }
 

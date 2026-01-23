@@ -12,6 +12,7 @@ from .views import (
     update_avatar,
     password_reset_request,
     password_reset_confirm,
+    google_login,
 )
 
 urlpatterns = [
@@ -27,4 +28,5 @@ urlpatterns = [
     # PASSWORD RESET
     path('password-reset/', password_reset_request, name='password-reset'),
     path('password-reset/confirm/', password_reset_confirm, name='password-reset-confirm'),
+    path('google-login/', google_login, name='google-login'),
 ]

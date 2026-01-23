@@ -12,14 +12,15 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from uuid import UUID
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Iterable, Optional
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
-from django.db.models import Avg, Count, F, Q, Sum
+from django.db.models import Avg, Count, F, Q, Sum, Value
+from django.db.models.functions import Greatest
 from django.utils import timezone as dj_tz
 from django.utils.crypto import get_random_string
 
@@ -31,6 +32,152 @@ logger = logging.getLogger(__name__)
 
 
 ORDER_NUMBER_RANDOM_CHARS = "0123456789"
+LOYALTY_EARN_RATE = Decimal("0.01")
+LOYALTY_META_KEY = "loyaltyAwarded"
+PAYMENT_CASH_ALIASES = {
+    "cash",
+    "counter",
+    "pay_at_counter",
+    "pay-at-counter",
+    "pay at counter",
+    "cod",
+}
+WALK_IN_CHANNEL_ALIASES = {
+    "walk-in",
+    "walkin",
+    "walk_in",
+    "walk in",
+    "counter",
+}
+
+
+def _normalize_payment_method(value: Optional[str]) -> str:
+    return str(value or "").strip().lower()
+
+
+def _is_cash_method(value: Optional[str]) -> bool:
+    return _normalize_payment_method(value) in PAYMENT_CASH_ALIASES
+
+
+def _is_walk_in_channel(value: Optional[str]) -> bool:
+    return str(value or "").strip().lower() in WALK_IN_CHANNEL_ALIASES
+
+
+def _is_guest_user(user) -> bool:
+    if not user:
+        return False
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    if email.endswith("@guest.local"):
+        return True
+    username = str(getattr(user, "username", "") or "").strip().lower()
+    return username == "guest_user"
+
+
+def _should_create_pending_cash_payment(payment_method: Optional[str], channel: Optional[str]) -> bool:
+    if not _is_cash_method(payment_method):
+        return False
+    if _is_walk_in_channel(channel):
+        return False
+    return True
+
+
+def _ensure_pending_cash_payment(order, *, amount: Decimal, customer_name: str, channel: str):
+    try:
+        from .models import PaymentTransaction
+    except Exception:
+        return None
+
+    order_ids = [str(order.id)]
+    if order.order_number:
+        order_ids.append(str(order.order_number))
+
+    existing = (
+        PaymentTransaction.objects.filter(order_id__in=order_ids)
+        .exclude(status=PaymentTransaction.STATUS_REFUNDED)
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        return existing
+
+    meta = {"source": "online", "orderNumber": order.order_number}
+    return PaymentTransaction.objects.create(
+        order_id=str(order.id),
+        amount=amount,
+        method=PaymentTransaction.METHOD_CASH,
+        status=PaymentTransaction.STATUS_PENDING,
+        customer=customer_name or "",
+        meta=meta,
+    )
+
+
+def _is_order_fully_paid(order) -> bool:
+    if not order:
+        return False
+    method = _normalize_payment_method(getattr(order, "payment_method", ""))
+    if not method:
+        return False
+    if _is_cash_method(method):
+        try:
+            from .models import PaymentTransaction
+        except Exception:
+            return False
+        order_ids = [str(order.id)]
+        if getattr(order, "order_number", ""):
+            order_ids.append(str(order.order_number))
+        return PaymentTransaction.objects.filter(
+            order_id__in=order_ids,
+            status=PaymentTransaction.STATUS_COMPLETED,
+        ).exists()
+    return True
+
+
+def _maybe_award_loyalty_points(order) -> Decimal:
+    if not order:
+        return Decimal("0.00")
+    try:
+        from .models import Order as OrderModel, AppUser
+    except Exception:
+        return Decimal("0.00")
+    try:
+        with transaction.atomic():
+            locked = (
+                OrderModel.objects.select_for_update()
+                .select_related("placed_by")
+                .filter(id=order.id)
+                .first()
+            )
+            if not locked:
+                return Decimal("0.00")
+            if canonical_status(locked.status) != "completed":
+                return Decimal("0.00")
+            if not _is_order_fully_paid(locked):
+                return Decimal("0.00")
+            if not locked.placed_by_id:
+                return Decimal("0.00")
+            if _is_guest_user(locked.placed_by):
+                return Decimal("0.00")
+            meta = locked.meta or {}
+            if meta.get(LOYALTY_META_KEY):
+                return Decimal("0.00")
+            points = (Decimal(locked.total_amount or 0) * LOYALTY_EARN_RATE).quantize(
+                Decimal("0.01"), rounding=ROUND_DOWN
+            )
+            if points <= 0:
+                meta[LOYALTY_META_KEY] = True
+                locked.meta = meta
+                locked.save(update_fields=["meta", "updated_at"])
+                return Decimal("0.00")
+            AppUser.objects.filter(id=locked.placed_by_id).update(
+                credit_points=F("credit_points") + points
+            )
+            meta[LOYALTY_META_KEY] = True
+            locked.meta = meta
+            locked.save(update_fields=["meta", "updated_at"])
+            return points
+    except Exception:
+        logger.exception("Failed to award credit points for purchase")
+        return Decimal("0.00")
 
 
 def _normalize_order_number_candidate(value: Optional[str]) -> str:
@@ -352,11 +499,6 @@ AUTO_ADVANCE_PHASE_RULES = [
         "current": {"in_progress", "in_prep", "assembling"},
         "target": "ready",
     },
-    {
-        "name": "complete",
-        "current": {"ready", "staged"},
-        "target": "completed",
-    },
 ]
 
 
@@ -542,6 +684,145 @@ ITEM_ACTIVE_STATES = {
 }
 
 
+def _coerce_int(value, fallback):
+    try:
+        parsed = int(value)
+        return parsed
+    except Exception:
+        return fallback
+
+
+def _get_pickup_windows():
+    pickup_window = max(
+        1, _coerce_int(getattr(settings, "ORDER_PICKUP_WINDOW_MINUTES", 30), 30)
+    )
+    grace_window = max(
+        0, _coerce_int(getattr(settings, "ORDER_PICKUP_GRACE_MINUTES", 15), 15)
+    )
+    return pickup_window, grace_window
+
+
+def _resolve_promised_time(order):
+    if getattr(order, "promised_time", None):
+        return order.promised_time
+    if getattr(order, "created_at", None) and getattr(order, "quoted_minutes", 0):
+        try:
+            return order.created_at + timedelta(minutes=int(order.quoted_minutes or 0))
+        except Exception:
+            return None
+    return None
+
+
+def _auto_cancel_no_show_orders(now_ts, limit=50):
+    try:
+        from .models import Order
+    except Exception:
+        return 0
+
+    pickup_window, grace_window = _get_pickup_windows()
+    cutoff = now_ts - timedelta(minutes=pickup_window + grace_window)
+
+    candidate_ids = list(
+        Order.objects.filter(
+            promised_time__isnull=False,
+            promised_time__lte=cutoff,
+            status__in={"ready", "staged", "handoff"},
+        )
+        .exclude(status__in={"completed", "cancelled", "voided", "refunded"})
+        .values_list("id", flat=True)[: max(1, int(limit or 50))]
+    )
+
+    processed = 0
+
+    for order_id in candidate_ids:
+        try:
+            with transaction.atomic():
+                order = (
+                    Order.objects.select_for_update()
+                    .select_related("placed_by")
+                    .get(id=order_id)
+                )
+
+                if canonical_status(order.status) not in {"staged", "handoff"}:
+                    continue
+                if _is_walk_in_channel(order.channel) or _is_walk_in_channel(
+                    order.order_type
+                ):
+                    continue
+
+                meta = order.meta or {}
+                if meta.get("no_show_processed"):
+                    continue
+
+                promised_time = _resolve_promised_time(order)
+                if not promised_time:
+                    continue
+                due_at = promised_time + timedelta(
+                    minutes=pickup_window + grace_window
+                )
+                if due_at > now_ts:
+                    continue
+
+                previous_status = order.status
+                order.status = "cancelled"
+                meta["no_show_processed"] = True
+                meta["no_show_processed_at"] = now_ts.isoformat()
+                meta["no_show_reason"] = "pickup_window_expired"
+                meta["cancel_reason"] = "pickup_window_expired"
+                meta["cancelled_at"] = now_ts.isoformat()
+                meta["cancelled_source"] = "system"
+                order.meta = meta
+
+                update_fields = ["status", "meta", "updated_at"]
+                auto_fields = _clear_auto_flow(order, reason="no_show")
+                if auto_fields:
+                    update_fields.extend(auto_fields)
+                update_fields = list(dict.fromkeys(update_fields))
+                order.save(update_fields=update_fields)
+                _restore_pax_for_order(order, reason="pickup_window_expired", now_ts=now_ts)
+
+                try:
+                    recalc_order_counters(order)
+                except Exception:
+                    pass
+
+                record_order_event(
+                    order,
+                    event_type="order.no_show",
+                    from_state=canonical_status(previous_status),
+                    to_state=canonical_status(order.status),
+                    actor=None,
+                    payload={
+                        "previousStatus": previous_status,
+                        "pickupWindowMinutes": pickup_window,
+                        "graceMinutes": grace_window,
+                    },
+                )
+
+                order_payload = _safe_order(order)
+                publish_event(
+                    "order.status_changed",
+                    {
+                        "order": order_payload,
+                        "status": canonical_status(order.status),
+                        "reason": "no_show",
+                    },
+                    roles={"admin", "manager", "staff"},
+                    user_ids=[
+                        str(order.placed_by_id)
+                    ]
+                    if getattr(order, "placed_by_id", None)
+                    else None,
+                )
+
+                processed += 1
+        except Exception:
+            logger.exception("Failed to auto cancel no-show order from queue")
+            continue
+
+    return processed
+
+
 def _parse_uuid(val):
     try:
         if not val:
@@ -550,6 +831,142 @@ def _parse_uuid(val):
         return str(val)
     except Exception:
         return None
+
+
+def _extract_ingredient_requirements(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+    requirements = []
+    for entry in raw:
+        if not entry:
+            continue
+        qty = 1
+        if isinstance(entry, dict):
+            item_id = (
+                entry.get("id")
+                or entry.get("menuItemId")
+                or entry.get("itemId")
+                or entry.get("menu_item_id")
+            )
+            qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count") or 1
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                qty = 1
+        else:
+            item_id = entry
+        if not item_id:
+            continue
+        qty = max(1, qty)
+        requirements.append((str(item_id), qty))
+    return requirements
+
+
+def _normalize_pax_deductions(raw):
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        normalized = {}
+        for key, value in raw.items():
+            try:
+                qty = int(value)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            normalized[str(key)] = qty
+        return normalized
+    if isinstance(raw, list):
+        normalized = {}
+        for entry in raw:
+            item_id = None
+            qty_raw = None
+            if isinstance(entry, dict):
+                item_id = (
+                    entry.get("menuItemId")
+                    or entry.get("menu_item_id")
+                    or entry.get("itemId")
+                    or entry.get("id")
+                )
+                qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count")
+            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                item_id, qty_raw = entry[0], entry[1]
+            if not item_id:
+                continue
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            key = str(item_id)
+            normalized[key] = normalized.get(key, 0) + qty
+        return normalized
+    return {}
+
+
+def _restore_pax_for_order(order, *, reason="", now_ts=None):
+    if not order:
+        return False
+    try:
+        from .models import Order, MenuItem
+    except Exception:
+        return False
+
+    restored = False
+    restored_items = None
+    restored_quantities = None
+    try:
+        with transaction.atomic():
+            locked = Order.objects.select_for_update().filter(id=order.id).first()
+            if not locked:
+                return False
+            if canonical_status(locked.status) != "cancelled":
+                return False
+            meta = locked.meta or {}
+            if meta.get("pax_restored") or not meta.get("pax_deductions"):
+                return False
+            deductions = _normalize_pax_deductions(meta.get("pax_deductions"))
+            if not deductions:
+                return False
+            for menu_item_id, qty in deductions.items():
+                MenuItem.objects.filter(id=menu_item_id).update(
+                    pax_per_preparation=F("pax_per_preparation") + qty
+                )
+            meta["pax_restored"] = True
+            meta["pax_restored_at"] = (now_ts or dj_tz.now()).isoformat()
+            if reason:
+                meta["pax_restore_reason"] = reason
+            locked.meta = meta
+            locked.save(update_fields=["meta", "updated_at"])
+            restored = True
+            restored_items = list(deductions.keys())
+            restored_quantities = deductions
+    except Exception:
+        logger.exception("Failed to restore pax for cancelled order")
+        return False
+
+    if restored and restored_items:
+        try:
+            publish_event(
+                "menu.pax.restored",
+                {
+                    "orderId": str(order.id),
+                    "orderNumber": getattr(order, "order_number", "") or "",
+                    "itemIds": restored_items,
+                    "quantities": restored_quantities or {},
+                    "reason": reason or "",
+                },
+                roles={"admin", "manager", "staff"},
+            )
+        except Exception:
+            logger.exception("Failed to publish pax restore event")
+    return restored
 
 
 def _safe_item(i):
@@ -626,6 +1043,18 @@ def _safe_order(o, with_items=True):
         except Exception:
             age_seconds = 0
 
+    meta = o.meta or {}
+    cancel_reason = (
+        meta.get("cancel_reason")
+        or meta.get("cancelReason")
+        or meta.get("no_show_reason")
+        or meta.get("noShowReason")
+        or ""
+    )
+    cancelled_at = meta.get("cancelled_at") or meta.get("cancelledAt") or None
+    cancelled_source = meta.get("cancelled_source") or meta.get("cancelledSource") or ""
+    cancelled_by = meta.get("cancelled_by") or meta.get("cancelledBy") or ""
+
     data = {
         "id": str(o.id),
         "orderNumber": o.order_number,
@@ -661,7 +1090,11 @@ def _safe_order(o, with_items=True):
         "lastStationCode": o.last_station_code or "",
         "lateBySeconds": int(o.late_by_seconds or 0),
         "ageSeconds": age_seconds,
-        "meta": o.meta or {},
+        "meta": meta,
+        "cancelReason": cancel_reason,
+        "cancelledAt": cancelled_at,
+        "cancelledSource": cancelled_source,
+        "cancelledBy": cancelled_by,
         "phaseSequence": int(o.phase_sequence or 0),
         "phaseStartedAt": o.phase_started_at.isoformat()
         if o.phase_started_at
@@ -676,6 +1109,49 @@ def _safe_order(o, with_items=True):
             o.auto_advance_duration_seconds or AUTO_ADVANCE_DEFAULT_SECONDS
         ),
     }
+    if getattr(o, "payment_status", None):
+        payment_status = str(o.payment_status).lower().strip()
+        data["paymentStatus"] = payment_status
+        data["isPaid"] = payment_status == "paid"
+    try:
+        from .models import PaymentTransaction
+
+        order_ids = [str(o.id)]
+        if o.order_number:
+            order_ids.append(str(o.order_number))
+        completed_payment = (
+            PaymentTransaction.objects.filter(
+                order_id__in=order_ids, status=PaymentTransaction.STATUS_COMPLETED
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        payment = completed_payment or (
+            PaymentTransaction.objects.filter(order_id__in=order_ids)
+            .order_by("-created_at")
+            .first()
+        )
+        if payment:
+            data["paymentStatus"] = payment.status
+            data["isPaid"] = payment.status == PaymentTransaction.STATUS_COMPLETED
+            data["payment"] = {
+                "id": str(payment.id),
+                "orderId": str(payment.order_id),
+                "orderNumber": o.order_number,
+                "amount": float(payment.amount),
+                "method": payment.method,
+                "status": payment.status,
+                "reference": payment.reference or "",
+                "customer": payment.customer or "",
+                "processedBy": (
+                    payment.processed_by.email
+                    if getattr(payment, "processed_by", None)
+                    else ""
+                ),
+                "date": (payment.created_at or dj_tz.now()).isoformat(),
+            }
+    except Exception:
+        pass
     data["autoAdvance"] = {
         "phaseSequence": data["phaseSequence"],
         "phaseStartedAt": data["phaseStartedAt"],
@@ -725,6 +1201,35 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
 
     try:
         from .models import Order, OrderItem, MenuItem
+        def apply_pax_deductions(blueprints):
+            totals = defaultdict(int)
+            for blueprint in blueprints:
+                menu_item = blueprint.get("menu_item")
+                qty = int(blueprint.get("quantity") or 0)
+                if not menu_item or qty <= 0:
+                    continue
+                requirements = _extract_ingredient_requirements(
+                    getattr(menu_item, "ingredients", []) or []
+                )
+                if requirements:
+                    for ingredient_id, multiplier in requirements:
+                        if ingredient_id == str(menu_item.id):
+                            continue
+                        totals[ingredient_id] += qty * max(1, int(multiplier or 1))
+                    continue
+                totals[str(menu_item.id)] += qty
+            if not totals:
+                return {}
+            for menu_item_id, qty in totals.items():
+                if qty <= 0:
+                    continue
+                MenuItem.objects.filter(id=menu_item_id).update(
+                    pax_per_preparation=Greatest(
+                        Value(0),
+                        F("pax_per_preparation") - qty,
+                    )
+                )
+            return dict(totals)
 
         station_lookup, station_list = _load_station_lookup()
         active_item_states = list(ITEM_ACTIVE_STATES)
@@ -916,6 +1421,38 @@ def _create_order_from_payload(payload, actor, *, with_items=True):
             created_items.append(item)
 
         recalc_order_counters(o, created_items)
+        try:
+            pax_deductions = apply_pax_deductions(line_blueprints)
+            if pax_deductions:
+                meta = o.meta or {}
+                meta["pax_deductions"] = pax_deductions
+                meta["pax_deducted"] = True
+                meta["pax_deducted_at"] = dj_tz.now().isoformat()
+                o.meta = meta
+                o.save(update_fields=["meta", "updated_at"])
+                try:
+                    publish_event(
+                        "menu.pax.updated",
+                        {
+                            "orderId": str(o.id),
+                            "orderNumber": o.order_number,
+                            "itemIds": list(pax_deductions.keys()),
+                            "quantities": pax_deductions,
+                        },
+                        roles={"admin", "manager", "staff"},
+                    )
+                except Exception:
+                    logger.exception("Failed to publish pax update event")
+        except Exception:
+            logger.exception("Failed to deduct pax per preparation")
+
+        if _should_create_pending_cash_payment(payment_method, requested_channel):
+            _ensure_pending_cash_payment(
+                o,
+                amount=total,
+                customer_name=customer_name,
+                channel=requested_channel,
+            )
 
         order_payload = _safe_order(o, with_items=with_items)
         record_order_event(
@@ -1069,6 +1606,7 @@ def order_queue(request):
         station_lookup, stations = _load_station_lookup()
         active_statuses = set(ORDER_ACTIVE_STATUSES)
         now_ts = dj_tz.now()
+        _auto_cancel_no_show_orders(now_ts, limit=100)
 
         qs = (
             Order.objects.filter(status__in=active_statuses)
@@ -1597,6 +2135,16 @@ def order_item_state(request, oid, item_id):
                 )
                 update_order_fields.append("handoff_code")
             order.save(update_fields=update_order_fields)
+            if auto_transition in {"staged", "handoff"} and previous_order_state not in {
+                "staged",
+                "handoff",
+            }:
+                try:
+                    from .notification_triggers import trigger_order_ready_for_pickup
+
+                    trigger_order_ready_for_pickup(order)
+                except Exception:
+                    pass
             record_order_event(
                 order,
                 event_type="order.status_auto",
@@ -1827,6 +2375,23 @@ def order_status(request, oid):
                 o.completed_at = None
                 update_fields.append("completed_at")
 
+        cancel_reason = (
+            (payload.get("reason") or payload.get("cancelReason") or payload.get("cancel_reason") or "")
+            .strip()
+        )
+        if target_status == "cancelled" and (status_changed or cancel_reason):
+            meta = o.meta or {}
+            if cancel_reason:
+                meta["cancel_reason"] = cancel_reason
+            elif status_changed and not meta.get("cancel_reason"):
+                meta["cancel_reason"] = "manual_cancelled"
+            if not meta.get("cancelled_at"):
+                meta["cancelled_at"] = dj_tz.now().isoformat()
+            if actor and not meta.get("cancelled_by"):
+                meta["cancelled_by"] = str(getattr(actor, "id", "")) or meta.get("cancelled_by", "")
+            o.meta = meta
+            update_fields.append("meta")
+
         auto_fields: list[str] = []
 
         if status_changed:
@@ -1904,6 +2469,26 @@ def order_status(request, oid):
             o.save(update_fields=update_fields)
         else:
             o.save(update_fields=["updated_at"])
+
+        if canonical_status(o.status) == "cancelled":
+            _restore_pax_for_order(
+                o, reason=cancel_reason or "cancelled", now_ts=dj_tz.now()
+            )
+
+        if status_changed:
+            new_canonical = canonical_status(o.status)
+            if new_canonical in {"staged", "handoff"} and previous_canonical not in {
+                "staged",
+                "handoff",
+            }:
+                try:
+                    from .notification_triggers import trigger_order_ready_for_pickup
+
+                    trigger_order_ready_for_pickup(o)
+                except Exception:
+                    pass
+
+        _maybe_award_loyalty_points(o)
 
         # Optional: decrement inventory on completion using simple recipe from MenuItem.ingredients
         if canonical_status(o.status) == "completed":

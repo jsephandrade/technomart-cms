@@ -82,7 +82,44 @@ def _get_or_create_menu_category_name(category_value):
         return name
 
 
-def _safe_menu_item(mi, category_map=None):
+def _normalize_ingredient_entries(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    return raw if isinstance(raw, list) else []
+
+
+def _extract_ingredient_requirements(raw):
+    entries = _normalize_ingredient_entries(raw)
+    requirements = []
+    for entry in entries:
+        if not entry:
+            continue
+        qty = 1
+        if isinstance(entry, dict):
+            item_id = (
+                entry.get("id")
+                or entry.get("menuItemId")
+                or entry.get("itemId")
+                or entry.get("menu_item_id")
+            )
+            qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count") or 1
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                qty = 1
+        else:
+            item_id = entry
+        if not item_id:
+            continue
+        qty = max(1, qty)
+        requirements.append((str(item_id), qty))
+    return requirements
+
+
+def _safe_menu_item(mi, category_map=None, ingredient_lookup=None):
     try:
         category_name = getattr(mi, "category", "")
         category_id = _resolve_category_id(category_name, category_map)
@@ -108,6 +145,57 @@ def _safe_menu_item(mi, category_map=None):
             image_url = None
         if not image_url:
             image_url = placeholder_url
+        ingredients = _normalize_ingredient_entries(
+            getattr(mi, "ingredients", []) or []
+        )
+        requirements = _extract_ingredient_requirements(ingredients)
+        pax_value = getattr(mi, "pax_per_preparation", 0) or 0
+        available_value = bool(mi.available)
+        if bool(getattr(mi, "archived", False)):
+            available_value = False
+        if requirements:
+            available_value = bool(mi.available) and not bool(getattr(mi, "archived", False))
+            pax_candidates = []
+            for ingredient_id, qty in requirements:
+                if ingredient_id == str(mi.id):
+                    continue
+                ingredient = None
+                if ingredient_lookup is not None:
+                    ingredient = ingredient_lookup.get(ingredient_id)
+                if ingredient is None:
+                    try:
+                        from .models import MenuItem
+
+                        ingredient = (
+                            MenuItem.objects.filter(id=ingredient_id)
+                            .values("id", "pax_per_preparation", "available", "archived")
+                            .first()
+                        )
+                    except Exception:
+                        ingredient = None
+                if not ingredient:
+                    pax_candidates.append(0)
+                    available_value = False
+                    continue
+                try:
+                    ingredient_pax = int(ingredient.get("pax_per_preparation") or 0)
+                except Exception:
+                    ingredient_pax = 0
+                qty = max(1, int(qty or 1))
+                pax_candidates.append(ingredient_pax // qty)
+                if ingredient.get("available") is False or ingredient.get("archived"):
+                    available_value = False
+            if pax_candidates:
+                pax_value = min(pax_candidates)
+                if pax_value <= 0:
+                    available_value = False
+            else:
+                pax_value = 0
+                available_value = False
+
+        if pax_value <= 0:
+            available_value = False
+
         return {
             "id": str(mi.id),
             "name": mi.name,
@@ -115,12 +203,14 @@ def _safe_menu_item(mi, category_map=None):
             "category": mi.category or "",
             "categoryId": category_id,
             "price": float(mi.price or 0),
-            "available": bool(mi.available),
+            "available": bool(available_value),
             "archived": bool(getattr(mi, "archived", False)),
             "archivedAt": mi.archived_at.isoformat() if getattr(mi, "archived_at", None) else None,
             "image": image_url,
-            "ingredients": getattr(mi, "ingredients", []) or [],
+            "ingredients": ingredients,
             "preparationTime": getattr(mi, "preparation_time", 0) or 0,
+            "paxPerPreparation": pax_value,
+            "estimatedPax": pax_value,
             "createdAt": mi.created_at.isoformat() if getattr(mi, "created_at", None) else None,
             "updatedAt": mi.updated_at.isoformat() if getattr(mi, "updated_at", None) else None,
         }
@@ -128,6 +218,10 @@ def _safe_menu_item(mi, category_map=None):
         category_name = getattr(mi, "category", "")
         category_id = _resolve_category_id(category_name, category_map)
         # Fallback for in-memory dicts to keep compatibility if ever used
+        pax_value = getattr(mi, "paxPerPreparation", 0) or 0
+        available_value = bool(getattr(mi, "available", True))
+        if pax_value <= 0:
+            available_value = False
         return {
             "id": str(getattr(mi, "id", "")),
             "name": getattr(mi, "name", "Unnamed"),
@@ -135,12 +229,14 @@ def _safe_menu_item(mi, category_map=None):
             "category": getattr(mi, "category", ""),
             "categoryId": category_id,
             "price": float(getattr(mi, "price", 0) or 0),
-            "available": bool(getattr(mi, "available", True)),
+            "available": bool(available_value),
             "archived": bool(getattr(mi, "archived", False)),
             "archivedAt": getattr(mi, "archivedAt", None),
             "image": image_url,
             "ingredients": getattr(mi, "ingredients", []) or [],
             "preparationTime": getattr(mi, "preparationTime", 0) or 0,
+            "paxPerPreparation": pax_value,
+            "estimatedPax": pax_value,
         }
 
 
@@ -375,7 +471,27 @@ def menu_items(request):
                     .values_list("name", "id")
                 )
                 category_map = {name.strip().lower(): str(cat_id) for name, cat_id in category_lookup}
-            items = [_safe_menu_item(it, category_map) for it in page_obj.object_list]
+            page_items = list(page_obj.object_list)
+            ingredient_ids = set()
+            for it in page_items:
+                requirements = _extract_ingredient_requirements(
+                    getattr(it, "ingredients", None)
+                )
+                for ingredient_id, _ in requirements:
+                    ingredient_ids.add(str(ingredient_id))
+            ingredient_lookup = {}
+            if ingredient_ids:
+                ingredient_rows = (
+                    MenuItem.objects.filter(id__in=ingredient_ids)
+                    .values("id", "pax_per_preparation", "available", "archived")
+                )
+                ingredient_lookup = {
+                    str(row["id"]): row for row in ingredient_rows if row.get("id")
+                }
+            items = [
+                _safe_menu_item(it, category_map, ingredient_lookup)
+                for it in page_items
+            ]
             pagination = {
                 "page": page_obj.number,
                 "limit": limit,
@@ -497,6 +613,16 @@ def menu_items(request):
             return JsonResponse({"success": False, "message": "preparationTime must be an integer"}, status=400)
         if prep < 0:
             return JsonResponse({"success": False, "message": "preparationTime cannot be negative"}, status=400)
+        # pax per preparation
+        try:
+            pax_val = int(payload.get("paxPerPreparation") or payload.get("estimatedPax") or 0)
+        except Exception:
+            return JsonResponse({"success": False, "message": "paxPerPreparation must be an integer"}, status=400)
+        if pax_val < 0:
+            return JsonResponse(
+                {"success": False, "message": "paxPerPreparation cannot be negative"},
+                status=400,
+            )
         available = bool(payload.get("available", True))
         image_url = None
         with transaction.atomic():
@@ -509,6 +635,7 @@ def menu_items(request):
                 available=available,
                 ingredients=ingredients,
                 preparation_time=prep,
+                pax_per_preparation=pax_val,
             )
             if img:
                 try:
@@ -551,6 +678,8 @@ def menu_items(request):
             "image": payload.get("image"),
             "ingredients": payload.get("ingredients") or [],
             "preparationTime": payload.get("preparationTime"),
+            "paxPerPreparation": payload.get("paxPerPreparation") or payload.get("estimatedPax") or 0,
+            "estimatedPax": payload.get("paxPerPreparation") or payload.get("estimatedPax") or 0,
         }
         MENU_ITEMS.append(item)
     try:
@@ -662,6 +791,17 @@ def menu_item_detail(request, item_id):
                     fields["preparation_time"] = prep
                 except Exception:
                     pass
+            if "paxPerPreparation" in payload or "estimatedPax" in payload:
+                try:
+                    pax_input = payload.get("paxPerPreparation")
+                    if pax_input is None:
+                        pax_input = payload.get("estimatedPax")
+                    pax_amount = int(pax_input or 0)
+                    if pax_amount < 0:
+                        pax_amount = 0
+                    fields["pax_per_preparation"] = pax_amount
+                except Exception:
+                    pass
             try:
                 model_fields = {f.name for f in MenuItem._meta.get_fields()}
             except Exception:
@@ -675,6 +815,7 @@ def menu_item_detail(request, item_id):
                 "ingredients",
                 "preparation_time",
                 "is_special",
+                "pax_per_preparation",
             }
             if model_fields:
                 allowed_fields |= model_fields
@@ -684,7 +825,11 @@ def menu_item_detail(request, item_id):
                 "orderedQuantity",
                 "orderQuantity",
             }  # guard against accidental extra fields (e.g., inventory/cart data)
-            allowed_input_keys = allowed_fields | {"preparationTime"}
+            allowed_input_keys = allowed_fields | {
+                "preparationTime",
+                "paxPerPreparation",
+                "estimatedPax",
+            }
             # Silently ignore unsupported/accidental fields (e.g., quantity from carts)
             safe_payload = {
                 k: v for k, v in payload.items() if k in allowed_input_keys and k not in disallowed
@@ -725,6 +870,10 @@ def menu_item_detail(request, item_id):
             for k in ["name", "description", "category", "image", "ingredients", "preparationTime"]:
                 if k in payload:
                     item[k] = payload[k]
+            if "paxPerPreparation" in payload:
+                item["paxPerPreparation"] = payload["paxPerPreparation"]
+            if "estimatedPax" in payload:
+                item["estimatedPax"] = payload["estimatedPax"]
             if "available" in payload:
                 if item.get("archived") and payload.get("available"):
                     return JsonResponse({"success": False, "message": "Archived items cannot be made available"}, status=400)

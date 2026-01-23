@@ -1,8 +1,11 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from decimal import Decimal, ROUND_DOWN
 from .utils import map_order_status  # if you put it in utils.py
+import json
+import logging
+from collections import defaultdict
 
 from rest_framework import status
 from api.models import Order, OrderItem
@@ -11,15 +14,414 @@ from rest_framework import serializers
 from decimal import Decimal
 
 from django.http import JsonResponse
-from api.models import Order, OrderItem, MenuItem
+from django.db import transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
+from django.utils.dateparse import parse_datetime
+from django.shortcuts import get_object_or_404
+from api.models import (
+    Order,
+    OrderItem,
+    MenuItem,
+    PaymentTransaction,
+    PaymentProof,
+    CheckoutSession,
+)
+from api.events import publish_event
 from .serializers import OrderSerializer
 from notifications.models import Notification
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone as dj_tz
 import uuid
-from menu.models import MenuItem  # adjust import to your menu app
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+
+logger = logging.getLogger(__name__)
+
+PAYMENT_CASH_ALIASES = {
+    "cash",
+    "counter",
+    "pay_at_counter",
+    "pay-at-counter",
+    "pay at counter",
+    "cod",
+}
+LOYALTY_META_KEY = "loyaltyAwarded"
+
+
+def _extract_ingredient_requirements(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+    requirements = []
+    for entry in raw:
+        if not entry:
+            continue
+        qty = 1
+        if isinstance(entry, dict):
+            item_id = (
+                entry.get("id")
+                or entry.get("menuItemId")
+                or entry.get("itemId")
+                or entry.get("menu_item_id")
+            )
+            qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count") or 1
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                qty = 1
+        else:
+            item_id = entry
+        if not item_id:
+            continue
+        qty = max(1, qty)
+        requirements.append((str(item_id), qty))
+    return requirements
+
+
+def _normalize_pax_deductions(raw):
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        normalized = {}
+        for key, value in raw.items():
+            try:
+                qty = int(value)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            normalized[str(key)] = qty
+        return normalized
+    if isinstance(raw, list):
+        normalized = {}
+        for entry in raw:
+            item_id = None
+            qty_raw = None
+            if isinstance(entry, dict):
+                item_id = (
+                    entry.get("menuItemId")
+                    or entry.get("menu_item_id")
+                    or entry.get("itemId")
+                    or entry.get("id")
+                )
+                qty_raw = entry.get("quantity") or entry.get("qty") or entry.get("count")
+            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                item_id, qty_raw = entry[0], entry[1]
+            if not item_id:
+                continue
+            try:
+                qty = int(qty_raw)
+            except Exception:
+                continue
+            if qty <= 0:
+                continue
+            key = str(item_id)
+            normalized[key] = normalized.get(key, 0) + qty
+        return normalized
+    return {}
+
+
+def _apply_pax_deductions(items):
+    if not isinstance(items, list) or not items:
+        return {}
+    totals = defaultdict(int)
+    for entry in items:
+        if not entry or not isinstance(entry, dict):
+            continue
+        menu_item_id = (
+            entry.get("menu_item_id")
+            or entry.get("menuItemId")
+            or entry.get("itemId")
+            or entry.get("id")
+        )
+        qty_raw = entry.get("quantity") or entry.get("qty") or 0
+        try:
+            qty = int(qty_raw)
+        except Exception:
+            qty = 0
+        if not menu_item_id or qty <= 0:
+            continue
+        menu_item = MenuItem.objects.filter(id=menu_item_id).first()
+        if not menu_item:
+            continue
+        requirements = _extract_ingredient_requirements(
+            getattr(menu_item, "ingredients", []) or []
+        )
+        if requirements:
+            for ingredient_id, multiplier in requirements:
+                if ingredient_id == str(menu_item.id):
+                    continue
+                totals[ingredient_id] += qty * max(1, int(multiplier or 1))
+            continue
+        totals[str(menu_item.id)] += qty
+
+    if not totals:
+        return {}
+    for menu_item_id, qty in totals.items():
+        if qty <= 0:
+            continue
+        MenuItem.objects.filter(id=menu_item_id).update(
+            pax_per_preparation=Greatest(
+                Value(0),
+                F("pax_per_preparation") - qty,
+            )
+        )
+    return dict(totals)
+
+
+def _restore_pax_for_order(order, *, reason="", now_ts=None):
+    if not order:
+        return False
+    restored = False
+    restored_items = None
+    restored_quantities = None
+    try:
+        with transaction.atomic():
+            locked = Order.objects.select_for_update().filter(id=order.id).first()
+            if not locked:
+                return False
+            status_value = str(getattr(locked, "status", "")).strip().lower()
+            if status_value != "cancelled":
+                return False
+            meta = locked.meta or {}
+            if meta.get("pax_restored") or not meta.get("pax_deductions"):
+                return False
+            deductions = _normalize_pax_deductions(meta.get("pax_deductions"))
+            if not deductions:
+                return False
+            for menu_item_id, qty in deductions.items():
+                MenuItem.objects.filter(id=menu_item_id).update(
+                    pax_per_preparation=F("pax_per_preparation") + qty
+                )
+            meta["pax_restored"] = True
+            meta["pax_restored_at"] = (now_ts or dj_tz.now()).isoformat()
+            if reason:
+                meta["pax_restore_reason"] = reason
+            locked.meta = meta
+            locked.save(update_fields=["meta", "updated_at"])
+            restored = True
+            restored_items = list(deductions.keys())
+            restored_quantities = deductions
+    except Exception:
+        logger.exception("Failed to restore pax for cancelled order")
+        return False
+
+    if restored and restored_items:
+        try:
+            publish_event(
+                "menu.pax.restored",
+                {
+                    "orderId": str(order.id),
+                    "orderNumber": getattr(order, "order_number", "") or "",
+                    "itemIds": restored_items,
+                    "quantities": restored_quantities or {},
+                    "reason": reason or "",
+                },
+                roles={"admin", "manager", "staff"},
+            )
+        except Exception:
+            logger.exception("Failed to publish pax restore event")
+    return restored
+
+
+def _normalize_payment_method(value):
+    return str(value or "").strip().lower()
+
+
+def _is_cash_method(value):
+    return _normalize_payment_method(value) in PAYMENT_CASH_ALIASES
+
+
+def _is_guest_user(user):
+    if not user:
+        return False
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    if email.endswith("@guest.local"):
+        return True
+    username = str(getattr(user, "username", "") or "").strip().lower()
+    return username == "guest_user"
+
+
+def _get_display_name(user, order=None):
+    if user:
+        get_full_name = getattr(user, "get_full_name", None)
+        if callable(get_full_name):
+            try:
+                full_name = get_full_name()
+                if full_name:
+                    return full_name
+            except Exception:
+                pass
+        for attr in ("name", "username", "email"):
+            value = getattr(user, attr, "")
+            if value:
+                return str(value)
+    if order and getattr(order, "customer_name", ""):
+        return str(order.customer_name)
+    return ""
+
+
+CHECKOUT_EXPIRY_MINUTES = 30
+
+
+def _parse_uuid(value):
+    try:
+        return uuid.UUID(str(value))
+    except Exception:
+        return None
+
+
+def _parse_promised_time(value):
+    if not value:
+        return None
+    parsed = parse_datetime(str(value))
+    return parsed
+
+
+def _coerce_decimal(value, default=Decimal("0.00")):
+    try:
+        return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    except Exception:
+        return default
+
+
+def _get_checkout_session(identifier):
+    if not identifier:
+        return None
+    uid = _parse_uuid(identifier)
+    if uid:
+        session = CheckoutSession.objects.filter(id=uid).first()
+        if session:
+            return session
+    return (
+        CheckoutSession.objects.filter(order_number__iexact=str(identifier))
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _resolve_order_or_checkout(identifier):
+    order = Order.objects.filter(order_number=identifier).first()
+    if order:
+        return order, None
+    return None, _get_checkout_session(identifier)
+
+
+def _is_order_fully_paid(order):
+    if not order:
+        return False
+    method = _normalize_payment_method(getattr(order, "payment_method", ""))
+    if not method:
+        return False
+    if _is_cash_method(method):
+        order_ids = [str(order.id)]
+        if getattr(order, "order_number", ""):
+            order_ids.append(str(order.order_number))
+        return PaymentTransaction.objects.filter(
+            order_id__in=order_ids, status=PaymentTransaction.STATUS_COMPLETED
+        ).exists()
+    return True
+
+
+def _ensure_pending_cash_payment(order, *, customer_name=""):
+    order_ids = [str(order.id)]
+    if order.order_number:
+        order_ids.append(str(order.order_number))
+    existing = (
+        PaymentTransaction.objects.filter(order_id__in=order_ids)
+        .exclude(status=PaymentTransaction.STATUS_REFUNDED)
+        .order_by("-created_at")
+        .first()
+    )
+    if existing:
+        return existing
+
+    meta = {"source": "online", "orderNumber": order.order_number}
+    return PaymentTransaction.objects.create(
+        order_id=str(order.id),
+        amount=order.total_amount or Decimal("0.00"),
+        method=PaymentTransaction.METHOD_CASH,
+        status=PaymentTransaction.STATUS_PENDING,
+        customer=customer_name or order.customer_name or "",
+        meta=meta,
+    )
+
+
+def _credits_for_amount(total_amount):
+    dec_amount = _coerce_decimal(total_amount)
+    if dec_amount < Decimal("100"):
+        return Decimal("0.00")
+    credits = (dec_amount / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    return credits
+
+
+def _maybe_award_loyalty_points(order):
+    if not order:
+        return Decimal("0.00")
+    status_value = str(getattr(order, "status", "")).strip().lower()
+    if status_value != "completed":
+        return Decimal("0.00")
+    if not _is_order_fully_paid(order):
+        return Decimal("0.00")
+    user = getattr(order, "placed_by", None)
+    if not user:
+        return Decimal("0.00")
+    if _is_guest_user(user):
+        return Decimal("0.00")
+    meta = order.meta or {}
+    if meta.get(LOYALTY_META_KEY):
+        return Decimal("0.00")
+    earned_points = _credits_for_amount(order.total_amount)
+    if earned_points <= 0:
+        meta[LOYALTY_META_KEY] = True
+        order.meta = meta
+        order.save(update_fields=["meta", "updated_at"])
+        return Decimal("0.00")
+    if not hasattr(user, "credit_points"):
+        user.credit_points = Decimal("0.0")
+    user.credit_points += earned_points
+    user.save()
+    meta[LOYALTY_META_KEY] = True
+    order.meta = meta
+    order.save(update_fields=["meta", "updated_at"])
+    return earned_points
+from django.utils.crypto import get_random_string
+
+ORDER_NUMBER_RANDOM_CHARS = "0123456789"
+
+
+def generate_unique_order_number(prefix="O", order_model=None, max_attempts=64):
+    prefix_clean = (prefix or "O").strip()[:1].upper() or "O"
+    if order_model is None:
+        order_model = Order
+
+    attempt = 0
+    while attempt < max_attempts:
+        random_component = get_random_string(
+            length=6, allowed_chars=ORDER_NUMBER_RANDOM_CHARS
+        )
+        candidate = f"{prefix_clean}-{random_component}"
+        exists_in_sessions = False
+        try:
+            exists_in_sessions = CheckoutSession.objects.filter(
+                order_number__iexact=candidate
+            ).exists()
+        except Exception:
+            exists_in_sessions = False
+        if (
+            not order_model.objects.filter(order_number__iexact=candidate).exists()
+            and not exists_in_sessions
+        ):
+            return candidate
+        attempt += 1
+
+    raise RuntimeError("Unable to generate unique order number")
 
 # ------------------------------
 # ✅ CREATE ORDER
@@ -66,12 +468,33 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 import traceback
-@require_POST
+@csrf_exempt
+@require_http_methods(["POST", "DELETE"])
 def cancel_order(request, order_number):
     # Fetch order without checking user
     order = get_object_or_404(Order, order_number=order_number)
-    order.status = 'cancelled'
-    order.save()
+    update_fields = []
+    if order.status != 'cancelled':
+        order.status = 'cancelled'
+        update_fields.append('status')
+
+    meta = order.meta or {}
+    if not meta.get('cancel_reason'):
+        meta['cancel_reason'] = 'user_cancelled'
+    if not meta.get('cancelled_at'):
+        meta['cancelled_at'] = dj_tz.now().isoformat()
+    if not meta.get('cancelled_source'):
+        meta['cancelled_source'] = 'user'
+    order.meta = meta
+    update_fields.append('meta')
+
+    if 'updated_at' not in update_fields:
+        update_fields.append('updated_at')
+    order.save(update_fields=update_fields)
+    try:
+        _restore_pax_for_order(order, reason=meta.get("cancel_reason") or "user_cancelled")
+    except Exception:
+        logger.exception("Failed to restore pax after cancellation")
     return JsonResponse({'message': f'Order {order_number} cancelled successfully.'})
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -105,65 +528,75 @@ def create_order(request):
     data = request.data
 
     try:
-        # 1️⃣ Parse credit points requested
-        requested_points = Decimal(data.get('credit_points_used', 0)).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-
-        # 2️⃣ Fetch Paid orders to calculate earned points
-        paid_orders = Order.objects.filter(placed_by=user, status='Paid')
-
-        total_earned_points = sum(
-            (order.total_amount * Decimal('0.01')).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-            for order in paid_orders
+        idempotency_key = (
+            request.headers.get("Idempotency-Key") or data.get("idempotency_key")
         )
+        if idempotency_key:
+            existing = (
+                CheckoutSession.objects.filter(
+                    user=user, idempotency_key=str(idempotency_key).strip()
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if existing and existing.status != CheckoutSession.STATUS_EXPIRED:
+                return Response(
+                    {
+                        "success": True,
+                        "checkout_id": str(existing.id),
+                        "order_number": existing.order_number,
+                        "total": float(existing.total_amount or 0),
+                        "credit_points_used": float(existing.credit_points_used or 0),
+                    }
+                )
 
-        total_used_points = sum(
-            (order.credit_points_used or Decimal('0.0')).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
-            for order in paid_orders
-        )
+        # 1?,???? Parse credit points requested
+        requested_points = _coerce_decimal(data.get("credit_points_used", 0))
 
-        # 3️⃣ Compute available points
-        available_points = max(total_earned_points - total_used_points, Decimal('0.0'))
+        # 2?,???? Compute available points
+        available_points = get_available_points(user)
 
-        # 4️⃣ Clamp requested points to available points and order total
-        order_total = Decimal(data['total_amount']).quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+        # 4?,???? Clamp requested points to available points and order total
+        order_total = _coerce_decimal(data.get("total_amount", 0))
         requested_points = min(requested_points, available_points, order_total)
 
-        # 5️⃣ Check if requested points exceed available points
+        # 5?,???? Check if requested points exceed available points
         if requested_points > available_points:
             return Response(
                 {'success': False, 'message': 'Insufficient backend points'},
                 status=400
             )
 
-        # 6️⃣ Generate unique order number
+        # 6?,???? Reserve order number for checkout
+        order_number = generate_unique_order_number(prefix="O", order_model=Order)
+        promised_time = _parse_promised_time(data.get("promised_time"))
+        payload = data if isinstance(data, dict) else dict(data)
 
-        order_number = str(uuid.uuid4())[:32]  # unique, max 32 chars
-
-        # 7️⃣ Create the order
-        order = Order.objects.create(
+        session = CheckoutSession.objects.create(
+            user=user,
             order_number=order_number,
-            placed_by=user,
+            status=CheckoutSession.STATUS_PENDING,
+            subtotal=_coerce_decimal(data.get("subtotal", order_total)),
+            discount=_coerce_decimal(data.get("discount", 0)),
             total_amount=order_total,
             credit_points_used=requested_points,
-            status='Pending',
-            customer_name=data['customer_name'],
-            promised_time=data['promised_time'],
-            order_type=data.get('order_type', 'pickup')
+            order_type=data.get("order_type", "pickup"),
+            customer_name=data.get("customer_name", ""),
+            promised_time=promised_time,
+            payload=payload,
+            idempotency_key=str(idempotency_key).strip() if idempotency_key else "",
+            expires_at=dj_tz.now() + timedelta(minutes=CHECKOUT_EXPIRY_MINUTES),
         )
 
-        # 8️⃣ Create order items
-        for item in data.get('items', []):
-            OrderItem.objects.create(
-                order=order,
-                item_name=item['name'],
-                price=Decimal(item['price']).quantize(Decimal('0.01'), rounding=ROUND_DOWN),
-                quantity=int(item['quantity']),
-                menu_item_id=item['menu_item_id'],
-                size=item.get('size'),
-                customize=item.get('customize')
-            )
-
-        return Response({'success': True, 'order_number': order.order_number})
+        return Response(
+            {
+                "success": True,
+                "checkout_id": str(session.id),
+                "order_number": session.order_number,
+                "total": float(order_total),
+                "credit_points_used": float(requested_points),
+            }
+        )
 
     except Exception as e:
         return Response({'success': False, 'message': str(e)}, status=500)
@@ -171,7 +604,7 @@ def create_order(request):
 @permission_classes([IsAuthenticated])
 def get_user_orders(request):
     user = request.user
-    customer_name = user.get_full_name() or user.username  # fallback
+    customer_name = _get_display_name(user)  # fallback
 
     orders = Order.objects.filter(customer_name=customer_name)
 
@@ -191,15 +624,351 @@ def user_credit_points(request):
     available_points = get_available_points(user)
     serializer = CreditPointsSerializer({'credit_points': available_points})
     return Response(serializer.data)
+
+def _can_review_payment(user):
+    try:
+        role = (getattr(user, "role", "") or "").lower()
+    except Exception:
+        role = ""
+    return bool(getattr(user, "is_staff", False)) or role in {"admin", "manager", "staff"}
+
+
+def _serialize_payment_proof(proof, request=None):
+    order_number = getattr(proof.order, "order_number", "") if proof.order_id else ""
+    image_url = ""
+    if getattr(proof, "proof_image", None):
+        try:
+            image_url = proof.proof_image.url
+        except Exception:
+            image_url = ""
+    if request and image_url and not image_url.startswith("http"):
+        image_url = request.build_absolute_uri(image_url)
+    return {
+        "id": str(proof.id),
+        "orderId": str(proof.order_id),
+        "orderNumber": order_number,
+        "amount": float(proof.amount),
+        "status": proof.status,
+        "referenceNumber": proof.reference_number or "",
+        "proofImageUrl": image_url,
+        "reviewedAt": proof.reviewed_at.isoformat() if proof.reviewed_at else None,
+        "reviewedNotes": proof.reviewed_notes or "",
+        "submittedAt": proof.created_at.isoformat() if proof.created_at else None,
+    }
+
+
+def _create_order_from_session(session, *, method=""):
+    payload = session.payload or {}
+    items = payload.get("items", [])
+    order_total = session.total_amount or _coerce_decimal(payload.get("total_amount", 0))
+    subtotal = session.subtotal or _coerce_decimal(payload.get("subtotal", order_total))
+    discount = session.discount or _coerce_decimal(payload.get("discount", 0))
+    credit_points_used = session.credit_points_used or _coerce_decimal(
+        payload.get("credit_points_used", 0)
+    )
+    promised_time = session.promised_time or _parse_promised_time(
+        payload.get("promised_time")
+    )
+    order_number_value = session.order_number or generate_unique_order_number(
+        prefix="O", order_model=Order
+    )
+    customer_name = session.customer_name or payload.get("customer_name") or _get_display_name(
+        session.user
+    )
+    order_type = session.order_type or payload.get("order_type", "pickup")
+    channel = payload.get("channel") or "online"
+
+    with transaction.atomic():
+        order = Order.objects.create(
+            order_number=order_number_value,
+            placed_by=session.user,
+            total_amount=order_total,
+            credit_points_used=credit_points_used,
+            status="pending",
+            customer_name=customer_name,
+            promised_time=promised_time,
+            order_type=order_type,
+            subtotal=subtotal,
+            discount=discount,
+            channel=channel,
+        )
+
+        for item in items:
+            OrderItem.objects.create(
+                order=order,
+                item_name=item.get("name") or item.get("item_name") or "Item",
+                price=_coerce_decimal(item.get("price", 0)),
+                quantity=int(item.get("quantity") or 1),
+                menu_item_id=item.get("menu_item_id") or item.get("menuItemId"),
+                size=item.get("size"),
+                customize=item.get("customize"),
+            )
+
+        try:
+            pax_deductions = _apply_pax_deductions(items)
+            if pax_deductions:
+                meta = order.meta or {}
+                meta["pax_deductions"] = pax_deductions
+                meta["pax_deducted"] = True
+                meta["pax_deducted_at"] = dj_tz.now().isoformat()
+                order.meta = meta
+                order.save(update_fields=["meta", "updated_at"])
+                try:
+                    publish_event(
+                        "menu.pax.updated",
+                        {
+                            "orderId": str(order.id),
+                            "orderNumber": order.order_number,
+                            "itemIds": list(pax_deductions.keys()),
+                            "quantities": pax_deductions,
+                        },
+                        roles={"admin", "manager", "staff"},
+                    )
+                except Exception:
+                    logger.exception("Failed to publish pax update event")
+        except Exception:
+            logger.exception("Failed to deduct pax per preparation")
+
+        if method:
+            order.payment_method = method
+            order.save(update_fields=["payment_method"])
+            if _is_cash_method(method):
+                _ensure_pending_cash_payment(
+                    order,
+                    customer_name=_get_display_name(session.user, order),
+                )
+
+        session.order_id = order.id
+        session.order_number = order.order_number
+        if method:
+            session.status = (
+                CheckoutSession.STATUS_AWAITING_CASH
+                if _is_cash_method(method)
+                else CheckoutSession.STATUS_FINALIZED
+            )
+        session.save(update_fields=["order_id", "order_number", "status", "updated_at"])
+    return order
+
+
+def _is_authenticated_user(user):
+    try:
+        return bool(getattr(user, "is_authenticated", False)) and getattr(user, "id", None)
+    except Exception:
+        return False
+
+
+def _ensure_order_for_proof(identifier, actor):
+    order, session = _resolve_order_or_checkout(identifier)
+    if not order and not session:
+        return None, JsonResponse({"success": False, "message": "Order not found"}, status=404)
+    actor_is_authenticated = _is_authenticated_user(actor)
+    if actor_is_authenticated and order and order.placed_by and order.placed_by != actor:
+        return None, JsonResponse(
+            {"success": False, "message": "Not authorized for this order."}, status=403
+        )
+    if actor_is_authenticated and session and session.user and session.user != actor:
+        return None, JsonResponse(
+            {"success": False, "message": "Not authorized for this checkout."}, status=403
+        )
+    if order:
+        return order, None
+    if session and session.order_id:
+        existing = Order.objects.filter(id=session.order_id).first() or Order.objects.filter(
+            order_number=session.order_number
+        ).first()
+        if existing:
+            return existing, None
+    if session.expires_at and session.expires_at < dj_tz.now():
+        session.status = CheckoutSession.STATUS_EXPIRED
+        session.save(update_fields=["status", "updated_at"])
+        return None, JsonResponse(
+            {"success": False, "message": "Checkout session expired"},
+            status=400,
+        )
+    try:
+        order = _create_order_from_session(session, method="")
+    except Exception:
+        logger.exception("Failed to create order from checkout session")
+        return None, JsonResponse(
+            {"success": False, "message": "Failed to create order from checkout."},
+            status=500,
+        )
+    return order, None
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def gcash_link(request, order_number):
-    try:
-        order = Order.objects.get(order_number=order_number)
-        gcash_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
-        return JsonResponse({"success": True, "gcash_url": gcash_url})
-    except Order.DoesNotExist:
+    order, session = _resolve_order_or_checkout(order_number)
+    if not order and not session:
         return JsonResponse({"success": False, "message": "Order not found"}, status=404)
+    amount = order.total_amount if order else session.total_amount
+    amount = _coerce_decimal(amount)
+    if amount <= 0:
+        return JsonResponse(
+            {"success": False, "message": "Invalid checkout amount."},
+            status=400,
+        )
+    ref = order.order_number if order else (session.order_number or str(session.id))
+    return JsonResponse(
+        {
+            "success": True,
+            "amount": float(amount),
+            "order_number": ref,
+            "message": "Use the in-app GCash QR to pay.",
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def submit_payment_proof(request, order_number):
+    order, error = _ensure_order_for_proof(order_number, request.user)
+    if error:
+        return error
+
+    if PaymentProof.objects.filter(
+        order_id=order.id, status=PaymentProof.STATUS_PENDING
+    ).exists():
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "A pending payment proof already exists for this order.",
+            },
+            status=409,
+        )
+
+    upload = (
+        request.FILES.get("proof_image")
+        or request.FILES.get("image")
+        or request.FILES.get("proof")
+    )
+    if not upload:
+        return JsonResponse(
+            {"success": False, "message": "Payment proof image is required."},
+            status=400,
+        )
+
+    reference_number = (
+        request.data.get("reference_number")
+        or request.data.get("referenceNumber")
+        or request.data.get("reference")
+        or ""
+    )
+
+    proof = PaymentProof.objects.create(
+        order=order,
+        submitted_by=request.user if getattr(request.user, "id", None) else None,
+        amount=_coerce_decimal(order.total_amount),
+        reference_number=str(reference_number or "").strip()[:64],
+        proof_image=upload,
+        status=PaymentProof.STATUS_PENDING,
+    )
+
+    if hasattr(order, "payment_status"):
+        order.payment_status = Order.PAYMENT_PENDING
+    if hasattr(order, "payment_method"):
+        order.payment_method = "gcash"
+    order.save(update_fields=["payment_status", "payment_method", "updated_at"])
+
+    return JsonResponse(
+        {"success": True, "data": _serialize_payment_proof(proof, request)},
+        status=201,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def list_payment_proofs(request):
+    proofs = PaymentProof.objects.select_related("order")
+    order_id = (
+        request.query_params.get("order_id")
+        or request.query_params.get("orderId")
+        or ""
+    )
+    order_number = (
+        request.query_params.get("order_number")
+        or request.query_params.get("orderNumber")
+        or ""
+    )
+
+    if order_number and not order_id:
+        order = Order.objects.filter(order_number=order_number).first()
+        if not order:
+            return JsonResponse({"success": True, "data": []})
+        order_id = str(order.id)
+
+    if order_id:
+        proofs = proofs.filter(order_id=order_id)
+
+    proofs = proofs.order_by("-created_at")
+    data = [_serialize_payment_proof(proof, request) for proof in proofs]
+    return JsonResponse({"success": True, "data": data})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def verify_payment_proof(request, proof_id):
+
+    proof = PaymentProof.objects.select_related("order").filter(id=proof_id).first()
+    if not proof:
+        return JsonResponse({"success": False, "message": "Payment proof not found."}, status=404)
+
+    if proof.status != PaymentProof.STATUS_PENDING:
+        return JsonResponse(
+            {"success": False, "message": "Payment proof is already finalized."},
+            status=400,
+        )
+
+    proof.status = PaymentProof.STATUS_VERIFIED
+    if getattr(request.user, "id", None):
+        proof.reviewed_by = request.user
+    proof.reviewed_at = dj_tz.now()
+    proof.reviewed_notes = str(request.data.get("notes") or "").strip()
+    proof.save(update_fields=["status", "reviewed_by", "reviewed_at", "reviewed_notes", "updated_at"])
+
+    order = proof.order
+    if hasattr(order, "payment_status"):
+        order.payment_status = Order.PAYMENT_PAID
+        order.payment_method = "gcash"
+        order.save(update_fields=["payment_status", "payment_method", "updated_at"])
+
+    return JsonResponse({"success": True, "data": _serialize_payment_proof(proof, request)})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def reject_payment_proof(request, proof_id):
+
+    proof = PaymentProof.objects.select_related("order").filter(id=proof_id).first()
+    if not proof:
+        return JsonResponse({"success": False, "message": "Payment proof not found."}, status=404)
+
+    if proof.status != PaymentProof.STATUS_PENDING:
+        return JsonResponse(
+            {"success": False, "message": "Payment proof is already finalized."},
+            status=400,
+        )
+
+    proof.status = PaymentProof.STATUS_REJECTED
+    if getattr(request.user, "id", None):
+        proof.reviewed_by = request.user
+    proof.reviewed_at = dj_tz.now()
+    proof.reviewed_notes = (
+        str(request.data.get("reason") or request.data.get("notes") or "").strip()
+    )
+    proof.save(update_fields=["status", "reviewed_by", "reviewed_at", "reviewed_notes", "updated_at"])
+
+    order = proof.order
+    if hasattr(order, "payment_status"):
+        order.payment_status = Order.PAYMENT_REJECTED
+        order.save(update_fields=["payment_status", "updated_at"])
+
+    return JsonResponse({"success": True, "data": _serialize_payment_proof(proof, request)})
 
 # ------------------------------
 # ✅ CONFIRM PAYMENT
@@ -207,50 +976,190 @@ def gcash_link(request, order_number):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def confirm_payment(request, order_number):
-    try:
-        data = request.data
-        method = data.get('method', None)
-        order = Order.objects.get(order_number=order_number)
+    data = request.data
+    method = data.get("method", None)
+    if not method:
+        return Response(
+            {"success": False, "message": "Payment method is required"},
+            status=400,
+        )
+
+    order = Order.objects.filter(order_number=order_number).first()
+    if order:
+        order.payment_method = method
+        order.status = "pending"
+        order.save(update_fields=["payment_method", "status"])
+
+        if _is_cash_method(method):
+            _ensure_pending_cash_payment(
+                order,
+                customer_name=_get_display_name(request.user, order),
+            )
+
+        earned_points = _maybe_award_loyalty_points(order)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Payment confirmed",
+                "status": map_order_status(order.status),
+                "order_number": order.order_number,
+                "order_id": str(order.id),
+                "earned_points": float(earned_points),
+            }
+        )
+
+    session = _get_checkout_session(order_number)
+    if not session:
+        return Response({"success": False, "message": "Order not found"}, status=404)
+
+    if session.expires_at and session.expires_at < dj_tz.now():
+        session.status = CheckoutSession.STATUS_EXPIRED
+        session.save(update_fields=["status", "updated_at"])
+        return Response(
+            {"success": False, "message": "Checkout session expired"},
+            status=400,
+        )
+
+    if session.order_id:
+        existing = Order.objects.filter(id=session.order_id).first() or Order.objects.filter(
+            order_number=session.order_number
+        ).first()
+        if existing:
+            return Response(
+                {
+                    "success": True,
+                    "message": "Payment confirmed",
+                    "status": map_order_status(existing.status),
+                    "order_number": existing.order_number,
+                    "order_id": str(existing.id),
+                }
+            )
+
+    payload = session.payload or {}
+    items = payload.get("items", [])
+    order_total = session.total_amount or _coerce_decimal(payload.get("total_amount", 0))
+    subtotal = session.subtotal or _coerce_decimal(payload.get("subtotal", order_total))
+    discount = session.discount or _coerce_decimal(payload.get("discount", 0))
+    credit_points_used = session.credit_points_used or _coerce_decimal(
+        payload.get("credit_points_used", 0)
+    )
+    promised_time = session.promised_time or _parse_promised_time(
+        payload.get("promised_time")
+    )
+    order_number_value = session.order_number or generate_unique_order_number(
+        prefix="O", order_model=Order
+    )
+    customer_name = session.customer_name or payload.get("customer_name") or _get_display_name(
+        session.user
+    )
+    order_type = session.order_type or payload.get("order_type", "pickup")
+    channel = payload.get("channel") or "online"
+
+    with transaction.atomic():
+        order = Order.objects.create(
+            order_number=order_number_value,
+            placed_by=session.user,
+            total_amount=order_total,
+            credit_points_used=credit_points_used,
+            status="pending",
+            customer_name=customer_name,
+            promised_time=promised_time,
+            order_type=order_type,
+            subtotal=subtotal,
+            discount=discount,
+            channel=channel,
+        )
+
+        for item in items:
+            OrderItem.objects.create(
+                order=order,
+                item_name=item.get("name") or item.get("item_name") or "Item",
+                price=_coerce_decimal(item.get("price", 0)),
+                quantity=int(item.get("quantity") or 1),
+                menu_item_id=item.get("menu_item_id") or item.get("menuItemId"),
+                size=item.get("size"),
+                customize=item.get("customize"),
+            )
+
+        try:
+            pax_deductions = _apply_pax_deductions(items)
+            if pax_deductions:
+                meta = order.meta or {}
+                meta["pax_deductions"] = pax_deductions
+                meta["pax_deducted"] = True
+                meta["pax_deducted_at"] = dj_tz.now().isoformat()
+                order.meta = meta
+                order.save(update_fields=["meta", "updated_at"])
+                try:
+                    publish_event(
+                        "menu.pax.updated",
+                        {
+                            "orderId": str(order.id),
+                            "orderNumber": order.order_number,
+                            "itemIds": list(pax_deductions.keys()),
+                            "quantities": pax_deductions,
+                        },
+                        roles={"admin", "manager", "staff"},
+                    )
+                except Exception:
+                    logger.exception("Failed to publish pax update event")
+        except Exception:
+            logger.exception("Failed to deduct pax per preparation")
 
         order.payment_method = method
-        order.status = "pending"  # start at pending
-        order.save()
+        order.save(update_fields=["payment_method"])
 
-        # Optionally, add credit points if needed
-        user = order.placed_by
-        earned_points = order.total_amount * Decimal('0.01')
-        if not hasattr(user, 'credit_points'):
-            user.credit_points = Decimal('0.0')
-        user.credit_points += earned_points
-        user.save()
+        if _is_cash_method(method):
+            _ensure_pending_cash_payment(
+                order,
+                customer_name=_get_display_name(session.user, order),
+            )
 
-        return Response({
+        session.order_id = order.id
+        session.order_number = order.order_number
+        session.status = (
+            CheckoutSession.STATUS_AWAITING_CASH
+            if _is_cash_method(method)
+            else CheckoutSession.STATUS_FINALIZED
+        )
+        session.save(update_fields=["order_id", "order_number", "status", "updated_at"])
+
+    earned_points = _maybe_award_loyalty_points(order)
+
+    return Response(
+        {
             "success": True,
             "message": "Payment confirmed",
             "status": map_order_status(order.status),
-            "earned_points": float(earned_points)
-        })
-
-    except Order.DoesNotExist:
-        return Response({"success": False, "message": "Order not found"}, status=404)
+            "order_number": order.order_number,
+            "order_id": str(order.id),
+            "earned_points": float(earned_points),
+        }
+    )
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def fetch_gcash_qr(request, order_number):
-    try:
-        order = Order.objects.get(order_number=order_number)
-        qr_url = f"https://pay.gcash.com/pay?amount={order.total_amount}&note=Order{order.order_number}"
-
-        return Response({
+    order, session = _resolve_order_or_checkout(order_number)
+    if not order and not session:
+        return Response(
+            {
+                "success": False,
+                "message": "Order not found",
+            },
+            status=404,
+        )
+    amount = order.total_amount if order else session.total_amount
+    ref = order.order_number if order else (session.order_number or str(session.id))
+    return Response(
+        {
             "success": True,
-            "qr_url": qr_url,
-            "total_amount": float(order.total_amount),
-        })
-
-    except Order.DoesNotExist:
-        return Response({
-            "success": False,
-            "message": "Order not found"
-        }, status=404)
+            "qr_url": None,
+            "order_number": ref,
+            "total_amount": float(amount),
+            "message": "Use the in-app GCash QR to pay.",
+        }
+    )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -275,16 +1184,21 @@ def list_orders(request):
             "order_number": order.order_number,
             "status": order.status,
             "total_amount": float(order.total_amount),
+            "created_at": order.created_at.isoformat() if order.created_at else None,
             "items": items,
         })
 
     return Response({"success": True, "orders": orders_data})
-from menu.models import MenuItem  # make sure this is your menu_item model
 from api.models import Offer, AppUser
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def redeem_offer(request):
     user = request.user
+    if _is_guest_user(user):
+        return Response(
+            {"success": False, "message": "Guest users cannot use credit points."},
+            status=403,
+        )
     offer_id = request.data.get('offer_id')
     points_to_use = Decimal(request.data.get('points_used', 0)).quantize(Decimal('0.01'), ROUND_DOWN)
 
@@ -296,11 +1210,11 @@ def redeem_offer(request):
         return Response({"success": False, "message": "Not enough credit points"}, status=400)
 
     # Generate order
-    order_number = str(uuid.uuid4())[:32]
+    order_number = generate_unique_order_number(prefix="O", order_model=Order)
     order = Order.objects.create(
         order_number=order_number,
         placed_by=user,
-        customer_name=user.get_full_name() or user.username,
+        customer_name=_get_display_name(user),
         order_type=request.data.get('order_type', 'pickup'),
         promised_time=request.data.get('promised_time'),
         subtotal=Decimal('0.00'),
@@ -340,16 +1254,28 @@ def redeem_offer(request):
         "remaining_points": available_points - points_to_use
     }, status=201)
 def get_available_points(user):
+    if _is_guest_user(user):
+        return Decimal("0.00")
     all_orders = Order.objects.filter(placed_by=user)
-    earned_points = sum(
-        Decimal(order.total_amount) * Decimal('0.01')
+    completed_orders = [
+        _credits_for_amount(order.total_amount)
         for order in all_orders
-    )
+        if str(getattr(order, "status", "")).strip().lower() == "completed"
+        and _is_order_fully_paid(order)
+    ]
+    earned_points = sum(completed_orders, Decimal("0.00"))
     used_points = sum(
-        Decimal(order.credit_points_used or 0)
-        for order in all_orders
+        [
+            Decimal(order.credit_points_used or 0).quantize(
+                Decimal("0.01"), rounding=ROUND_DOWN
+            )
+            for order in all_orders
+        ],
+        Decimal("0.00"),
     )
-    return max(earned_points - used_points, Decimal('0.00')).quantize(Decimal('0.01'), ROUND_DOWN)
+    return max(earned_points - used_points, Decimal("0.00")).quantize(
+        Decimal("0.01"), ROUND_DOWN
+    )
 
 
 @api_view(['POST'])
@@ -357,6 +1283,11 @@ def get_available_points(user):
 def apply_voucher(request):
     try:
         user = request.user
+        if _is_guest_user(user):
+            return Response(
+                {"success": False, "message": "Guest users cannot use credit points."},
+                status=403,
+            )
         voucher_points = int(request.data.get('points', 0))
 
         if voucher_points > user.credit_points:
@@ -367,16 +1298,18 @@ def apply_voucher(request):
         user.save()
 
         # Create a “free order” with total_amount = 0
+        order_number = generate_unique_order_number(prefix="O", order_model=Order)
+
         order = Order.objects.create(
-            order_number=str(uuid.uuid4())[:12],
-            placed_by=user,
-            total_amount=0,
-            credit_points_used=voucher_points,
-            status='Pending',
-            customer_name=user.get_full_name() or user.username,
-            promised_time=request.data.get('promised_time', None),
-            order_type=request.data.get('order_type', 'pickup')
-        )
+        order_number=order_number,
+        placed_by=user,
+        total_amount=0,
+        credit_points_used=voucher_points,
+        status='Pending',
+        customer_name=_get_display_name(user),
+        promised_time=request.data.get('promised_time', None),
+        order_type=request.data.get('order_type', 'pickup')
+    )
 
         # Optionally add order items
         for item in request.data.get('items', []):
@@ -408,6 +1341,11 @@ from django.shortcuts import get_object_or_404
 @permission_classes([IsAuthenticated])
 def redeem_offer(request):
     user = request.user
+    if _is_guest_user(user):
+        return Response(
+            {"success": False, "message": "Guest users cannot use credit points."},
+            status=403,
+        )
     offer_id = request.data.get('offer_id')
     points_to_use = Decimal(request.data.get('points_used', 0)).quantize(Decimal('0.01'), ROUND_DOWN)
 
@@ -420,7 +1358,7 @@ def redeem_offer(request):
         return Response({"success": False, "message": "Not enough credit points"}, status=400)
 
     # Create unique order number
-    order_number = str(uuid.uuid4())[:32]
+    order_number = generate_unique_order_number(prefix="O", order_model=Order)
 
     # Create the order
     order = Order.objects.create(

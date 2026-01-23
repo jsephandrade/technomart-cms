@@ -9,10 +9,12 @@ Note: First run will download ~100MB of model weights automatically.
 
 import io
 import json
+import jwt
 import numpy as np
 from typing import Optional, Tuple, List
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone as dj_timezone
 
@@ -30,6 +32,42 @@ from .utils_audit import record_audit
 # ------------------
 # DeepFace Utilities
 # ------------------
+
+def _user_from_auth_header(request):
+    auth = request.META.get("HTTP_AUTHORIZATION", "") or ""
+    if not auth.startswith("Bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip()
+    if not token:
+        return None
+
+    payload = None
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except Exception:
+        payload = None
+
+    if payload is None:
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            payload = AccessToken(token).payload
+        except Exception:
+            return None
+
+    user_id = str(payload.get("sub") or payload.get("user_id") or payload.get("id") or "")
+    email = (payload.get("email") or "").lower().strip()
+
+    try:
+        from .models import AppUser
+        if user_id:
+            user = AppUser.objects.filter(id=user_id).first()
+            if user:
+                return user
+        if email:
+            return AppUser.objects.filter(email=email).first()
+    except Exception:
+        return None
+    return None
 
 def _extract_face_and_embedding(
     image_bytes: bytes,
@@ -71,8 +109,17 @@ def _extract_face_and_embedding(
         if not faces or len(faces) == 0:
             return None, {"error": "no_face_detected", "message": "No face detected in image"}
 
-        if len(faces) > 1:
-            return None, {"error": "multiple_faces", "message": "Multiple faces detected - ensure only one person is visible"}
+        multiple_faces = len(faces) > 1
+        if multiple_faces:
+            # Choose the most prominent face to avoid hard-failing on background faces.
+            def _face_score(item):
+                area = item.get("facial_area") or {}
+                w = area.get("w") or area.get("width") or 0
+                h = area.get("h") or area.get("height") or 0
+                conf = item.get("confidence") or 0
+                return (conf, w * h)
+
+            faces = sorted(faces, key=_face_score, reverse=True)
 
         face = faces[0]
         confidence = face.get('confidence', 0)
@@ -82,11 +129,12 @@ def _extract_face_and_embedding(
             return None, {"error": "low_confidence", "message": "Face detection confidence too low - improve lighting or angle"}
 
         # Generate embedding using the specified model
+        face_img = face.get("face") if isinstance(face, dict) else None
         embeddings = DeepFace.represent(
-            img_path=img_array,
+            img_path=face_img if face_img is not None else img_array,
             model_name=model_name,
             detector_backend='opencv',
-            enforce_detection=enforce_detection,
+            enforce_detection=False if face_img is not None else enforce_detection,
             align=True
         )
 
@@ -100,7 +148,9 @@ def _extract_face_and_embedding(
             "confidence": confidence,
             "face_area": face.get('facial_area', {}),
             "model": model_name,
-            "embedding_dim": len(embedding_vec)
+            "embedding_dim": len(embedding_vec),
+            "multiple_faces": multiple_faces,
+            "faces_detected": len(faces),
         }
 
         return embedding_vec, metadata
@@ -180,10 +230,48 @@ def _find_best_match(
     return best_match, best_distance
 
 
+def _get_face_login_settings():
+    try:
+        threshold = float(getattr(settings, "FACE_LOGIN_THRESHOLD", 0.35) or 0.35)
+    except Exception:
+        threshold = 0.35
+    try:
+        required_frames = int(
+            getattr(settings, "FACE_LOGIN_REQUIRED_FRAMES", 3) or 3
+        )
+    except Exception:
+        required_frames = 3
+    try:
+        max_frames = int(getattr(settings, "FACE_LOGIN_MAX_FRAMES", 5) or 5)
+    except Exception:
+        max_frames = 5
+    required_frames = max(1, required_frames)
+    max_frames = max(required_frames, max_frames)
+    return threshold, required_frames, max_frames
+
+
+def _collect_images_from_payload(data):
+    images = []
+    primary = data.get("image") or data.get("imageData") or ""
+    if primary:
+        images.append(primary)
+    extra = data.get("images") or []
+    if isinstance(extra, list):
+        for entry in extra:
+            if isinstance(entry, dict):
+                value = entry.get("data") or entry.get("image") or ""
+            else:
+                value = entry
+            if value:
+                images.append(value)
+    return images
+
+
 # ------------------
 # API Endpoints
 # ------------------
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def face_register(request):
     """Register or update the calling user's face template using DeepFace.
@@ -194,15 +282,8 @@ def face_register(request):
 
     Stores DeepFace embedding and optional reference image.
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
-        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
-
-    import jwt
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-    except Exception:
+    user = _user_from_auth_header(request)
+    if not user:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
 
     try:
@@ -228,18 +309,31 @@ def face_register(request):
     if model_name not in ["Facenet512", "VGG-Face", "ArcFace", "Facenet", "DeepFace"]:
         model_name = "Facenet512"  # fallback to default
 
-    # Extract face and generate embedding
-    embedding_vec, metadata = _extract_face_and_embedding(raw, model_name=model_name, enforce_detection=True)
+    # Extract face and generate embedding (try strict detection first, fall back if necessary)
+    enforce_detection = (
+        bool(data.get("enforce_detection"))
+        if isinstance(data.get("enforce_detection"), bool)
+        else True
+    )
+    embedding_vec, metadata = _extract_face_and_embedding(
+        raw, model_name=model_name, enforce_detection=enforce_detection
+    )
+
+    if embedding_vec is None and enforce_detection:
+        fallback_vec, fallback_meta = _extract_face_and_embedding(
+            raw, model_name=model_name, enforce_detection=False
+        )
+        if fallback_vec is not None:
+            embedding_vec = fallback_vec
+            metadata = metadata or {}
+            metadata["fallback_detection"] = True
 
     if embedding_vec is None:
         error_msg = metadata.get("message", "Face processing failed") if metadata else "Face processing failed"
         return JsonResponse({"success": False, "message": error_msg}, status=400)
 
     try:
-        from .models import AppUser, FaceTemplate
-        user = AppUser.objects.filter(id=payload.get("sub")).first()
-        if not user:
-            return JsonResponse({"success": False, "message": "User not found"}, status=404)
+        from .models import FaceTemplate
 
         # Convert embedding to JSON string
         embedding_json = json.dumps(embedding_vec.tolist())
@@ -295,6 +389,7 @@ def face_register(request):
         return JsonResponse({"success": False, "message": f"Registration failed: {str(e)}"}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST"])
 def face_login(request):
     """Attempt login by matching submitted face image to stored DeepFace templates.
@@ -315,8 +410,10 @@ def face_login(request):
         or ""
     )
     return_tokens = not (header_mode == "cookie" or str(auth_mode).lower() == "cookie")
+    token_type = (data.get("tokenType") or data.get("token_type") or "").lower()
+    use_simplejwt = token_type in {"simplejwt", "simple", "jwt"}
 
-    image = data.get("image") or data.get("imageData") or ""
+    images = _collect_images_from_payload(data)
     remember_raw = data.get("remember")
     remember = False
     if isinstance(remember_raw, bool):
@@ -324,9 +421,7 @@ def face_login(request):
     elif isinstance(remember_raw, (int, str)):
         remember = str(remember_raw).lower() in {"1", "true", "yes", "on"}
 
-    # Extract image
-    mime, raw = _extract_dataurl_image(image)
-    if not raw:
+    if not images:
         return JsonResponse({"success": False, "message": "Missing image"}, status=400)
 
     # Optional: specify model (must match registered model for best results)
@@ -334,27 +429,51 @@ def face_login(request):
     if model_name not in ["Facenet512", "VGG-Face", "ArcFace", "Facenet", "DeepFace"]:
         model_name = "Facenet512"
 
-    # Extract face and generate embedding
-    embedding_vec, metadata = _extract_face_and_embedding(raw, model_name=model_name, enforce_detection=True)
+    threshold, required_frames, max_frames = _get_face_login_settings()
+    images = images[:max_frames]
 
-    if embedding_vec is None:
-        error_msg = metadata.get("message", "Face processing failed") if metadata else "Face processing failed"
-        try:
-            record_audit(
-                request,
-                type="login",
-                action="Login failed",
-                details=f"Face login: {error_msg}",
-                severity="warning",
+    embeddings = []
+    metadata_list = []
+    last_error = None
+    for image in images:
+        _, raw = _extract_dataurl_image(image)
+        if not raw:
+            continue
+        embedding_vec, metadata = _extract_face_and_embedding(
+            raw, model_name=model_name, enforce_detection=True
+        )
+        if embedding_vec is None:
+            # Attempt a fallback pass with relaxed detection
+            fallback_vec, fallback_meta = _extract_face_and_embedding(
+                raw, model_name=model_name, enforce_detection=False
             )
-        except Exception:
-            pass
-        return JsonResponse({"success": False, "message": error_msg}, status=400)
+            if fallback_vec is not None:
+                embedding_vec = fallback_vec
+                metadata = metadata or {}
+                metadata["fallback_detection"] = True
+            else:
+                last_error = (
+                    metadata.get("message", "Face processing failed")
+                    if metadata
+                    else "Face processing failed"
+                )
+                continue
+        embeddings.append(embedding_vec)
+        metadata_list.append(metadata or {})
 
-    # Matching threshold (cosine distance)
-    # Lower is more similar: 0 = identical, 1 = completely different
-    # Facenet512 typically uses 0.4 threshold
-    THRESHOLD = 0.4
+    if len(embeddings) < required_frames:
+        if last_error:
+            try:
+                record_audit(
+                    request,
+                    type="login",
+                    action="Login failed",
+                    details=f"Face login: {last_error}",
+                    severity="warning",
+                )
+            except Exception:
+                pass
+        return JsonResponse({"success": False, "message": "Face not recognized"}, status=401)
 
     try:
         from .models import FaceTemplate
@@ -387,13 +506,38 @@ def face_login(request):
         if not candidates:
             return JsonResponse({"success": False, "message": "No valid face templates found"}, status=404)
 
-        # Find best match
-        best_match, distance = _find_best_match(
-            embedding_vec,
-            candidates,
-            distance_metric="cosine",
-            threshold=THRESHOLD
-        )
+        match_results = []
+        for embedding_vec in embeddings:
+            best_match, distance = _find_best_match(
+                embedding_vec,
+                candidates,
+                distance_metric="cosine",
+                threshold=threshold,
+            )
+            if not best_match:
+                try:
+                    record_audit(
+                        request,
+                        type="login",
+                        action="Login failed",
+                        details="Face login: Not recognized",
+                        severity="warning",
+                    )
+                except Exception:
+                    pass
+                return JsonResponse(
+                    {"success": False, "message": "Face not recognized"}, status=401
+                )
+            match_results.append((best_match, distance))
+
+        user_ids = {str(match.user_id) for match, _ in match_results}
+        if len(user_ids) != 1:
+            return JsonResponse(
+                {"success": False, "message": "Face not recognized"}, status=401
+            )
+
+        best_match = match_results[0][0]
+        distance = max(result[1] for result in match_results)
 
         if not best_match:
             try:
@@ -401,12 +545,14 @@ def face_login(request):
                     request,
                     type="login",
                     action="Login failed",
-                    details=f"Face login: Not recognized (best distance: {distance:.4f})",
+                    details="Face login: Not recognized",
                     severity="warning",
                 )
             except Exception:
                 pass
-            return JsonResponse({"success": False, "message": "Face not recognized"}, status=401)
+            return JsonResponse(
+                {"success": False, "message": "Face not recognized"}, status=401
+            )
 
         user = best_match.user
 
@@ -453,14 +599,6 @@ def face_login(request):
         user.last_login = dj_timezone.now()
         user.save(update_fields=["last_login"])
 
-        exp_seconds = (
-            getattr(settings, "JWT_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
-            if remember
-            else getattr(settings, "JWT_EXP_SECONDS", 3600)
-        )
-        token = _issue_jwt(user, exp_seconds=exp_seconds)
-        refresh_token = _issue_refresh_token_db(user, remember=remember, request=request)
-
         try:
             record_audit(
                 request,
@@ -483,9 +621,31 @@ def face_login(request):
             },
         }
         if return_tokens:
-            payload.update({"token": token, "refreshToken": refresh_token})
+            if use_simplejwt:
+                try:
+                    from rest_framework_simplejwt.tokens import RefreshToken
+                    refresh = RefreshToken.for_user(user)
+                    payload.update(
+                        {
+                            "access": str(refresh.access_token),
+                            "refresh": str(refresh),
+                            "tokenType": "simplejwt",
+                        }
+                    )
+                except Exception:
+                    return JsonResponse({"success": False, "message": "Login failed"}, status=500)
+            else:
+                exp_seconds = (
+                    getattr(settings, "JWT_REMEMBER_EXP_SECONDS", 30 * 24 * 60 * 60)
+                    if remember
+                    else getattr(settings, "JWT_EXP_SECONDS", 3600)
+                )
+                token = _issue_jwt(user, exp_seconds=exp_seconds)
+                refresh_token = _issue_refresh_token_db(user, remember=remember, request=request)
+                payload.update({"token": token, "refreshToken": refresh_token})
         resp = JsonResponse(payload)
-        _set_auth_cookies(resp, token, refresh_token, remember=remember, access_max_age=exp_seconds)
+        if return_tokens and not use_simplejwt:
+            _set_auth_cookies(resp, token, refresh_token, remember=remember, access_max_age=exp_seconds)
         return resp
 
     except Exception as e:
@@ -502,6 +662,7 @@ def face_login(request):
         return JsonResponse({"success": False, "message": "Login failed"}, status=500)
 
 
+@csrf_exempt
 @require_http_methods(["POST", "DELETE"])
 def face_unregister(request):
     """Remove the calling user's face template.
@@ -509,22 +670,12 @@ def face_unregister(request):
     Requires Authorization: Bearer <jwt>.
     Accepts POST or DELETE for convenience.
     """
-    auth = request.META.get("HTTP_AUTHORIZATION", "")
-    if not auth.startswith("Bearer "):
-        return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
-    token = auth.split(" ", 1)[1].strip()
-
-    import jwt
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-    except Exception:
+    user = _user_from_auth_header(request)
+    if not user:
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
 
     try:
-        from .models import AppUser, FaceTemplate
-        user = AppUser.objects.filter(id=payload.get("sub")).first()
-        if not user:
-            return JsonResponse({"success": False, "message": "User not found"}, status=404)
+        from .models import FaceTemplate
 
         tpl = FaceTemplate.objects.filter(user=user).first()
         if not tpl:

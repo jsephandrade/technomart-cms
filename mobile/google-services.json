@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "167582994512",
+    "project_id": "technomart-4df5d",
+    "storage_bucket": "technomart-4df5d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:167582994512:android:6ae7641f582fb26b99c155",
+        "android_client_info": {
+          "package_name": "com.joseph224.TechnoMart"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "167582994512-slsbb1veuc7t5o8ea0h4oiloh2c639op.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAe_hzKjTdEatO_hySxjGCOsRi8XRuVMk4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "167582994512-slsbb1veuc7t5o8ea0h4oiloh2c639op.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

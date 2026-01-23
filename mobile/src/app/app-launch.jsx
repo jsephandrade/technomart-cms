@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Image,
@@ -8,15 +8,20 @@ import {
   Easing,
   AccessibilityInfo,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  BASE_URL,
+  USER_CACHE_KEY,
+  clearStoredTokens,
+  getValidToken,
+} from '../api/api';
 
 export default function AppLaunchScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isAuthenticated, initializing } = useAuth();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Animations
   const opacity = useRef(new Animated.Value(0)).current;
@@ -35,9 +40,69 @@ export default function AppLaunchScreen() {
       duration: 500,
       useNativeDriver: true,
     }).start(() => {
-      router.replace(isAuthenticated ? '/(tabs)' : '/account-login');
+      router.replace(isAuthenticated ? '/home-dashboard' : '/account-login');
     });
   }, [fadeOut, isAuthenticated, router]);
+
+  useEffect(() => {
+    let active = true;
+    const checkAuth = async () => {
+      try {
+        const token = await getValidToken();
+        if (!token) {
+          if (active) {
+            setIsAuthenticated(false);
+          }
+          return;
+        }
+
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const storedUser = entries[0][1] || entries[1][1];
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            const email = String(parsed?.email || '').toLowerCase();
+            if (email.endsWith('@guest.local')) {
+              await clearStoredTokens();
+              if (active) {
+                setIsAuthenticated(false);
+              }
+              return;
+            }
+          } catch (err) {
+            console.warn('Failed to parse stored user:', err);
+          }
+        }
+
+        try {
+          const res = await fetch(`${BASE_URL}/accounts/profile/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.status === 401) {
+            await clearStoredTokens();
+            if (active) {
+              setIsAuthenticated(false);
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn('Profile check failed, continuing session:', err);
+        }
+
+        if (active) {
+          setIsAuthenticated(true);
+        }
+      } finally {
+        if (active) {
+          setAuthChecked(true);
+        }
+      }
+    };
+    checkAuth();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     AccessibilityInfo.announceForAccessibility?.('Techno Mart is loading');
@@ -104,12 +169,12 @@ export default function AppLaunchScreen() {
   }, [logoY, opacity, scale, spin1, spin2, spin3]);
 
   useEffect(() => {
-    if (initializing) {
+    if (!authChecked) {
       return undefined;
     }
     const timeout = setTimeout(goNext, 2500);
     return () => clearTimeout(timeout);
-  }, [goNext, initializing]);
+  }, [authChecked, goNext]);
 
   // Spins
   const rotate1 = spin1.interpolate({
@@ -127,7 +192,11 @@ export default function AppLaunchScreen() {
 
   return (
     <TouchableWithoutFeedback
-      onPress={goNext}
+      onPress={() => {
+        if (authChecked) {
+          goNext();
+        }
+      }}
       accessibilityRole="button"
       accessibilityLabel="Skip intro and continue to login"
     >
@@ -135,8 +204,8 @@ export default function AppLaunchScreen() {
         style={{
           flex: 1,
           backgroundColor: 'white',
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
+          paddingTop: 0,
+          paddingBottom: 0,
           alignItems: 'center',
           justifyContent: 'center',
           opacity: fadeOut, // fade-out applied here

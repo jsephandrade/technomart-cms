@@ -9,9 +9,9 @@
 
 export const CHART_COLORS = {
   // Primary brand colors
-  primary: 'hsl(var(--primary))',
-  primaryLight: 'hsl(var(--primary) / 0.8)',
-  primaryDark: 'hsl(var(--primary) / 1.2)',
+  primary: 'hsl(var(--chart-primary))',
+  primaryLight: 'hsl(var(--chart-primary) / 0.8)',
+  primaryDark: 'hsl(var(--chart-primary))',
 
   // Secondary colors for multi-series charts
   secondary: 'hsl(var(--secondary))',
@@ -21,7 +21,7 @@ export const CHART_COLORS = {
   success: '#10b981', // Green
   warning: '#f59e0b', // Orange
   danger: 'hsl(var(--destructive))', // Red
-  info: '#3b82f6', // Blue
+  info: 'hsl(var(--chart-primary))', // Chart info blue
 
   // Neutral colors
   muted: 'hsl(var(--muted-foreground))',
@@ -52,7 +52,11 @@ export const CHART_GRADIENTS = {
     definition: (
       <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
         <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.8} />
-        <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0.05} />
+        <stop
+          offset="95%"
+          stopColor={CHART_COLORS.primary}
+          stopOpacity={0.05}
+        />
       </linearGradient>
     ),
   }),
@@ -74,7 +78,11 @@ export const CHART_GRADIENTS = {
     definition: (
       <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
         <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.8} />
-        <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0.05} />
+        <stop
+          offset="95%"
+          stopColor={CHART_COLORS.success}
+          stopOpacity={0.05}
+        />
       </linearGradient>
     ),
   }),
@@ -233,14 +241,16 @@ export const formatHours = (value) => {
 /**
  * Professional tooltip for currency data
  */
-export const CustomCurrencyTooltip = ({ active, payload, label, labelFormatter }) => {
+export const CustomCurrencyTooltip = ({
+  active,
+  payload,
+  label,
+  labelFormatter,
+}) => {
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div
-      style={CHART_STYLES.tooltip.contentStyle}
-      className="custom-tooltip"
-    >
+    <div style={CHART_STYLES.tooltip.contentStyle} className="custom-tooltip">
       <p style={CHART_STYLES.tooltip.labelStyle}>
         {labelFormatter ? labelFormatter(label) : label}
       </p>
@@ -263,14 +273,17 @@ export const CustomCurrencyTooltip = ({ active, payload, label, labelFormatter }
 /**
  * Professional tooltip for numeric data
  */
-export const CustomNumericTooltip = ({ active, payload, label, labelFormatter, valueFormatter }) => {
+export const CustomNumericTooltip = ({
+  active,
+  payload,
+  label,
+  labelFormatter,
+  valueFormatter,
+}) => {
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div
-      style={CHART_STYLES.tooltip.contentStyle}
-      className="custom-tooltip"
-    >
+    <div style={CHART_STYLES.tooltip.contentStyle} className="custom-tooltip">
       <p style={CHART_STYLES.tooltip.labelStyle}>
         {labelFormatter ? labelFormatter(label) : label}
       </p>
@@ -284,7 +297,9 @@ export const CustomNumericTooltip = ({ active, payload, label, labelFormatter, v
         >
           <span className="font-medium">{entry.name}:</span>{' '}
           <span className="font-semibold">
-            {valueFormatter ? valueFormatter(entry.value) : formatNumber(entry.value)}
+            {valueFormatter
+              ? valueFormatter(entry.value)
+              : formatNumber(entry.value)}
           </span>
         </p>
       ))}
@@ -303,10 +318,7 @@ export const CustomPercentTooltip = ({ active, payload }) => {
   const percentage = ((data.value / total) * 100).toFixed(1);
 
   return (
-    <div
-      style={CHART_STYLES.tooltip.contentStyle}
-      className="custom-tooltip"
-    >
+    <div style={CHART_STYLES.tooltip.contentStyle} className="custom-tooltip">
       <p style={CHART_STYLES.tooltip.labelStyle}>{data.name}</p>
       <p style={CHART_STYLES.tooltip.itemStyle}>
         <span className="font-medium">Count:</span>{' '}
@@ -431,10 +443,12 @@ export const REFERENCE_LINES = {
  * Generate chart data for export
  */
 export const prepareChartDataForExport = (data, columns) => {
-  return data.map(row => {
+  return data.map((row) => {
     const exportRow = {};
-    columns.forEach(col => {
-      exportRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key];
+    columns.forEach((col) => {
+      exportRow[col.label] = col.format
+        ? col.format(row[col.key])
+        : row[col.key];
     });
     return exportRow;
   });

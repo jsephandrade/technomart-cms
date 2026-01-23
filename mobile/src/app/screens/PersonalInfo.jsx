@@ -13,12 +13,7 @@ import {
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
 
 import { useAuth } from '../../context/AuthContext';
 import { useUpdateProfile, useUploadAvatar } from '../../api/hooks';
@@ -39,6 +34,22 @@ const splitName = (fullName) => {
     last: parts.slice(1).join(' '),
   };
 };
+
+const getInitials = (value) => {
+  const safe = String(value || '').trim();
+  if (!safe) return 'NA';
+  const parts = safe.split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'NA';
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  const first = parts[0][0] || '';
+  const last = parts[parts.length - 1][0] || '';
+  return `${first}${last}`.toUpperCase();
+};
+
+const resolveImagePickerMediaTypes = () =>
+  ImagePicker?.MediaType?.Images || ImagePicker?.MediaTypeOptions?.Images;
 
 const FieldCard = ({ title, subtitle, icon, children }) => (
   <View style={styles.card}>
@@ -125,7 +136,6 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function PersonalInfoScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { user, refreshProfile, setUser } = useAuth();
   const { mutateAsync: submitProfile, isPending: isSaving } =
     useUpdateProfile();
@@ -142,32 +152,7 @@ export default function PersonalInfoScreen() {
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
 
-  const [faceSupported, setFaceSupported] = useState(false);
-  const [biometricEnrolled, setBiometricEnrolled] = useState(false);
-
   const isGuest = Boolean(user?.is_guest);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      const types =
-        await LocalAuthentication.supportedAuthenticationTypesAsync();
-      if (mounted) {
-        setFaceSupported(
-          compatible &&
-            types.includes(
-              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
-            )
-        );
-        setBiometricEnrolled(enrolled);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -230,6 +215,11 @@ export default function PersonalInfoScreen() {
     return '';
   }, [firstName, lastName, user?.name]);
 
+  const initials = useMemo(
+    () => getInitials(displayName || user?.email || ''),
+    [displayName, user?.email]
+  );
+
   const roleLabel = useMemo(() => {
     if (!user?.role) return null;
     return user.role
@@ -291,8 +281,9 @@ export default function PersonalInfoScreen() {
       );
       return;
     }
+    const mediaTypes = resolveImagePickerMediaTypes();
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      ...(mediaTypes ? { mediaTypes } : {}),
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
@@ -408,29 +399,11 @@ export default function PersonalInfoScreen() {
     setConfirmPwd('');
   }, [oldPwd, newPwd, confirmPwd]);
 
-  const handleFaceRecognition = useCallback(async () => {
-    if (!faceSupported || !biometricEnrolled) {
-      Alert.alert(
-        'Not available',
-        'Face recognition is not supported on this device.'
-      );
-      return;
-    }
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Verify with Face ID',
-    });
-    if (result.success) {
-      Alert.alert('Verified', 'Identity confirmed!');
-    } else {
-      Alert.alert('Failed', 'Face recognition failed. Try again.');
-    }
-  }, [faceSupported, biometricEnrolled]);
-
   const saveDisabled = !hasChanges || isSaving || profileLoading || isGuest;
   const heroSubtitle = user?.email?.trim() || '';
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="chevron-left" size={28} color="#F07F13" />
@@ -453,7 +426,7 @@ export default function PersonalInfoScreen() {
               <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
             ) : (
               <View style={styles.avatarFallback}>
-                <Feather name="camera" size={24} color="#F07F13" />
+                <Text style={styles.avatarInitials}>{initials}</Text>
               </View>
             )}
             <View style={styles.avatarBadge}>
@@ -585,33 +558,6 @@ export default function PersonalInfoScreen() {
           </TouchableOpacity>
         </FieldCard>
 
-        {faceSupported ? (
-          <FieldCard
-            title="Face Recognition"
-            subtitle="Use Face ID for a faster and safer log in."
-            icon={<Feather name="smile" size={18} color="#F07F13" />}
-          >
-            <Text style={styles.helperText}>
-              {biometricEnrolled
-                ? 'You are enrolled for biometric login. Test it below.'
-                : 'Enroll your face on this device to enable biometric login.'}
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.btnPrimary,
-                styles.btnSecondary,
-                !biometricEnrolled && styles.btnDisabled,
-              ]}
-              onPress={handleFaceRecognition}
-              disabled={!biometricEnrolled}
-            >
-              <Text style={styles.btnText}>
-                {biometricEnrolled ? 'Test Face ID' : 'No Face Enrolled'}
-              </Text>
-            </TouchableOpacity>
-          </FieldCard>
-        ) : null}
-
         <TouchableOpacity
           style={[styles.saveButton, saveDisabled && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -625,7 +571,7 @@ export default function PersonalInfoScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -680,6 +626,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(240,127,19,0.4)',
+  },
+  avatarInitials: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#9a3412',
   },
   avatarBadge: {
     position: 'absolute',

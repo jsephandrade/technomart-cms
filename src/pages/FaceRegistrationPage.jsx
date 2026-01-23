@@ -3,15 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import {
-  UserPlus,
-  XCircle,
-  CheckCircle,
-  Camera,
-  Shield,
-  Sparkles,
-  Zap,
-} from 'lucide-react';
+import { UserPlus, XCircle, CheckCircle, Camera } from 'lucide-react';
 import PageTransition from '@/components/PageTransition';
 import AuthCard from '@/components/auth/AuthCard';
 import AuthPageShell, {
@@ -328,54 +320,7 @@ const FaceRegistrationPage = () => {
       contentClassName="space-y-1 sm:space-y-3 text-center sm:text-left"
       titleClassName="text-[20px] sm:text-4xl"
       descriptionClassName="text-[9px] sm:text-sm"
-    >
-      <div className="mt-6 sm:mt-8 space-y-4">
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="mt-1">
-            <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-base sm:text-lg mb-1">
-              Advanced Security
-            </h3>
-            <p className="text-gray-600 text-xs sm:text-sm">
-              Powered by Facenet512 deep learning model with facial embeddings.
-              Your actual photos are never stored.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="mt-1">
-            <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-base sm:text-lg mb-1">
-              Quick Setup
-            </h3>
-            <p className="text-gray-600 text-xs sm:text-sm">
-              Registration takes less than 10 seconds. One photo is all we need
-              for accurate recognition.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="mt-1">
-            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-base sm:text-lg mb-1">
-              Seamless Login
-            </h3>
-            <p className="text-gray-600 text-xs sm:text-sm">
-              Skip passwords entirely. Just look at your camera and you're in -
-              works even with different lighting and angles.
-            </p>
-          </div>
-        </div>
-      </div>
-    </AuthBrandIntro>
+    ></AuthBrandIntro>
   );
 
   return (

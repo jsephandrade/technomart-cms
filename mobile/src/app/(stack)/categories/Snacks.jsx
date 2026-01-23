@@ -1,5 +1,5 @@
 // ComboMeals.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -20,13 +20,16 @@ import {
 } from '@expo-google-fonts/roboto';
 import { useCart } from '../../../context/CartContext';
 import { fetchMenuItems } from '../../../api/api';
+import { resolveImageSource } from '../../../utils/image';
+import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
+import { subscribeMenuRefresh } from '../../../utils/menuRefresh';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 40) / 2;
 
 export default function ComboMeals() {
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
+  const { cart, addToCart, decreaseQuantity, removeFromCart } = useCart();
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,52 +38,90 @@ export default function ComboMeals() {
     Roboto_700Bold,
   });
 
-  useEffect(() => {
-    loadComboMeals();
-  }, []);
-
-  const loadComboMeals = async () => {
+  const loadComboMeals = useCallback(async ({ silent = false } = {}) => {
     try {
+      if (!silent) setLoading(true);
       const items = await fetchMenuItems();
       const filtered = items.filter(
         (item) =>
-          item.category &&
-          item.category.toLowerCase().includes('snacks')
+          item.category && item.category.toLowerCase().includes('snacks')
       );
       setMenuItems(filtered);
     } catch (error) {
-      console.error('Error fetching snacks:', error);
+      console.error('Error fetching Snacks:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadComboMeals();
+  }, [loadComboMeals]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadComboMeals({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadComboMeals]);
 
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#e67e22" />
-        <Text style={{ marginTop: 8, color: '#e67e22', fontFamily: 'Roboto_700Bold' }}>
-          Loading Combo snacks...
+        <Text
+          style={{
+            marginTop: 8,
+            color: '#e67e22',
+            fontFamily: 'Roboto_700Bold',
+          }}
+        >
+          Loading Combo Snacks...
         </Text>
       </View>
     );
   }
 
+  const handleDecrease = (itemId, qty) => {
+    if (qty <= 1) {
+      removeFromCart(itemId);
+      return;
+    }
+    decreaseQuantity(itemId);
+  };
+
   const renderItem = ({ item }) => {
     const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
+    const paxRemaining = getPaxRemaining(item);
+    const isAvailable = isPaxAvailable(item);
 
     return (
-      <View style={styles.card}>
-        {item.image && (
-          <Image source={{ uri: item.image }} style={styles.image} />
-        )}
+      <View style={[styles.card, !isAvailable && styles.cardDisabled]}>
+        <Image source={resolveImageSource(item.image)} style={styles.image} />
         <Text style={styles.name}>{item.name}</Text>
+        {paxRemaining !== null && (
+          <View
+            style={[
+              styles.paxBadge,
+              paxRemaining === 0 && styles.paxBadgeEmpty,
+            ]}
+          >
+            <Text
+              style={[
+                styles.paxBadgeText,
+                paxRemaining === 0 && styles.paxBadgeTextEmpty,
+              ]}
+            >
+              {paxRemaining} pax
+            </Text>
+          </View>
+        )}
         <Text style={styles.price}>₱{item.price}</Text>
 
         <View style={styles.controls}>
           <TouchableOpacity
             style={styles.controlBtn}
-            onPress={() => decreaseQuantity(item.id)}
+            onPress={() => handleDecrease(item.id, qty)}
           >
             <Ionicons name="remove" size={18} color="#fff" />
           </TouchableOpacity>
@@ -88,12 +129,19 @@ export default function ComboMeals() {
           <Text style={styles.qty}>{qty}</Text>
 
           <TouchableOpacity
-            style={styles.controlBtn}
+            style={[
+              styles.controlBtn,
+              !isAvailable && styles.controlBtnDisabled,
+            ]}
             onPress={() => addToCart(item)}
+            disabled={!isAvailable}
           >
             <Ionicons name="add" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
+        {!isAvailable && (
+          <Text style={styles.unavailableText}>Unavailable</Text>
+        )}
       </View>
     );
   };
@@ -105,7 +153,7 @@ export default function ComboMeals() {
   };
 
   const handleAddMoreItems = () => {
-    router.push('/(tabs)');
+    router.push('/home-dashboard');
   };
 
   return (
@@ -122,7 +170,7 @@ export default function ComboMeals() {
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={26} color="black" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>snacks</Text>
+            <Text style={styles.headerTitle}>Snacks</Text>
             <Ionicons name="fast-food-outline" size={26} color="black" />
           </View>
         </View>
@@ -144,7 +192,7 @@ export default function ComboMeals() {
       ) : (
         <View style={styles.centered}>
           <Text style={{ fontFamily: 'Roboto_700Bold', color: '#555' }}>
-            No Combo Meals found.
+            No Snacks found.
           </Text>
         </View>
       )}
@@ -152,7 +200,10 @@ export default function ComboMeals() {
       {/* Floating Cart */}
       {total > 0 && (
         <View style={styles.floatingContainer}>
-          <TouchableOpacity style={styles.floatingCart} onPress={handleCheckout}>
+          <TouchableOpacity
+            style={styles.floatingCart}
+            onPress={handleCheckout}
+          >
             <Ionicons name="cart-outline" size={22} color="#fff" />
             <Text style={styles.cartText}>₱{total} • Checkout</Text>
           </TouchableOpacity>
@@ -210,6 +261,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#f97316',
   },
+  cardDisabled: {
+    opacity: 0.55,
+    borderColor: '#E5E7EB',
+  },
   image: { width: '100%', height: 100, borderRadius: 8, marginBottom: 8 },
   name: {
     fontSize: 16,
@@ -218,8 +273,26 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
+  paxBadge: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
+  paxBadgeEmpty: {
+    backgroundColor: '#FEE2E2',
+  },
+  paxBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Roboto_700Bold',
+    color: '#075985',
+  },
+  paxBadgeTextEmpty: {
+    color: '#B91C1C',
+  },
   price: {
-    fontSize: 14,
+    fontSize: 18,
     fontFamily: 'Roboto_400Regular',
     color: '#777',
     marginBottom: 8,
@@ -236,12 +309,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 6,
   },
+  controlBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
   qty: {
     fontSize: 16,
     fontFamily: 'Roboto_700Bold',
     color: '#333',
     minWidth: 20,
     textAlign: 'center',
+  },
+  unavailableText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: 'Roboto_700Bold',
+    color: '#B91C1C',
   },
   floatingContainer: {
     position: 'absolute',

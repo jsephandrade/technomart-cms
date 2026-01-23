@@ -55,7 +55,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DJANGO_SECRET_KEY: test-ci-secret
+      DJANGO_SECRET_KEY: test-ci-secret-please-change-1234567890-abcdefghijklmnopqrstuvwxyz
+      DJANGO_DEBUG: 0
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       DJANGO_DB_ENGINE: mysql
       DJANGO_DB_NAME: technomart

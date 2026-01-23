@@ -942,13 +942,13 @@ export const EventDetailsModal = ({
                     </div>
 
                     {/* Information Alert */}
-                    <div className="flex gap-2 rounded-lg bg-blue-50 border border-blue-200 p-2.5">
-                      <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 text-xs text-blue-900">
+                    <div className="flex gap-2 rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                      <AlertCircle className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 text-xs text-primary">
                         <p className="font-medium mb-0.5">
                           Payment Confirmation
                         </p>
-                        <p className="text-blue-700">
+                        <p className="text-primary/80">
                           {paymentMethod === 'cash'
                             ? 'Please prepare the exact amount. A receipt will be provided upon payment.'
                             : 'You will be redirected to complete the payment securely.'}
@@ -960,7 +960,8 @@ export const EventDetailsModal = ({
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
                       {remainingDue <= 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          Payment is complete. Add menu items to reopen payment.
+                          Payment is complete. Update the package to reopen
+                          payment.
                         </p>
                       ) : null}
                       <Button

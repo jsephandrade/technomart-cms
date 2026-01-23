@@ -2,11 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/AuthContext';
 import { useEmployees, useSchedule } from '@/hooks/useEmployees';
+import { useCalendarExceptions } from '@/hooks/useCalendarExceptions';
+import { employeeService } from '@/api/services/employeeService';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import ManageEmployeesDialog from '@/components/employee-schedule/ManageEmployeesDialog';
 import AddScheduleDialog from '@/components/employee-schedule/AddScheduleDialog';
 import EditScheduleDialog from '@/components/employee-schedule/EditScheduleDialog';
+import TeamCompositionCard from '@/components/employee-schedule/TeamCompositionCard';
 import AttendanceAdmin from '@/components/AttendanceAdmin';
 import LeaveManagement from '@/components/LeaveManagement';
 import AttendanceTimeCard from '@/components/employee-schedule/AttendanceTimeCard';
@@ -14,19 +17,32 @@ import AddEmployeeTab from '@/components/employee-schedule/AddEmployeeTab';
 import ScheduleTab from '@/components/employee-schedule/ScheduleTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import {
   Archive,
   CalendarDays,
   ClipboardList,
   Plane,
   RotateCcw,
+  ShieldOff,
   ShieldPlus,
   Trash2,
+  Users,
 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -51,6 +67,34 @@ const DAYS_OF_WEEK = [
   'Saturday',
 ];
 
+const getManilaDayName = () => {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      weekday: 'long',
+    }).format(new Date());
+  } catch {
+    return DAYS_OF_WEEK[new Date().getDay()];
+  }
+};
+
+const getManilaDateString = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+};
+
 const DEFAULT_SCHEDULE_ENTRY = {
   employeeId: '',
   employeeName: '',
@@ -63,31 +107,101 @@ const DEFAULT_EMPLOYEE_FORM = {
   id: '',
   name: '',
   position: '',
-  hourlyRate: 0,
+  hireDate: '',
   contact: '',
   status: 'active',
 };
 
+const buildEmptyRoleTargets = (days = []) => {
+  const targets = {};
+  (days || []).forEach((day) => {
+    if (!day) return;
+    targets[day] = [];
+  });
+  return targets;
+};
+
+const normalizeRole = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase();
+
+const normalizeTargetsByDay = (targetsByDay = {}, days = []) => {
+  const base = buildEmptyRoleTargets(days);
+  const source =
+    targetsByDay && typeof targetsByDay === 'object' ? targetsByDay : {};
+  Object.keys(base).forEach((day) => {
+    const entries = Array.isArray(source[day]) ? source[day] : [];
+    base[day] = entries
+      .map((entry) => ({
+        id: entry?.id,
+        role: String(entry?.role || '').trim(),
+        target: Number(entry?.target || 0),
+      }))
+      .filter((entry) => entry.role);
+  });
+  return base;
+};
+
+const normalizeExceptionEntry = (entry) => {
+  if (!entry) return null;
+  const requestedAt = entry.requestedAt || entry.requested_at;
+  const parsed =
+    typeof requestedAt === 'number'
+      ? requestedAt
+      : Date.parse(requestedAt || '');
+  return {
+    id: entry.id,
+    day: entry.day,
+    role: entry.role,
+    message: entry.message || '',
+    requestedBy: entry.requestedBy || entry.requested_by || '',
+    requestedAt: Number.isFinite(parsed) ? parsed : Date.now(),
+  };
+};
+
+const extractTargetsByDay = (payload, days) => {
+  if (payload?.targetsByDay && typeof payload.targetsByDay === 'object') {
+    return payload.targetsByDay;
+  }
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : [];
+  if (!items.length) return {};
+  const base = buildEmptyRoleTargets(days);
+  items.forEach((entry) => {
+    const day = entry?.day;
+    if (!day || !base[day]) return;
+    base[day].push({
+      id: entry?.id,
+      role: entry?.role,
+      target: entry?.target,
+    });
+  });
+  return base;
+};
+
 const EmployeeSchedule = () => {
   const { hasAnyRole, user } = useAuth();
-  const canManage = hasAnyRole(['manager', 'admin']);
+  const canManage = hasAnyRole(['manager']);
   const isAdmin = hasAnyRole(['admin']);
   const isStaffOnly = hasAnyRole(['staff']) && !canManage;
+  const canViewAttendanceDialog = hasAnyRole(['staff', 'manager']);
   const allowAttendanceWithoutShift = isStaffOnly;
-  const showCombinedAttendanceLeave = canManage && !isAdmin;
-  const attendanceTabValue = showCombinedAttendanceLeave
-    ? 'attendance-leave'
-    : 'attendance';
-  const attendanceTabLabel = showCombinedAttendanceLeave
-    ? 'Attendance & Leave'
-    : 'Attendance Records';
-  const leaveTabLabel = isAdmin ? 'Leave Management' : 'Leave Records';
+  const ATTENDANCE_TAB_VALUE = 'attendance-records';
+  const LEAVE_TAB_VALUE = 'leave-management';
+  const attendanceTabLabel = 'Attendance Records';
+  const leaveTabLabel = 'Leave Management';
+  const tabsGridCols = 'grid-cols-5';
   const staffLeaveTabValue = 'leave-request';
-  const tabsGridCols = showCombinedAttendanceLeave
-    ? 'grid-cols-3'
-    : 'grid-cols-4';
   const location = useLocation();
   const navigate = useNavigate();
+  const isPendingAccount =
+    String(user?.status || '')
+      .trim()
+      .toLowerCase() === 'pending';
 
   const {
     employees = [],
@@ -97,6 +211,23 @@ const EmployeeSchedule = () => {
     loading: employeesLoading,
     refetch: refetchEmployees,
   } = useEmployees();
+
+  const {
+    schedule = [],
+    addScheduleEntry,
+    updateScheduleEntry,
+    deleteScheduleEntry,
+    clearScheduleEntries,
+    loading: scheduleLoading,
+    refetch: refetchSchedule,
+  } = useSchedule({}, { autoFetch: true });
+
+  const {
+    exceptions: calendarExceptions,
+    loading: calendarExceptionsLoading,
+    createException: createCalendarException,
+    deleteException: deleteCalendarException,
+  } = useCalendarExceptions({}, { autoFetch: true });
 
   const resolvedEmployeeId = useMemo(() => {
     if (!user) return null;
@@ -127,6 +258,91 @@ const EmployeeSchedule = () => {
     return { ...user, employeeId: resolvedEmployeeId };
   }, [resolvedEmployeeId, user]);
 
+  const normalizedManilaDay = String(getManilaDayName() || '')
+    .trim()
+    .toLowerCase();
+  const manilaDateKey = getManilaDateString();
+  const attendanceEmployeeId = useMemo(() => {
+    if (!attendanceUser) return '';
+    return String(attendanceUser.employeeId || attendanceUser.id || '').trim();
+  }, [attendanceUser]);
+  const todayScheduleEntries = useMemo(() => {
+    if (!schedule?.length) return [];
+    return schedule.filter((entry) => {
+      if (!entry) return false;
+      const entryDay = String(entry.day || '')
+        .trim()
+        .toLowerCase();
+      return Boolean(entryDay && entryDay === normalizedManilaDay);
+    });
+  }, [schedule, normalizedManilaDay]);
+
+  const attendanceScheduleEntry = useMemo(() => {
+    if (!attendanceUser || !schedule?.length) return null;
+    const targetId = attendanceEmployeeId;
+    if (!targetId) return null;
+    return schedule.find((entry) => {
+      if (!entry) return false;
+      const entryDay = String(entry.day || '')
+        .trim()
+        .toLowerCase();
+      if (!entryDay || entryDay !== normalizedManilaDay) return false;
+      const entryEmployeeId = String(
+        entry.employeeId ||
+          entry.employee?.id ||
+          entry.employee?.employeeId ||
+          ''
+      ).trim();
+      return entryEmployeeId === targetId;
+    });
+  }, [attendanceEmployeeId, attendanceUser, schedule, normalizedManilaDay]);
+
+  const resolvedAttendanceScheduleEntry = useMemo(() => {
+    if (attendanceScheduleEntry) return attendanceScheduleEntry;
+    if (isStaffOnly && todayScheduleEntries.length > 0) {
+      return [...todayScheduleEntries].sort((a, b) =>
+        String(a?.startTime || '').localeCompare(String(b?.startTime || ''))
+      )[0];
+    }
+    return null;
+  }, [attendanceScheduleEntry, isStaffOnly, todayScheduleEntries]);
+  const todayCalendarException = useMemo(() => {
+    if (!calendarExceptions?.length || !manilaDateKey) return null;
+    return (
+      calendarExceptions.find(
+        (exception) => String(exception?.date || '') === manilaDateKey
+      ) || null
+    );
+  }, [calendarExceptions, manilaDateKey]);
+  const isNoWorkDay = useMemo(() => {
+    if (!todayCalendarException) return false;
+    const kind = String(
+      todayCalendarException.kind || todayCalendarException.type || ''
+    )
+      .trim()
+      .toLowerCase();
+    if (kind === 'no_work') return true;
+    if (kind === 'holiday' && !todayCalendarException.isWorkdayOverride) {
+      return true;
+    }
+    return false;
+  }, [todayCalendarException]);
+  const hasAssignedShift = useMemo(() => {
+    if (!schedule?.length) return false;
+    if (isStaffOnly && schedule.length > 0) return true;
+    if (!attendanceEmployeeId) return false;
+    return schedule.some((entry) => {
+      if (!entry) return false;
+      const entryEmployeeId = String(
+        entry.employeeId ||
+          entry.employee?.id ||
+          entry.employee?.employeeId ||
+          ''
+      ).trim();
+      return entryEmployeeId === attendanceEmployeeId;
+    });
+  }, [attendanceEmployeeId, isStaffOnly, schedule]);
+
   const displayEmployees = useMemo(
     () =>
       employees.filter(
@@ -140,14 +356,67 @@ const EmployeeSchedule = () => {
       .sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
   }, [employees]);
 
-  const {
-    schedule = [],
-    addScheduleEntry,
-    updateScheduleEntry,
-    deleteScheduleEntry,
-    loading: scheduleLoading,
-    refetch: refetchSchedule,
-  } = useSchedule({}, { autoFetch: true });
+  const [roleTargetsByDay, setRoleTargetsByDay] = useState(() =>
+    buildEmptyRoleTargets(DAYS_OF_WEEK)
+  );
+  const [roleTargetsLoading, setRoleTargetsLoading] = useState(false);
+  const [roleExceptions, setRoleExceptions] = useState([]);
+
+  const roleOptions = useMemo(() => {
+    const unique = new Set();
+    displayEmployees.forEach((employee) => {
+      const role = String(employee?.position || '').trim();
+      if (role) unique.add(role);
+    });
+    Object.values(roleTargetsByDay || {}).forEach((entries) => {
+      (entries || []).forEach((entry) => {
+        const role = String(entry?.role || '').trim();
+        if (role) unique.add(role);
+      });
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [displayEmployees, roleTargetsByDay]);
+
+  const employeeRoleMap = useMemo(() => {
+    const map = new Map();
+    displayEmployees.forEach((employee) => {
+      if (!employee?.id) return;
+      const roleLabel = String(employee?.position || '').trim() || 'Unassigned';
+      const roleKey = normalizeRole(roleLabel) || 'unassigned';
+      map.set(String(employee.id), { roleKey, roleLabel });
+    });
+    return map;
+  }, [displayEmployees]);
+
+  const roleLabelMap = useMemo(() => {
+    const map = {};
+    displayEmployees.forEach((employee) => {
+      const label = String(employee?.position || '').trim();
+      if (!label) return;
+      map[normalizeRole(label)] = label;
+    });
+    Object.values(roleTargetsByDay || {}).forEach((entries) => {
+      (entries || []).forEach((entry) => {
+        const label = String(entry?.role || '').trim();
+        if (!label) return;
+        map[normalizeRole(label)] = label;
+      });
+    });
+    return map;
+  }, [displayEmployees, roleTargetsByDay]);
+
+  const roleCountsByDay = useMemo(() => {
+    const counts = {};
+    (schedule || []).forEach((entry) => {
+      const day = entry?.day;
+      if (!day) return;
+      const roleInfo = employeeRoleMap.get(String(entry.employeeId));
+      const roleKey = roleInfo?.roleKey || 'unassigned';
+      if (!counts[day]) counts[day] = {};
+      counts[day][roleKey] = (counts[day][roleKey] || 0) + 1;
+    });
+    return counts;
+  }, [schedule, employeeRoleMap]);
 
   const [dialogOpen, setDialogOpenState] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -161,11 +430,18 @@ const EmployeeSchedule = () => {
   const [quickAdd, setQuickAdd] = useState({
     name: '',
     position: '',
+    hireDate: '',
+    userId: '',
+    contact: '',
     repeatDays: ['Monday'],
     startTime: '08:00',
     endTime: '16:00',
   });
   const [activeTab, setActiveTab] = useState('schedule');
+  const [roleExceptionDialog, setRoleExceptionDialog] = useState(null);
+  const [roleExceptionReason, setRoleExceptionReason] = useState('');
+  const [autoBuildDialogOpen, setAutoBuildDialogOpen] = useState(false);
+  const [autoBuildBusy, setAutoBuildBusy] = useState(false);
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState(null);
@@ -177,12 +453,191 @@ const EmployeeSchedule = () => {
   const [deletingEmployee, setDeletingEmployee] = useState(false);
   const attendanceAutoOpenDismissed = useRef(false);
 
+  const resolveRoleInfo = (employeeId) => {
+    if (!employeeId) {
+      return { roleKey: 'unassigned', roleLabel: 'Unassigned' };
+    }
+    const info = employeeRoleMap.get(String(employeeId));
+    if (info) return info;
+    return { roleKey: 'unassigned', roleLabel: 'Unassigned' };
+  };
+
+  const getRoleTarget = (day, roleKey) => {
+    if (!day || !roleKey) return 0;
+    const targets = Array.isArray(roleTargetsByDay?.[day])
+      ? roleTargetsByDay[day]
+      : [];
+    const match = targets.find(
+      (entry) => normalizeRole(entry?.role) === roleKey
+    );
+    return Number(match?.target || 0);
+  };
+
+  const getRoleCapacity = (employeeId, day, excludeScheduleId = null) => {
+    const roleInfo = resolveRoleInfo(employeeId);
+    const roleKey = roleInfo.roleKey || 'unassigned';
+    const target = getRoleTarget(day, roleKey);
+    let currentCount = roleCountsByDay?.[day]?.[roleKey] || 0;
+
+    if (excludeScheduleId) {
+      const existing = (schedule || []).find(
+        (entry) => String(entry?.id) === String(excludeScheduleId)
+      );
+      if (existing && existing.day === day) {
+        const existingRole = resolveRoleInfo(existing.employeeId);
+        if (existingRole.roleKey === roleKey) {
+          currentCount = Math.max(0, currentCount - 1);
+        }
+      }
+    }
+
+    const status =
+      target <= 0 ? 'missing' : currentCount >= target ? 'full' : 'available';
+
+    return {
+      day,
+      roleKey,
+      roleLabel: roleInfo.roleLabel || roleKey,
+      target,
+      currentCount,
+      status,
+    };
+  };
+
+  const getRoleCapacityForRole = (day, roleKey) => {
+    const target = getRoleTarget(day, roleKey);
+    const currentCount = roleCountsByDay?.[day]?.[roleKey] || 0;
+    const status =
+      target <= 0 ? 'missing' : currentCount >= target ? 'full' : 'available';
+    return {
+      day,
+      roleKey,
+      roleLabel: roleLabelMap?.[roleKey] || roleKey || 'Unassigned',
+      target,
+      currentCount,
+      status,
+    };
+  };
+
+  const handleUpdateRoleTargets = async (day, targets) => {
+    if (!canManage || !day) return;
+    setRoleTargetsLoading(true);
+    try {
+      const res = await employeeService.updateRoleTargets({
+        day,
+        targets: Array.isArray(targets) ? targets : [],
+      });
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to update role targets');
+      }
+      const payload = res?.data || res || {};
+      const normalized = normalizeTargetsByDay(
+        extractTargetsByDay(payload, DAYS_OF_WEEK),
+        DAYS_OF_WEEK
+      );
+      setRoleTargetsByDay(normalized);
+      toast.success('Team composition updated');
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to update team composition targets');
+    } finally {
+      setRoleTargetsLoading(false);
+    }
+  };
+
+  const handleAddRoleException = async (payload) => {
+    if (!canManage) return;
+    try {
+      const res = await employeeService.createRoleException({
+        day: payload?.day || '',
+        role: payload?.roleLabel || 'Role',
+        message: payload?.message || '',
+        requestedBy: payload?.requestedBy || '',
+      });
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to create exception');
+      }
+      const entry = normalizeExceptionEntry(res?.data || res);
+      if (entry) {
+        setRoleExceptions((prev) => [entry, ...(prev || [])]);
+      }
+      toast.success('Exception request submitted');
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to submit exception request');
+    }
+  };
+
+  const handleClearRoleException = async (id) => {
+    if (!canManage || !id) return;
+    try {
+      const res = await employeeService.deleteRoleException(id);
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to clear exception');
+      }
+      setRoleExceptions((prev) =>
+        (prev || []).filter((item) => String(item.id) !== String(id))
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to clear exception request');
+    }
+  };
+
+  const handleClearAllRoleExceptions = async () => {
+    if (!canManage) return;
+    try {
+      const res = await employeeService.clearRoleExceptions();
+      if (res?.success === false) {
+        throw new Error(res?.message || 'Failed to clear exceptions');
+      }
+      setRoleExceptions([]);
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to clear exception requests');
+    }
+  };
+
+  const openRoleExceptionDialog = (payload) => {
+    setRoleExceptionDialog(payload || null);
+    setRoleExceptionReason('');
+  };
+
+  const closeRoleExceptionDialog = () => {
+    setRoleExceptionDialog(null);
+    setRoleExceptionReason('');
+  };
+
+  const submitRoleException = async () => {
+    if (!roleExceptionDialog) return;
+    const reason = roleExceptionReason.trim();
+    const baseMessage = roleExceptionDialog.message || '';
+    const message = reason ? `${baseMessage} Reason: ${reason}` : baseMessage;
+    await handleAddRoleException({
+      day: roleExceptionDialog.day,
+      roleLabel: roleExceptionDialog.roleLabel,
+      message,
+      requestedBy: user?.name || user?.email || 'Manager',
+    });
+    closeRoleExceptionDialog();
+  };
+
   const handleQuickAdd = async () => {
     if (!canManage) return;
     if (!quickAdd.name.trim()) {
-      toast.error('Name is required');
+      toast.error('Staff member is required');
       return;
     }
+    if (!quickAdd.userId) {
+      toast.error('Select a staff member to link');
+      return;
+    }
+    if (roleTargetsLoading) {
+      toast.info('Loading team composition targets. Please try again.');
+      return;
+    }
+    const roleLabel = String(quickAdd.position || '').trim();
+    const roleKey = normalizeRole(roleLabel) || 'unassigned';
     const repeatDays =
       Array.isArray(quickAdd.repeatDays) && quickAdd.repeatDays.length
         ? Array.from(new Set(quickAdd.repeatDays))
@@ -191,7 +646,49 @@ const EmployeeSchedule = () => {
       toast.error('Select at least one day');
       return;
     }
-    const scheduleEntries = repeatDays.map((day) => ({
+
+    if (!roleLabel) {
+      toast.error('Role is required to schedule under team composition rules');
+      return;
+    }
+
+    const availableRepeatDays = repeatDays.filter((day) => {
+      const status = getRoleCapacityForRole(day, roleKey)?.status || 'missing';
+      return status !== 'full';
+    });
+    if (availableRepeatDays.length === 0) {
+      toast.error(
+        'The selected role has reached its capacity for the days you picked.'
+      );
+      return;
+    }
+
+    const capacityIssues = availableRepeatDays
+      .map((day) => getRoleCapacityForRole(day, roleKey))
+      .filter((issue) => issue.status !== 'available');
+    if (capacityIssues.length) {
+      const missingDays = capacityIssues
+        .filter((issue) => issue.status === 'missing')
+        .map((issue) => issue.day);
+      const fullDays = capacityIssues
+        .filter((issue) => issue.status === 'full')
+        .map(
+          (issue) =>
+            `${issue.day} (${issue.currentCount}/${issue.target} ${roleLabel})`
+        );
+      const parts = [];
+      if (missingDays.length) {
+        parts.push(
+          `No target set for ${roleLabel} on ${missingDays.join(', ')}`
+        );
+      }
+      if (fullDays.length) {
+        parts.push(`Role capacity reached on ${fullDays.join(', ')}`);
+      }
+      toast.error(`${parts.join('. ')}. Update team composition to proceed.`);
+      return;
+    }
+    const scheduleEntries = availableRepeatDays.map((day) => ({
       day,
       startTime: quickAdd.startTime,
       endTime: quickAdd.endTime,
@@ -199,6 +696,9 @@ const EmployeeSchedule = () => {
     const payload = {
       name: quickAdd.name,
       position: quickAdd.position,
+      hireDate: quickAdd.hireDate,
+      userId: quickAdd.userId,
+      contact: quickAdd.contact,
       schedule: scheduleEntries,
     };
     try {
@@ -207,6 +707,9 @@ const EmployeeSchedule = () => {
       setQuickAdd({
         name: '',
         position: '',
+        hireDate: '',
+        userId: '',
+        contact: '',
         repeatDays: ['Monday'],
         startTime: '08:00',
         endTime: '16:00',
@@ -217,33 +720,139 @@ const EmployeeSchedule = () => {
     }
   };
 
-  const hasShiftToday = useMemo(() => {
-    // Check if user has a linked Employee record
-    const userEmployeeId = resolvedEmployeeId || user?.employeeId || user?.id;
-    if (!userEmployeeId || !Array.isArray(schedule) || schedule.length === 0) {
-      return false;
+  const handleAutoBuildRoster = async () => {
+    if (!canManage || autoBuildBusy) return;
+
+    if (!autoBuildPlan.entries.length) {
+      toast.info('No new shifts needed for the current targets.');
+      setAutoBuildDialogOpen(false);
+      return;
     }
 
-    const todayIndex = new Date().getDay();
-    const todayName = DAYS_OF_WEEK[todayIndex] || '';
-    if (!todayName) return false;
-    const normalize = (value) =>
-      typeof value === 'string' ? value.trim().toLowerCase() : '';
-    const todayKey = normalize(todayName);
+    setAutoBuildBusy(true);
+    try {
+      await Promise.all(
+        autoBuildPlan.entries.map((entry) =>
+          addScheduleEntry(entry, { suppressToast: true })
+        )
+      );
+      toast.success(
+        `Added ${autoBuildPlan.entries.length} shift${
+          autoBuildPlan.entries.length === 1 ? '' : 's'
+        } from team composition targets.`
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to auto-build the roster.');
+    } finally {
+      setAutoBuildBusy(false);
+      setAutoBuildDialogOpen(false);
+    }
+  };
 
-    return schedule.some((entry) => {
-      if (!entry) return false;
-      const entryEmployeeId =
-        entry.employeeId ??
-        entry.employee?.id ??
-        entry.employee?.employeeId ??
-        null;
-      if (entryEmployeeId == null) return false;
-      // Compare with user's employeeId (preferred) or fall back to user.id for backwards compat
-      if (String(entryEmployeeId) !== String(userEmployeeId)) return false;
-      return normalize(entry.day) === todayKey;
+  const hasShiftToday = useMemo(
+    () => Boolean(resolvedAttendanceScheduleEntry),
+    [resolvedAttendanceScheduleEntry]
+  );
+
+  const autoBuildPlan = useMemo(() => {
+    const plan = { entries: [], shortfalls: [] };
+    if (!canManage) return plan;
+
+    const activeDays = DAYS_OF_WEEK.filter(
+      (day) => String(day || '').toLowerCase() !== 'sunday'
+    );
+
+    const scheduledByDay = new Map();
+    (schedule || []).forEach((entry) => {
+      const day = entry?.day;
+      if (!day || !entry?.employeeId) return;
+      const key = String(entry.employeeId);
+      if (!scheduledByDay.has(day)) {
+        scheduledByDay.set(day, new Set());
+      }
+      scheduledByDay.get(day).add(key);
     });
-  }, [schedule, resolvedEmployeeId, user?.employeeId, user?.id]);
+
+    const employeesByRole = new Map();
+    displayEmployees.forEach((employee) => {
+      if (!employee?.id) return;
+      const roleKey = normalizeRole(employee.position) || 'unassigned';
+      if (!employeesByRole.has(roleKey)) {
+        employeesByRole.set(roleKey, []);
+      }
+      employeesByRole.get(roleKey).push(employee);
+    });
+
+    employeesByRole.forEach((list) =>
+      list.sort((a, b) => (a?.name || '').localeCompare(b?.name || ''))
+    );
+
+    activeDays.forEach((day) => {
+      const targets = Array.isArray(roleTargetsByDay?.[day])
+        ? roleTargetsByDay[day]
+        : [];
+      targets.forEach((entry) => {
+        const roleKey = normalizeRole(entry?.role);
+        const target = Number(entry?.target || 0);
+        if (!roleKey || target <= 0) return;
+        const currentCount = roleCountsByDay?.[day]?.[roleKey] || 0;
+        const needed = target - currentCount;
+        if (needed <= 0) return;
+
+        const available = employeesByRole.get(roleKey) || [];
+        const daySet = scheduledByDay.get(day) || new Set();
+        let added = 0;
+
+        for (const employee of available) {
+          if (added >= needed) break;
+          const key = String(employee.id);
+          if (daySet.has(key)) continue;
+          daySet.add(key);
+          scheduledByDay.set(day, daySet);
+          plan.entries.push({
+            employeeId: employee.id,
+            employeeName: employee.name || '',
+            day,
+            startTime: DEFAULT_SCHEDULE_ENTRY.startTime,
+            endTime: DEFAULT_SCHEDULE_ENTRY.endTime,
+          });
+          added += 1;
+        }
+
+        if (added < needed) {
+          plan.shortfalls.push({
+            day,
+            role: entry.role || roleLabelMap?.[roleKey] || roleKey,
+            missing: needed - added,
+          });
+        }
+      });
+    });
+
+    return plan;
+  }, [
+    canManage,
+    displayEmployees,
+    roleCountsByDay,
+    roleLabelMap,
+    roleTargetsByDay,
+    schedule,
+  ]);
+
+  const newScheduleCapacity = useMemo(() => {
+    if (!newScheduleEntry.employeeId || !newScheduleEntry.day) return null;
+    return getRoleCapacity(newScheduleEntry.employeeId, newScheduleEntry.day);
+  }, [getRoleCapacity, newScheduleEntry]);
+
+  const editScheduleCapacity = useMemo(() => {
+    if (!editingSchedule?.employeeId || !editingSchedule?.day) return null;
+    return getRoleCapacity(
+      editingSchedule.employeeId,
+      editingSchedule.day,
+      editingSchedule.id
+    );
+  }, [editingSchedule, getRoleCapacity]);
 
   const handleScheduleDialogOpenChange = (open) => {
     if (!open) {
@@ -290,7 +899,72 @@ const EmployeeSchedule = () => {
   ]);
 
   useEffect(() => {
-    if (!isStaffOnly) return;
+    if (!canManage) return;
+    let active = true;
+
+    const loadTargets = async () => {
+      setRoleTargetsLoading(true);
+      try {
+        const res = await employeeService.getRoleTargets();
+        if (!active) return;
+        if (res?.success === false) {
+          throw new Error(res?.message || 'Failed to load role targets');
+        }
+        const payload = res?.data || res || {};
+        const normalized = normalizeTargetsByDay(
+          extractTargetsByDay(payload, DAYS_OF_WEEK),
+          DAYS_OF_WEEK
+        );
+        setRoleTargetsByDay(normalized);
+      } catch (error) {
+        if (!active) return;
+        console.error(error);
+        toast.error('Unable to load team composition targets');
+      } finally {
+        if (active) setRoleTargetsLoading(false);
+      }
+    };
+
+    loadTargets();
+    return () => {
+      active = false;
+    };
+  }, [canManage]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    let active = true;
+
+    const loadExceptions = async () => {
+      try {
+        const res = await employeeService.getRoleExceptions();
+        if (!active) return;
+        if (res?.success === false) {
+          throw new Error(res?.message || 'Failed to load exceptions');
+        }
+        const items = res?.data || res || [];
+        const list = Array.isArray(items) ? items : items.items || [];
+        const normalized = list
+          .map((entry) => normalizeExceptionEntry(entry))
+          .filter(Boolean);
+        setRoleExceptions(normalized);
+      } catch (error) {
+        if (!active) return;
+        console.error(error);
+        toast.error('Unable to load exception requests');
+      } finally {
+        // no-op
+      }
+    };
+
+    loadExceptions();
+    return () => {
+      active = false;
+    };
+  }, [canManage]);
+
+  useEffect(() => {
+    if (!canViewAttendanceDialog) return;
 
     const searchParams = new URLSearchParams(location.search || '');
     const attendanceParam = (
@@ -329,7 +1003,7 @@ const EmployeeSchedule = () => {
 
     if (scheduleLoading) return;
 
-    if (!hasShiftToday && !allowAttendanceWithoutShift) {
+    if (!resolvedAttendanceScheduleEntry) {
       clearAttendanceIndicators();
       return;
     }
@@ -342,10 +1016,11 @@ const EmployeeSchedule = () => {
   }, [
     attendanceDialogOpen,
     allowAttendanceWithoutShift,
+    canViewAttendanceDialog,
     hasShiftToday,
-    isStaffOnly,
     location,
     scheduleLoading,
+    resolvedAttendanceScheduleEntry,
     navigate,
   ]);
 
@@ -372,7 +1047,7 @@ const EmployeeSchedule = () => {
       );
     };
 
-    if (!hasShiftToday && !allowAttendanceWithoutShift) {
+    if (!resolvedAttendanceScheduleEntry) {
       clearPopupState();
       return;
     }
@@ -390,6 +1065,7 @@ const EmployeeSchedule = () => {
     location.search,
     location.state,
     scheduleLoading,
+    resolvedAttendanceScheduleEntry,
     navigate,
   ]);
 
@@ -401,7 +1077,7 @@ const EmployeeSchedule = () => {
   };
 
   useEffect(() => {
-    if (!isStaffOnly) return;
+    if (!canViewAttendanceDialog) return;
 
     const normalizedPath = (location.pathname || '').replace(/\/+$/, '') || '/';
     const matchesEmployeesRoute =
@@ -413,7 +1089,7 @@ const EmployeeSchedule = () => {
     }
 
     if (scheduleLoading) return;
-    if (!hasShiftToday && !allowAttendanceWithoutShift) return;
+    if (!resolvedAttendanceScheduleEntry) return;
     if (attendanceDialogOpen || attendanceAutoOpenDismissed.current) return;
 
     attendanceAutoOpenDismissed.current = true;
@@ -421,11 +1097,18 @@ const EmployeeSchedule = () => {
   }, [
     attendanceDialogOpen,
     allowAttendanceWithoutShift,
+    canViewAttendanceDialog,
     hasShiftToday,
-    isStaffOnly,
     location.pathname,
     scheduleLoading,
+    resolvedAttendanceScheduleEntry,
   ]);
+
+  useEffect(() => {
+    if (!resolvedAttendanceScheduleEntry && attendanceDialogOpen) {
+      setAttendanceDialogOpen(false);
+    }
+  }, [attendanceDialogOpen, resolvedAttendanceScheduleEntry]);
 
   const lookupEmployeeName = (employeeId) =>
     displayEmployees.find((e) => e?.id === employeeId)?.name || 'Unknown';
@@ -439,7 +1122,7 @@ const EmployeeSchedule = () => {
 
   const handleUpdateEmployee = async (updates) => {
     if (!canManage) return;
-    const { id, name, position, hourlyRate, contact, status } = updates || {};
+    const { id, name, position, hireDate, contact, status } = updates || {};
 
     if (!id) {
       toast.error('Select an employee to update');
@@ -452,14 +1135,10 @@ const EmployeeSchedule = () => {
     }
 
     try {
-      const sanitizedRate = Number.isFinite(Number(hourlyRate))
-        ? Number(hourlyRate)
-        : 0;
-
       await updateEmployee(id, {
         name: name.trim(),
         position: position.trim(),
-        hourlyRate: sanitizedRate,
+        hireDate: hireDate || '',
         contact: contact?.trim() || '',
         status: status ? String(status).toLowerCase() : 'active',
       });
@@ -481,6 +1160,11 @@ const EmployeeSchedule = () => {
       return;
     }
 
+    if (roleTargetsLoading) {
+      toast.info('Loading team composition targets. Please try again.');
+      return;
+    }
+
     const start = toMinutes(startTime);
     const end = toMinutes(endTime);
 
@@ -495,6 +1179,27 @@ const EmployeeSchedule = () => {
       )
     ) {
       toast.error('Schedule already exists for this day');
+      return;
+    }
+
+    const capacity = getRoleCapacity(employeeId, day);
+    if (capacity.status !== 'available') {
+      const employeeName = lookupEmployeeName(employeeId);
+      const message =
+        capacity.status === 'missing'
+          ? `${employeeName} needs a ${capacity.roleLabel} target set for ${day}.`
+          : `${employeeName} exceeds the ${capacity.roleLabel} target (${capacity.currentCount}/${capacity.target}) on ${day}.`;
+      toast.warning(
+        'Role capacity reached. Update targets or request an exception.'
+      );
+      openRoleExceptionDialog({
+        day,
+        roleLabel: capacity.roleLabel,
+        currentCount: capacity.currentCount,
+        target: capacity.target,
+        employeeName,
+        message,
+      });
       return;
     }
 
@@ -520,6 +1225,36 @@ const EmployeeSchedule = () => {
       return;
     }
 
+    if (roleTargetsLoading) {
+      toast.info('Loading team composition targets. Please try again.');
+      return;
+    }
+
+    const capacity = getRoleCapacity(
+      editingSchedule.employeeId,
+      editingSchedule.day,
+      editingSchedule.id
+    );
+    if (capacity.status !== 'available') {
+      const employeeName = lookupEmployeeName(editingSchedule.employeeId);
+      const message =
+        capacity.status === 'missing'
+          ? `${employeeName} needs a ${capacity.roleLabel} target set for ${editingSchedule.day}.`
+          : `${employeeName} exceeds the ${capacity.roleLabel} target (${capacity.currentCount}/${capacity.target}) on ${editingSchedule.day}.`;
+      toast.warning(
+        'Role capacity reached. Update targets or request an exception.'
+      );
+      openRoleExceptionDialog({
+        day: editingSchedule.day,
+        roleLabel: capacity.roleLabel,
+        currentCount: capacity.currentCount,
+        target: capacity.target,
+        employeeName,
+        message,
+      });
+      return;
+    }
+
     try {
       await updateScheduleEntry(editingSchedule?.id, editingSchedule);
       setEditingSchedule(null);
@@ -529,22 +1264,92 @@ const EmployeeSchedule = () => {
     }
   };
 
-  const handleDeleteSchedule = async (id) => {
+  const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState(null);
+  const [scheduleDeleteDialogOpen, setScheduleDeleteDialogOpen] =
+    useState(false);
+  const [editDayDialogOpen, setEditDayDialogOpen] = useState(false);
+  const [editDay, setEditDay] = useState('Monday');
+  const [editDayStartTime, setEditDayStartTime] = useState('08:00');
+  const [editDayEndTime, setEditDayEndTime] = useState('16:00');
+  const [editDayBusy, setEditDayBusy] = useState(false);
+  const [scheduleClearDialogOpen, setScheduleClearDialogOpen] = useState(false);
+
+  const handleDeleteSchedule = (entryOrId) => {
     if (!canManage) return;
+    setScheduleDeleteTarget(entryOrId);
+    setScheduleDeleteDialogOpen(true);
+  };
 
-    const confirmDelete =
-      typeof window !== 'undefined'
-        ? window.confirm('Delete this schedule entry?')
-        : true;
-
-    if (!confirmDelete) return;
-
+  const performDeleteSchedule = async () => {
+    if (!canManage || !scheduleDeleteTarget) return;
     try {
-      await deleteScheduleEntry(id);
-      toast.success('Deleted schedule');
+      await deleteScheduleEntry(scheduleDeleteTarget);
+    } catch {
+      // Errors shown by hook.
+    } finally {
+      setScheduleDeleteDialogOpen(false);
+      setScheduleDeleteTarget(null);
+    }
+  };
+
+  const handleOpenEditDaySchedule = () => {
+    if (!canManage) return;
+    setEditDayDialogOpen(true);
+  };
+
+  const performEditDaySchedule = async () => {
+    if (!canManage) return;
+    const startMinutes = toMinutes(editDayStartTime);
+    const endMinutes = toMinutes(editDayEndTime);
+    if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+      toast.error('Invalid time values');
+      return;
+    }
+    if (endMinutes <= startMinutes) {
+      toast.error('End time must be after start time');
+      return;
+    }
+    const entries = (schedule || []).filter(
+      (entry) => String(entry?.day) === String(editDay)
+    );
+    if (!entries.length) {
+      toast.info('No shifts found for the selected day');
+      setEditDayDialogOpen(false);
+      return;
+    }
+
+    setEditDayBusy(true);
+    try {
+      await Promise.all(
+        entries.map((entry) =>
+          updateScheduleEntry(entry.id, {
+            startTime: editDayStartTime,
+            endTime: editDayEndTime,
+          })
+        )
+      );
+      toast.success(`Updated ${entries.length} shift(s) on ${editDay}`);
+      setEditDayDialogOpen(false);
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete schedule');
+      toast.error('Failed to update shifts');
+    } finally {
+      setEditDayBusy(false);
+    }
+  };
+
+  const handleClearAllSchedules = () => {
+    if (!canManage) return;
+    setScheduleClearDialogOpen(true);
+  };
+
+  const performClearAllSchedules = async () => {
+    try {
+      await clearScheduleEntries();
+    } catch {
+      // toast from hook
+    } finally {
+      setScheduleClearDialogOpen(false);
     }
   };
 
@@ -554,7 +1359,7 @@ const EmployeeSchedule = () => {
       id: employee.id,
       name: employee.name || '',
       position: employee.position || '',
-      hourlyRate: employee.hourlyRate ?? 0,
+      hireDate: employee.hireDate || '',
       contact: employee.contact || '',
       status: employee.status || 'active',
     });
@@ -633,7 +1438,7 @@ const EmployeeSchedule = () => {
         id: firstEmployee.id,
         name: firstEmployee.name || '',
         position: firstEmployee.position || '',
-        hourlyRate: firstEmployee.hourlyRate ?? 0,
+        hireDate: firstEmployee.hireDate || '',
         contact: firstEmployee.contact || '',
         status: firstEmployee.status || 'active',
       });
@@ -658,34 +1463,109 @@ const EmployeeSchedule = () => {
       onArchiveEmployee={handleArchiveEmployeeRequest}
       onOpenManageEmployees={handleOpenManageEmployees}
       onOpenArchivedEmployees={handleOpenArchivedEmployees}
+      getRoleCapacityForRole={getRoleCapacityForRole}
     />
   );
+
+  const teamCompositionPane = canManage ? (
+    <div className="space-y-6">
+      <TeamCompositionCard
+        daysOfWeek={DAYS_OF_WEEK}
+        targetsByDay={roleTargetsByDay}
+        countsByDay={roleCountsByDay}
+        roleLabelMap={roleLabelMap}
+        roleOptions={roleOptions}
+        canManage={canManage}
+        onUpdateTargets={handleUpdateRoleTargets}
+        onAutoBuildRoster={() => setAutoBuildDialogOpen(true)}
+        autoBuildBusy={autoBuildBusy || roleTargetsLoading}
+        exceptionRequests={roleExceptions}
+        onClearException={handleClearRoleException}
+        onClearAllExceptions={handleClearAllRoleExceptions}
+      />
+    </div>
+  ) : null;
 
   const schedulePane = (
-    <ScheduleTab
-      daysOfWeek={DAYS_OF_WEEK}
-      displayEmployees={displayEmployees}
-      employeeDirectory={employees}
-      schedule={schedule}
-      canManage={canManage}
-      setEditingSchedule={setEditingSchedule}
-      handleDeleteSchedule={handleDeleteSchedule}
-      lookupEmployeeName={lookupEmployeeName}
-      setNewScheduleEntry={setNewScheduleEntry}
-      handleScheduleDialogOpenChange={handleScheduleDialogOpenChange}
-      defaultScheduleEntry={DEFAULT_SCHEDULE_ENTRY}
-      onOpenManageEmployees={handleOpenManageEmployees}
-      onOpenAddSchedule={() => {
-        if (!canManage) return;
-        setNewScheduleEntry({ ...DEFAULT_SCHEDULE_ENTRY });
-        handleScheduleDialogOpenChange(true);
-      }}
-    />
+    <div className="space-y-6">
+      {attendanceUser && isNoWorkDay ? (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-amber-700 shadow-sm">
+          <p className="font-semibold text-amber-700">
+            {todayCalendarException?.kind === 'holiday'
+              ? 'Holiday notice'
+              : 'No work day notice'}
+          </p>
+          <p className="text-amber-700/80">
+            {todayCalendarException?.name
+              ? `${todayCalendarException.name}.`
+              : 'Today is marked as a no work day.'}{' '}
+            Daily Time Record controls are disabled.
+          </p>
+        </div>
+      ) : null}
+      {attendanceUser &&
+      !scheduleLoading &&
+      !hasAssignedShift &&
+      !isNoWorkDay ? (
+        <div className="rounded-2xl border border-destructive/60 bg-destructive/5 p-4 text-sm text-destructive shadow-sm">
+          <p className="font-semibold text-destructive">
+            No assigned shift detected
+          </p>
+          <p className="text-destructive/80">
+            Managers must assign you to a team composition or schedule entry
+            before Daily Time Record controls become available. Please check
+            with your manager for updates.
+          </p>
+        </div>
+      ) : null}
+      <ScheduleTab
+        daysOfWeek={DAYS_OF_WEEK}
+        displayEmployees={displayEmployees}
+        employeeDirectory={employees}
+        schedule={schedule}
+        canManage={canManage}
+        calendarExceptions={calendarExceptions}
+        calendarExceptionsLoading={calendarExceptionsLoading}
+        onCreateCalendarException={createCalendarException}
+        onDeleteCalendarException={deleteCalendarException}
+        setEditingSchedule={setEditingSchedule}
+        handleDeleteSchedule={handleDeleteSchedule}
+        lookupEmployeeName={lookupEmployeeName}
+        setNewScheduleEntry={setNewScheduleEntry}
+        handleScheduleDialogOpenChange={handleScheduleDialogOpenChange}
+        defaultScheduleEntry={DEFAULT_SCHEDULE_ENTRY}
+        onOpenManageEmployees={handleOpenManageEmployees}
+        onOpenAddSchedule={() => {
+          if (!canManage) return;
+          setNewScheduleEntry({ ...DEFAULT_SCHEDULE_ENTRY });
+          handleScheduleDialogOpenChange(true);
+        }}
+        onClearAllSchedules={handleClearAllSchedules}
+        onEditDaySchedule={handleOpenEditDaySchedule}
+      />
+    </div>
   );
 
-  const leaveRequestPanel =
-    attendanceUser && !isAdmin ? <LeaveManagement /> : null;
+  const leaveManagementPanel = attendanceUser ? <LeaveManagement /> : null;
 
+  if (isPendingAccount) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 rounded-2xl border border-border/70 bg-card/80 p-6 text-center shadow-sm">
+        <ShieldOff className="h-10 w-10 text-destructive" />
+        <div className="space-y-1">
+          <p className="text-lg font-semibold">Approval pending</p>
+          <p className="text-sm text-muted-foreground">
+            Your account is still awaiting admin approval, so Employee
+            Management is temporarily unavailable. Please check back once
+            approved or reach out to your administrator.
+          </p>
+        </div>
+        <Button onClick={() => navigate('/still-pending')} variant="outline">
+          View pending status
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       {canManage ? (
@@ -698,14 +1578,20 @@ const EmployeeSchedule = () => {
             className={`w-full grid ${tabsGridCols} gap-2 bg-muted/40 p-1 rounded-lg`}
           >
             <TabsTrigger
+              value="team-composition"
+              aria-label="Team Composition"
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
+            >
+              <Users className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden lg:inline">Team Composition</span>
+            </TabsTrigger>
+            <TabsTrigger
               value="add"
               aria-label="Add Employee and Schedule"
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ShieldPlus className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden lg:inline">
-                Add Employee and Schedule
-              </span>
+              <span className="hidden lg:inline">Add Employee & Sched</span>
             </TabsTrigger>
             <TabsTrigger
               value="schedule"
@@ -716,47 +1602,37 @@ const EmployeeSchedule = () => {
               <span className="hidden lg:inline">Weekly Schedule</span>
             </TabsTrigger>
             <TabsTrigger
-              value={attendanceTabValue}
+              value={ATTENDANCE_TAB_VALUE}
               aria-label={attendanceTabLabel}
               className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
             >
               <ClipboardList className="h-4 w-4" aria-hidden="true" />
               <span className="hidden lg:inline">{attendanceTabLabel}</span>
             </TabsTrigger>
-            {isAdmin ? (
-              <TabsTrigger
-                value="leave"
-                aria-label={leaveTabLabel}
-                className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
-              >
-                <Plane className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden lg:inline">{leaveTabLabel}</span>
-              </TabsTrigger>
-            ) : null}
+            <TabsTrigger
+              value={LEAVE_TAB_VALUE}
+              aria-label={leaveTabLabel}
+              className="flex min-w-0 items-center justify-center gap-2 px-0 py-2 rounded-md"
+            >
+              <Plane className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden lg:inline">{leaveTabLabel}</span>
+            </TabsTrigger>
           </TabsList>
+          <TabsContent value="team-composition" className="space-y-6">
+            {activeTab === 'team-composition' ? teamCompositionPane : null}
+          </TabsContent>
           <TabsContent value="add" className="space-y-6">
             {activeTab === 'add' ? addEmployeeContent : null}
           </TabsContent>
           <TabsContent value="schedule" className="space-y-6">
             {activeTab === 'schedule' ? schedulePane : null}
           </TabsContent>
-          <TabsContent value={attendanceTabValue} className="space-y-6">
-            {activeTab === attendanceTabValue ? (
-              showCombinedAttendanceLeave ? (
-                <div className="space-y-6">
-                  <AttendanceAdmin />
-                  {leaveRequestPanel}
-                </div>
-              ) : (
-                <AttendanceAdmin />
-              )
-            ) : null}
+          <TabsContent value={ATTENDANCE_TAB_VALUE} className="space-y-6">
+            {activeTab === ATTENDANCE_TAB_VALUE ? <AttendanceAdmin /> : null}
           </TabsContent>
-          {isAdmin ? (
-            <TabsContent value="leave" className="space-y-6">
-              {activeTab === 'leave' ? <LeaveManagement /> : null}
-            </TabsContent>
-          ) : null}
+          <TabsContent value={LEAVE_TAB_VALUE} className="space-y-6">
+            {activeTab === LEAVE_TAB_VALUE ? leaveManagementPanel : null}
+          </TabsContent>
         </Tabs>
       ) : isStaffOnly ? (
         <Tabs
@@ -786,13 +1662,13 @@ const EmployeeSchedule = () => {
             {activeTab === 'schedule' ? schedulePane : null}
           </TabsContent>
           <TabsContent value={staffLeaveTabValue} className="space-y-6">
-            {activeTab === staffLeaveTabValue ? leaveRequestPanel : null}
+            {activeTab === staffLeaveTabValue ? leaveManagementPanel : null}
           </TabsContent>
         </Tabs>
       ) : (
         <>
           {schedulePane}
-          {leaveRequestPanel}
+          {leaveManagementPanel}
         </>
       )}
 
@@ -801,6 +1677,7 @@ const EmployeeSchedule = () => {
         setEditingSchedule={setEditingSchedule}
         daysOfWeek={DAYS_OF_WEEK}
         employeeList={displayEmployees}
+        capacityStatus={editScheduleCapacity}
         onSave={handleEditSchedule}
       />
 
@@ -905,6 +1782,209 @@ const EmployeeSchedule = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={scheduleDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setScheduleDeleteDialogOpen(open);
+          if (!open) {
+            setScheduleDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Delete schedule entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removing this shift will delete it from the roster. Confirm to
+              remove the assignment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                performDeleteSchedule();
+              }}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Delete shift
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={scheduleClearDialogOpen}
+        onOpenChange={(open) => {
+          setScheduleClearDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Delete all shifts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove every schedule entry for the week. Confirm only
+              if you are sure you want to start over.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                performClearAllSchedules();
+              }}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Delete all shifts
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={editDayDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditDayDialogOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Edit daily shift time</DialogTitle>
+            <DialogDescription>
+              Set a uniform start/end time for every shift in a single day.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-day" className="text-right">
+                Day
+              </Label>
+              <Select
+                value={editDay}
+                onValueChange={(value) => setEditDay(value)}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select a day" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAYS_OF_WEEK.map((day) => (
+                    <SelectItem key={day} value={day}>
+                      {day}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-start" className="text-right">
+                Start time
+              </Label>
+              <Input
+                id="edit-start"
+                type="time"
+                value={editDayStartTime}
+                onChange={(event) => setEditDayStartTime(event.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-end" className="text-right">
+                End time
+              </Label>
+              <Input
+                id="edit-end"
+                type="time"
+                value={editDayEndTime}
+                onChange={(event) => setEditDayEndTime(event.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setEditDayDialogOpen(false)}
+              disabled={editDayBusy}
+            >
+              Cancel
+            </Button>
+            <Button onClick={performEditDaySchedule} disabled={editDayBusy}>
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={autoBuildDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setAutoBuildDialogOpen(false);
+          else setAutoBuildDialogOpen(true);
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[520px]">
+          <AlertDialogHeader className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Users className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <AlertDialogTitle>Auto-build roster?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The system will assign available teammates to meet the daily role
+              targets. Existing shifts will remain unchanged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              {autoBuildPlan.entries.length
+                ? `${autoBuildPlan.entries.length} shift${
+                    autoBuildPlan.entries.length === 1 ? '' : 's'
+                  } will be created.`
+                : 'No new shifts are needed to meet current targets.'}
+            </p>
+            {autoBuildPlan.shortfalls.length ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900">
+                <p className="font-semibold">Unfilled targets</p>
+                <ul className="mt-2 space-y-1">
+                  {autoBuildPlan.shortfalls.map((shortfall, index) => (
+                    <li key={`${shortfall.day}-${shortfall.role}-${index}`}>
+                      {shortfall.day}: {shortfall.role} missing{' '}
+                      {shortfall.missing}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+          <AlertDialogFooter className="gap-2 sm:gap-3">
+            <AlertDialogCancel disabled={autoBuildBusy}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="gap-2"
+              disabled={autoBuildBusy || autoBuildPlan.entries.length === 0}
+              onClick={(event) => {
+                event.preventDefault();
+                handleAutoBuildRoster();
+              }}
+            >
+              Auto-build roster
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog
         open={archivedDialogOpen}
         onOpenChange={(open) => {
@@ -986,10 +2066,62 @@ const EmployeeSchedule = () => {
         employeeList={displayEmployees}
         daysOfWeek={DAYS_OF_WEEK}
         onAddSchedule={handleAddSchedule}
+        capacityStatus={newScheduleCapacity}
         showTrigger={false}
       />
 
-      {attendanceUser && (
+      <Dialog
+        open={Boolean(roleExceptionDialog)}
+        onOpenChange={(open) => {
+          if (!open) closeRoleExceptionDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Request a role exception</DialogTitle>
+            <DialogDescription>
+              Daily team composition limits prevent duplicate roles. Add a note
+              to request an exception.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+              <p className="font-semibold text-foreground">
+                {roleExceptionDialog?.day} - {roleExceptionDialog?.roleLabel}
+              </p>
+              <p>
+                {roleExceptionDialog?.currentCount ?? 0} /
+                {roleExceptionDialog?.target ?? 0} currently scheduled
+              </p>
+              {roleExceptionDialog?.employeeName ? (
+                <p className="text-xs text-muted-foreground">
+                  Requested for {roleExceptionDialog.employeeName}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="role-exception-reason">
+                Exception reason (optional)
+              </Label>
+              <Textarea
+                id="role-exception-reason"
+                value={roleExceptionReason}
+                onChange={(event) => setRoleExceptionReason(event.target.value)}
+                placeholder="Explain why this role needs an exception for the day."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeRoleExceptionDialog}>
+              Cancel
+            </Button>
+            <Button onClick={submitRoleException}>Request exception</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {attendanceUser && resolvedAttendanceScheduleEntry ? (
         <Dialog
           open={attendanceDialogOpen}
           onOpenChange={handleAttendanceDialogChange}
@@ -1001,10 +2133,14 @@ const EmployeeSchedule = () => {
                 Track today's time in and time out.
               </DialogDescription>
             </DialogHeader>
-            <AttendanceTimeCard user={attendanceUser} />
+            <AttendanceTimeCard
+              user={attendanceUser}
+              dailySchedule={resolvedAttendanceScheduleEntry}
+              calendarException={todayCalendarException}
+            />
           </DialogContent>
         </Dialog>
-      )}
+      ) : null}
     </div>
   );
 };

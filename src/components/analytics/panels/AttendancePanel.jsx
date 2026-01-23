@@ -48,9 +48,6 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-const currency = (value) =>
-  `₱${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-
 const roundHours = (value) => Math.round(Number(value || 0) * 10) / 10;
 
 const formatHoursValue = (value) => `${roundHours(value).toFixed(1)}h`;
@@ -193,12 +190,10 @@ export default function AttendancePanel() {
     const rosterList = employees.map((emp) => {
       const staffHours =
         hoursByStaff.find((entry) => entry.employeeId === emp.id)?.hours ?? 0;
-
       return {
         id: emp.id,
         name: emp.name,
         position: emp.position || 'Team Member',
-        hourlyRate: emp.hourlyRate,
         status: emp.status,
         weeklyHours: roundHours(staffHours),
         isExternal: false,
@@ -211,7 +206,6 @@ export default function AttendancePanel() {
         id: entry.lookupKey,
         name: entry.name,
         position: entry.position,
-        hourlyRate: null,
         status: 'guest',
         weeklyHours: roundHours(entry.hours),
         isExternal: true,
@@ -502,14 +496,13 @@ export default function AttendancePanel() {
                     <TableHead>Staff</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead className="text-right">Weekly Hours</TableHead>
-                    <TableHead className="text-right">Hourly Rate</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {roster.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={4}
+                        colSpan={3}
                         className="text-center text-muted-foreground py-6"
                       >
                         No staff records available
@@ -541,11 +534,6 @@ export default function AttendancePanel() {
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatHoursValue(member.weeklyHours)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {member.hourlyRate
-                            ? currency(member.hourlyRate)
-                            : '—'}
                         </TableCell>
                       </TableRow>
                     ))

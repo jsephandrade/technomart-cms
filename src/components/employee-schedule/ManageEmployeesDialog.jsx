@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -9,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Users } from 'lucide-react';
+import {
+  CANTEEN_ROLE_OPTIONS,
+  mergeRoleOptions,
+  resolveRoleLabel,
+} from '@/lib/canteenRoles';
 
 const ManageEmployeesDialog = ({
   open,
@@ -31,11 +36,26 @@ const ManageEmployeesDialog = ({
 }) => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
 
+  const roleOptions = useMemo(
+    () =>
+      mergeRoleOptions(
+        CANTEEN_ROLE_OPTIONS,
+        employeeList.map((employee) => employee.position)
+      ),
+    [employeeList]
+  );
+  const [roleQuery, setRoleQuery] = useState('');
+  const filteredRoleOptions = useMemo(() => {
+    const query = (roleQuery || '').trim().toLowerCase();
+    if (!query) return roleOptions;
+    return roleOptions.filter((role) => role.toLowerCase().includes(query));
+  }, [roleOptions, roleQuery]);
+
   const normalizedEmployee = managedEmployee || {
     id: '',
     name: '',
     position: '',
-    hourlyRate: 0,
+    hireDate: '',
     contact: '',
     status: 'active',
   };
@@ -60,10 +80,7 @@ const ManageEmployeesDialog = ({
         id: firstEmployee.id,
         name: firstEmployee.name || '',
         position: firstEmployee.position || '',
-        hourlyRate:
-          typeof firstEmployee.hourlyRate === 'number'
-            ? firstEmployee.hourlyRate
-            : Number(firstEmployee.hourlyRate || 0),
+        hireDate: firstEmployee.hireDate || '',
         contact: firstEmployee.contact || '',
         status: firstEmployee.status || 'active',
       });
@@ -72,7 +89,7 @@ const ManageEmployeesDialog = ({
         id: '',
         name: '',
         position: '',
-        hourlyRate: 0,
+        hireDate: '',
         contact: '',
         status: 'active',
       });
@@ -95,10 +112,7 @@ const ManageEmployeesDialog = ({
         id: employee.id,
         name: employee.name || '',
         position: employee.position || '',
-        hourlyRate:
-          typeof employee.hourlyRate === 'number'
-            ? employee.hourlyRate
-            : Number(employee.hourlyRate || 0),
+        hireDate: employee.hireDate || '',
         contact: employee.contact || '',
         status: employee.status || 'active',
       });
@@ -107,7 +121,7 @@ const ManageEmployeesDialog = ({
         id: '',
         name: '',
         position: '',
-        hourlyRate: 0,
+        hireDate: '',
         contact: '',
         status: 'active',
       });
@@ -122,7 +136,7 @@ const ManageEmployeesDialog = ({
             id: '',
             name: '',
             position: '',
-            hourlyRate: 0,
+            hireDate: '',
             contact: '',
             status: 'active',
           }),
@@ -190,31 +204,51 @@ const ManageEmployeesDialog = ({
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="position" className="text-right">
-                Position
+                Position / Role
               </Label>
-              <Input
-                id="position"
-                value={normalizedEmployee.position}
-                onChange={(e) => handleFieldChange('position', e.target.value)}
-                className="col-span-3"
-              />
+              <Select
+                value={resolveRoleLabel(
+                  normalizedEmployee.position,
+                  roleOptions
+                )}
+                onValueChange={(value) => handleFieldChange('position', value)}
+              >
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="p-3">
+                    <Input
+                      value={roleQuery}
+                      onChange={(event) => setRoleQuery(event.target.value)}
+                      placeholder="Search roles..."
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto">
+                    {(filteredRoleOptions || []).map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {role}
+                      </SelectItem>
+                    ))}
+                    {!filteredRoleOptions.length ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        No roles match.
+                      </div>
+                    ) : null}
+                  </div>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="hourlyRate" className="text-right">
-                Hourly Rate
+              <Label htmlFor="hireDate" className="text-right">
+                Hire Date
               </Label>
               <Input
-                id="hourlyRate"
-                type="number"
-                value={
-                  normalizedEmployee.hourlyRate === null ||
-                  normalizedEmployee.hourlyRate === undefined
-                    ? ''
-                    : String(normalizedEmployee.hourlyRate)
-                }
-                onChange={(e) =>
-                  handleFieldChange('hourlyRate', e.target.value)
-                }
+                id="hireDate"
+                type="date"
+                value={normalizedEmployee.hireDate || ''}
+                onChange={(e) => handleFieldChange('hireDate', e.target.value)}
                 className="col-span-3"
               />
             </div>

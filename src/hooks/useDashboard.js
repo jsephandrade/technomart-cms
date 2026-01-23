@@ -2,12 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import dashboardService from '@/api/services/dashboardService';
 
-export const useDashboard = (timeRange = 'today') => {
+export const useDashboard = (timeRange = 'today', options = {}) => {
+  const enabled =
+    options?.enabled !== undefined ? Boolean(options.enabled) : true;
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(enabled));
   const [error, setError] = useState(null);
 
   const fetchDashboardStats = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -27,7 +34,7 @@ export const useDashboard = (timeRange = 'today') => {
     } finally {
       setLoading(false);
     }
-  }, [timeRange]);
+  }, [timeRange, enabled]);
 
   useEffect(() => {
     fetchDashboardStats();

@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
+import CalendarExceptionsCard from '@/components/employee-schedule/CalendarExceptionsCard';
 import { Badge } from '@/components/ui/badge';
-import { CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import {
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const DAY_LABELS = [
@@ -109,6 +117,11 @@ const ScheduleCalendar = ({
   defaultDate,
   onDateSelect,
   className,
+  calendarExceptions = [],
+  calendarExceptionsLoading = false,
+  canManage = false,
+  onCreateCalendarException,
+  onDeleteCalendarException,
 }) => {
   const resolvedEmployees = useMemo(() => {
     if (Array.isArray(employeeList) && employeeList.length > 0) {
@@ -147,6 +160,7 @@ const ScheduleCalendar = ({
   const [viewDate, setViewDate] = useState(() =>
     startOfMonth(selectedDate || computeFallbackDate)
   );
+  const [exceptionsOpen, setExceptionsOpen] = useState(false);
 
   useEffect(() => {
     if (controlledDate) return;
@@ -220,6 +234,16 @@ const ScheduleCalendar = ({
     () => new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }),
     []
   );
+  const manilaDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+    []
+  );
   const dayLabelFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('en-US', {
@@ -245,10 +269,36 @@ const ScheduleCalendar = ({
     : startOfMonth(new Date());
   const currentMonthLabel = monthFormatter.format(currentMonthStart);
 
+  const exceptionByDate = useMemo(() => {
+    const map = new Map();
+    (calendarExceptions || []).forEach((exception) => {
+      const key = String(exception?.date || '').trim();
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, exception);
+      }
+    });
+    return map;
+  }, [calendarExceptions]);
+
   const selectedDateLabel = useMemo(() => {
     if (!selectedDate) return null;
     return fullDateFormatter.format(selectedDate);
   }, [selectedDate, fullDateFormatter]);
+
+  const selectedDateKey = useMemo(() => {
+    if (!selectedDate) return '';
+    try {
+      return manilaDateFormatter.format(selectedDate);
+    } catch {
+      return selectedDate.toISOString().split('T')[0];
+    }
+  }, [manilaDateFormatter, selectedDate]);
+
+  const selectedDateException = useMemo(() => {
+    if (!selectedDateKey) return null;
+    return exceptionByDate.get(selectedDateKey) || null;
+  }, [exceptionByDate, selectedDateKey]);
 
   const calendarDays = useMemo(() => {
     const monthStart = currentMonthStart;
@@ -264,6 +314,13 @@ const ScheduleCalendar = ({
         selectedDate && normalized.getTime() === selectedDate.getTime();
       const isToday = normalized.getTime() === today.getTime();
       const isScheduled = scheduledDayIndices.has(normalized.getDay());
+      let dateKey = '';
+      try {
+        dateKey = manilaDateFormatter.format(normalized);
+      } catch {
+        dateKey = normalized.toISOString().split('T')[0];
+      }
+      const exception = dateKey ? exceptionByDate.get(dateKey) : null;
 
       return {
         date: normalized,
@@ -272,140 +329,204 @@ const ScheduleCalendar = ({
         isSelected,
         isToday,
         isScheduled,
+        exception,
       };
     });
-  }, [currentMonthStart, selectedDate, today, scheduledDayIndices]);
+  }, [
+    currentMonthStart,
+    exceptionByDate,
+    manilaDateFormatter,
+    selectedDate,
+    today,
+    scheduledDayIndices,
+  ]);
 
   return (
-    <FeaturePanelCard
-      badgeText="Shift Calendar"
-      badgeIcon={CalendarClock}
-      description="Monthly view of scheduled shifts. Select a day to review assignments."
-      className={cn('w-full', className ? className : 'max-w-xs')}
-      contentClassName="space-y-4"
-    >
-      <div className="rounded-lg border border-border/60 bg-background/70 p-3 shadow-sm">
-        <div className="flex items-center justify-between text-xs font-semibold">
-          <span>{currentMonthLabel}</span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={goToPreviousMonth}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background transition-colors hover:bg-muted"
-              aria-label="Previous month"
-            >
-              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={goToNextMonth}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background transition-colors hover:bg-muted"
-              aria-label="Next month"
-            >
-              <ChevronRight className="h-3 w-3" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground">
-          {SHORT_DAY_LABELS.map((label) => (
-            <div key={label} className="py-1">
-              {label}
+    <>
+      <FeaturePanelCard
+        badgeText="Shift Calendar"
+        badgeIcon={CalendarClock}
+        description="Monthly view of scheduled shifts. Select a day to review assignments."
+        className={cn('w-full', className ? className : 'max-w-xs')}
+        contentClassName="space-y-4"
+        headerActions={
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={() => setExceptionsOpen(true)}
+            className="h-9 w-9"
+            aria-label="Open calendar exceptions"
+          >
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        }
+      >
+        <div className="rounded-lg border border-border/60 bg-background/70 p-3 shadow-sm">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span>{currentMonthLabel}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={goToPreviousMonth}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background transition-colors hover:bg-muted"
+                aria-label="Previous month"
+              >
+                <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={goToNextMonth}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background transition-colors hover:bg-muted"
+                aria-label="Next month"
+              >
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+              </button>
             </div>
-          ))}
-        </div>
+          </div>
 
-        <div className="mt-1 grid grid-cols-7 gap-1 text-[11px]">
-          {calendarDays.map((day) => (
-            <button
-              key={day.key}
-              type="button"
-              onClick={() => handleSelectDate(day.date)}
-              className={cn(
-                'relative flex h-7 items-center justify-center rounded-sm border border-transparent leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                day.isCurrentMonth
-                  ? 'text-foreground'
-                  : 'text-muted-foreground/60',
-                day.isSelected
-                  ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                  : 'hover:bg-muted',
-                day.isToday && !day.isSelected
-                  ? 'border border-primary/50'
-                  : null
-              )}
-              aria-pressed={day.isSelected}
-              aria-label={dayLabelFormatter.format(day.date)}
-            >
-              {day.date.getDate()}
-              {day.isScheduled ? (
-                <span
-                  className={cn(
-                    'absolute bottom-0.5 h-1 w-1 rounded-full',
-                    day.isSelected ? 'bg-primary-foreground' : 'bg-primary'
-                  )}
-                />
-              ) : null}
-            </button>
-          ))}
-        </div>
+          <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] font-medium uppercase tracking-tight text-muted-foreground">
+            {SHORT_DAY_LABELS.map((label) => (
+              <div key={label} className="py-1">
+                {label}
+              </div>
+            ))}
+          </div>
 
-        <p className="mt-2 text-[10px] text-muted-foreground text-center">
-          Dates with a dot indicate at least one scheduled shift.
-        </p>
-      </div>
+          <div className="mt-1 grid grid-cols-7 gap-1 text-[11px]">
+            {calendarDays.map((day) => (
+              <button
+                key={day.key}
+                type="button"
+                onClick={() => handleSelectDate(day.date)}
+                className={cn(
+                  'relative flex h-7 items-center justify-center rounded-sm border border-transparent leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                  day.isCurrentMonth
+                    ? 'text-foreground'
+                    : 'text-muted-foreground/60',
+                  day.isSelected
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'hover:bg-muted',
+                  day.isToday && !day.isSelected
+                    ? 'border border-primary/50'
+                    : null
+                )}
+                aria-pressed={day.isSelected}
+                aria-label={dayLabelFormatter.format(day.date)}
+              >
+                {day.date.getDate()}
+                {day.exception ? (
+                  <span
+                    className={cn(
+                      'absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full',
+                      day.exception.kind === 'no_work'
+                        ? 'bg-amber-500'
+                        : 'bg-emerald-500'
+                    )}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                {day.isScheduled ? (
+                  <span
+                    className={cn(
+                      'absolute bottom-0.5 h-1 w-1 rounded-full',
+                      day.isSelected ? 'bg-primary-foreground' : 'bg-primary'
+                    )}
+                  />
+                ) : null}
+              </button>
+            ))}
+          </div>
 
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {selectedDayLabel ? `${selectedDayLabel} Shifts` : 'Shifts'}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {selectedDayLabel
-              ? `Showing assignments for ${selectedDayLabel}${
-                  selectedDateLabel ? ` (${selectedDateLabel})` : ''
-                }.`
-              : 'Select a day to review assignments.'}
+          <p className="mt-2 text-[10px] text-muted-foreground text-center">
+            Dots indicate scheduled shifts. Colored markers show holidays or no
+            work days.
           </p>
         </div>
 
-        {selectedDayEntries.length > 0 ? (
-          <div className="space-y-2">
-            {selectedDayEntries.map((entry) => {
-              const employee = employeeLookup.get(entry.employeeId);
-              const displayName =
-                employee?.name || entry.employeeName || 'Unassigned';
-              const displayRole =
-                employee?.position ||
-                entry?.position ||
-                entry?.employee?.position ||
-                'N/A';
-              const compositeKey =
-                entry.id ??
-                `${entry.employeeId || 'unknown'}-${entry.day}-${entry.startTime}-${entry.endTime}`;
-
-              return (
-                <div
-                  key={compositeKey}
-                  className="flex items-center justify-between rounded-md border border-border/70 bg-background/95 p-3 shadow-sm"
-                >
-                  <div>
-                    <p className="text-sm font-semibold leading-tight">
-                      {displayName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {displayRole}
-                    </p>
-                  </div>
-                  <Badge variant="secondary">
-                    {entry.startTime} - {entry.endTime}
-                  </Badge>
-                </div>
-              );
-            })}
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {selectedDayLabel ? `${selectedDayLabel} Shifts` : 'Shifts'}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {selectedDayLabel
+                ? `Showing assignments for ${selectedDayLabel}${
+                    selectedDateLabel ? ` (${selectedDateLabel})` : ''
+                  }.`
+                : 'Select a day to review assignments.'}
+            </p>
           </div>
-        ) : null}
-      </div>
-    </FeaturePanelCard>
+
+          {selectedDateException ? (
+            <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={cn(
+                    selectedDateException.kind === 'no_work'
+                      ? 'border border-amber-500/30 bg-amber-500/10 text-amber-700'
+                      : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700'
+                  )}
+                >
+                  {selectedDateException.kind === 'no_work'
+                    ? 'No work day'
+                    : 'Holiday'}
+                </Badge>
+                <span className="font-semibold text-foreground">
+                  {selectedDateException.name || 'Calendar exception'}
+                </span>
+              </div>
+              {selectedDateException.isWorkdayOverride ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Workday override is enabled for this holiday.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {selectedDayEntries.length > 0 ? (
+            <div className="space-y-2">
+              {selectedDayEntries.map((entry) => {
+                const employee = employeeLookup.get(entry.employeeId);
+                const displayName =
+                  employee?.name || entry.employeeName || 'Unassigned';
+                const compositeKey =
+                  entry.id ??
+                  `${entry.employeeId || 'unknown'}-${entry.day}-${entry.startTime}-${entry.endTime}`;
+
+                return (
+                  <div
+                    key={compositeKey}
+                    className="flex items-center justify-between rounded-md border border-border/70 bg-background/95 p-3 shadow-sm"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold leading-tight">
+                        {displayName}
+                      </p>
+                    </div>
+                    <Badge variant="secondary">
+                      {entry.startTime} - {entry.endTime}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      </FeaturePanelCard>
+
+      <Dialog open={exceptionsOpen} onOpenChange={setExceptionsOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <CalendarExceptionsCard
+            exceptions={calendarExceptions}
+            loading={calendarExceptionsLoading}
+            canManage={canManage}
+            onCreateException={onCreateCalendarException}
+            onDeleteException={onDeleteCalendarException}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

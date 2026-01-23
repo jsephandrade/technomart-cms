@@ -45,7 +45,7 @@ const LogSummaryCard = ({ summary }) => {
                 icon={LogIn}
                 label="Logins"
                 value={today.login}
-                color="text-blue-500"
+                color="text-primary"
               />
               <StatBox
                 icon={UserCog}
@@ -76,7 +76,7 @@ const LogSummaryCard = ({ summary }) => {
               icon={LogIn}
               label="Logins"
               value={week.login}
-              color="text-blue-500"
+              color="text-primary"
             />
             <StatBox
               icon={UserCog}
@@ -104,7 +104,7 @@ const LogSummaryCard = ({ summary }) => {
               icon={LogIn}
               label="Logins"
               value={month.login}
-              color="text-blue-500"
+              color="text-primary"
             />
             <StatBox
               icon={UserCog}

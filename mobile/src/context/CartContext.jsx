@@ -1,35 +1,97 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { selectMenuImage } from '../utils/image';
 
 const CartContext = createContext();
+const CART_STORAGE_KEY = 'cart';
 
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const loadCart = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setCart((prev) => (prev.length ? prev : parsed));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load cart', err);
+      } finally {
+        setHydrated(true);
+      }
+    };
+    loadCart();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart)).catch((err) =>
+      console.error('Failed to save cart', err)
+    );
+  }, [cart, hydrated]);
 
   const addToCart = (item) => {
-    const exists = cart.find((i) => i.id === item.id);
-    if (exists) {
-      setCart(
-        cart.map((i) =>
+    const basePrice = Number(item.basePrice ?? item.price ?? 0);
+    const imageCandidate = selectMenuImage(item);
+    setCart((prev) => {
+      const exists = prev.find((i) => i.id === item.id);
+      if (exists) {
+        return prev.map((i) =>
           i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
-        )
-      );
-    } else {
-      setCart([...cart, { ...item, quantity: 1 }]);
-    }
+        );
+      }
+      return [
+        ...prev,
+        {
+          ...item,
+          image: imageCandidate ?? item.image ?? null,
+          basePrice,
+          price: basePrice,
+          quantity: 1,
+        },
+      ];
+    });
   };
 
-  const removeFromCart = (id) => setCart(cart.filter((i) => i.id !== id));
+  const removeFromCart = (id) =>
+    setCart((prev) => prev.filter((i) => i.id !== id));
   const increaseQuantity = (id) =>
-    setCart(cart.map((i) => i.id === id ? { ...i, quantity: i.quantity + 1 } : i));
+    setCart((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, quantity: i.quantity + 1 } : i))
+    );
   const decreaseQuantity = (id) =>
-    setCart(cart.map((i) => i.id === id ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i));
+    setCart((prev) =>
+      prev.map((i) =>
+        i.id === id ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i
+      )
+    );
 
-  // ✅ Add clearCart
   const clearCart = () => setCart([]);
+  const updateCartItem = (id, updates) =>
+    setCart((prev) =>
+      prev.map((item) =>
+        String(item.id ?? item.menu_item_id) === String(id)
+          ? { ...item, ...updates }
+          : item
+      )
+    );
 
   return (
     <CartContext.Provider
-      value={{ cart, addToCart, removeFromCart, increaseQuantity, decreaseQuantity, clearCart }}
+      value={{
+        cart,
+        addToCart,
+        removeFromCart,
+        increaseQuantity,
+        decreaseQuantity,
+        clearCart,
+        updateCartItem,
+      }}
     >
       {children}
     </CartContext.Provider>

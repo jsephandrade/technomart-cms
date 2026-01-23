@@ -105,7 +105,6 @@ export const mockEmployees = [
     email: 'maria@example.com',
     phone: '+63-912-345-6789',
     hireDate: '2023-08-15T00:00:00Z',
-    salary: 18000,
     status: 'active',
   },
 ];
@@ -143,19 +142,6 @@ export const mockCateringOrders = [
     ],
     total: 1125,
     notes: 'Vegetarian options required for 5 guests',
-  },
-];
-
-export const mockFeedback = [
-  {
-    id: '1',
-    customerName: 'Juan Dela Cruz',
-    rating: 5,
-    comment: 'Excellent food and service!',
-    orderNumber: 'W-045',
-    category: 'food_quality',
-    status: 'new',
-    createdAt: '2024-01-29T12:30:00Z',
   },
 ];
 

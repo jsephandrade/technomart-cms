@@ -12,11 +12,16 @@ from django.views.decorators.http import require_http_methods
 from .models import (
     CateringEvent,
     CateringEventItem,
+    CateringPackage,
+    CateringPackageItem,
     MenuItem,
     PaymentTransaction,
     PaymentMethodConfig,
 )
+from .catering_packages import apply_catering_package
 from .views_common import _actor_from_request, _has_permission
+
+CUSTOMER_VIEW_ROLES = {"customer", "faculty"}
 
 
 def _parse_date(value):
@@ -153,6 +158,10 @@ def _serialize_event(event, include_items=False):
             "phone": event.contact_phone or "",
             "email": event.contact_email or event.client_email or "",
         },
+        "packageId": str(event.package_id) if event.package_id else None,
+        "packageName": event.package_name or "",
+        "packagePricePerPax": float(event.package_price_per_pax or 0),
+        "packageItems": event.package_snapshot or [],
         "createdAt": event.created_at.isoformat() if event.created_at else None,
         "updatedAt": event.updated_at.isoformat() if event.updated_at else None,
     }
@@ -175,6 +184,48 @@ def _serialize_event(event, include_items=False):
     return payload
 
 
+def _serialize_package(package, include_items=False):
+    payload = {
+        "id": str(package.id),
+        "name": package.name,
+        "description": package.description or "",
+        "pricePerPax": float(package.price_per_pax or 0),
+        "minPax": int(package.min_pax or 0),
+        "maxPax": int(package.max_pax) if package.max_pax is not None else None,
+        "active": package.active,
+        "createdAt": package.created_at.isoformat() if package.created_at else None,
+        "updatedAt": package.updated_at.isoformat() if package.updated_at else None,
+    }
+
+    if include_items:
+        items = []
+        related_items = package.items.all() if hasattr(package, "items") else []
+        for item in related_items:
+            menu_item = item.menu_item
+            menu_image = ""
+            if menu_item and getattr(menu_item, "image", None):
+                menu_image = getattr(menu_item.image, "url", "") or ""
+            item_payload = {
+                "id": str(item.id),
+                "menuItemId": str(menu_item.id) if menu_item else None,
+                "name": item.name or (menu_item.name if menu_item else ""),
+                "quantityPerPax": float(item.quantity_per_pax or 0),
+                "notes": item.notes or "",
+            }
+            if menu_item:
+                item_payload["menuItem"] = {
+                    "id": str(menu_item.id),
+                    "name": menu_item.name,
+                    "price": float(menu_item.price or 0),
+                    "category": menu_item.category or "",
+                    "image": menu_image,
+                }
+            items.append(item_payload)
+        payload["items"] = items
+
+    return payload
+
+
 
 def _actor_uuid(actor):
     if hasattr(actor, "id"):
@@ -182,6 +233,266 @@ def _actor_uuid(actor):
     if isinstance(actor, dict):
         return actor.get("id")
     return None
+
+
+def _actor_role(actor):
+    try:
+        role = getattr(actor, "role", "")
+    except Exception:
+        role = ""
+    if not role and isinstance(actor, dict):
+        role = actor.get("role") or ""
+    return str(role or "").lower()
+
+
+@require_http_methods(["GET", "POST"])
+def catering_packages(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+
+    if request.method == "GET":
+        if not (
+            _has_permission(actor, "catering.view")
+            or _has_permission(actor, "all")
+            or _actor_role(actor) in CUSTOMER_VIEW_ROLES
+        ):
+            return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+        include_items = str(request.GET.get("includeItems") or "").lower() in {"1", "true", "yes"}
+        active_param = request.GET.get("active")
+
+        qs = CateringPackage.objects.all()
+        if active_param is None or active_param == "":
+            qs = qs.filter(active=True)
+        else:
+            active_value = str(active_param).lower() in {"1", "true", "yes"}
+            qs = qs.filter(active=active_value)
+
+        if include_items:
+            qs = qs.prefetch_related("items", "items__menu_item")
+
+        packages = list(qs.order_by("name", "created_at"))
+        data = [_serialize_package(pkg, include_items=include_items) for pkg in packages]
+        return JsonResponse({"success": True, "data": data})
+
+    if not (_has_permission(actor, "catering.manage") or _has_permission(actor, "all")):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"success": False, "message": "name is required"}, status=400)
+
+    price_per_pax = _decimal(payload.get("pricePerPax") or payload.get("price_per_pax") or 0)
+    min_pax = payload.get("minPax") or payload.get("min_pax") or 1
+    max_pax = payload.get("maxPax") or payload.get("max_pax")
+    active = bool(payload.get("active", True))
+
+    try:
+        min_pax = max(1, int(min_pax))
+    except Exception:
+        return JsonResponse({"success": False, "message": "minPax must be a number"}, status=400)
+
+    if max_pax is not None and max_pax != "":
+        try:
+            max_pax = max(1, int(max_pax))
+        except Exception:
+            return JsonResponse({"success": False, "message": "maxPax must be a number"}, status=400)
+        if max_pax < min_pax:
+            return JsonResponse({"success": False, "message": "maxPax must be >= minPax"}, status=400)
+    else:
+        max_pax = None
+
+    items_payload = payload.get("items") or []
+    if items_payload is not None and not isinstance(items_payload, list):
+        return JsonResponse({"success": False, "message": "items must be a list"}, status=400)
+
+    menu_item_ids = [
+        item.get("menuItemId") or item.get("menu_item_id")
+        for item in items_payload
+        if isinstance(item, dict) and (item.get("menuItemId") or item.get("menu_item_id"))
+    ]
+    menu_item_ids = [mid for mid in menu_item_ids if mid]
+    menu_items_map = {}
+    if menu_item_ids:
+        qs = MenuItem.objects.filter(id__in=menu_item_ids)
+        menu_items_map = {str(mi.id): mi for mi in qs}
+
+    normalized_items = []
+    for index, item in enumerate(items_payload):
+        if not isinstance(item, dict):
+            continue
+        menu_item_id = item.get("menuItemId") or item.get("menu_item_id")
+        menu_item = menu_items_map.get(str(menu_item_id)) if menu_item_id else None
+        item_name = (item.get("name") or (menu_item.name if menu_item else "") or "").strip()
+        if not item_name:
+            return JsonResponse(
+                {"success": False, "message": "Each item requires a name or menuItemId"},
+                status=400,
+            )
+        quantity_per_pax = _decimal(
+            item.get("quantityPerPax") or item.get("quantity_per_pax") or 0
+        )
+        if quantity_per_pax <= 0:
+            return JsonResponse(
+                {"success": False, "message": "quantityPerPax must be greater than 0"},
+                status=400,
+            )
+        normalized_items.append(
+            {
+                "menu_item": menu_item,
+                "name": item_name,
+                "quantity_per_pax": quantity_per_pax,
+                "notes": (item.get("notes") or "").strip(),
+                "sort_order": int(item.get("sortOrder") or item.get("sort_order") or index),
+            }
+        )
+
+    with transaction.atomic():
+        package = CateringPackage.objects.create(
+            name=name,
+            description=(payload.get("description") or "").strip(),
+            price_per_pax=price_per_pax,
+            min_pax=min_pax,
+            max_pax=max_pax,
+            active=active,
+        )
+
+        for item in normalized_items:
+            CateringPackageItem.objects.create(package=package, **item)
+
+    package.refresh_from_db()
+    if items_payload:
+        package = CateringPackage.objects.prefetch_related("items", "items__menu_item").get(pk=package.id)
+    return JsonResponse({"success": True, "data": _serialize_package(package, include_items=True)})
+
+
+@require_http_methods(["GET", "PATCH", "DELETE"])
+def catering_package_detail(request, package_id):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+
+    try:
+        package = CateringPackage.objects.prefetch_related("items", "items__menu_item").get(pk=package_id)
+    except CateringPackage.DoesNotExist:
+        return JsonResponse({"success": False, "message": "Package not found"}, status=404)
+
+    if request.method == "GET":
+        if not (
+            _has_permission(actor, "catering.view")
+            or _has_permission(actor, "all")
+            or _actor_role(actor) in CUSTOMER_VIEW_ROLES
+        ):
+            return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+        return JsonResponse({"success": True, "data": _serialize_package(package, include_items=True)})
+
+    if not (_has_permission(actor, "catering.manage") or _has_permission(actor, "all")):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    if request.method == "DELETE":
+        package.active = False
+        package.save(update_fields=["active", "updated_at"])
+        return JsonResponse({"success": True, "message": "Package deactivated"})
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    updated_fields = []
+    if "name" in payload:
+        package.name = (payload.get("name") or "").strip()
+        updated_fields.append("name")
+    if "description" in payload:
+        package.description = (payload.get("description") or "").strip()
+        updated_fields.append("description")
+    if "pricePerPax" in payload or "price_per_pax" in payload:
+        package.price_per_pax = _decimal(payload.get("pricePerPax") or payload.get("price_per_pax") or 0)
+        updated_fields.append("price_per_pax")
+    if "minPax" in payload or "min_pax" in payload:
+        try:
+            package.min_pax = max(1, int(payload.get("minPax") or payload.get("min_pax") or 1))
+        except Exception:
+            return JsonResponse({"success": False, "message": "minPax must be a number"}, status=400)
+        updated_fields.append("min_pax")
+    if "maxPax" in payload or "max_pax" in payload:
+        raw_max = payload.get("maxPax") or payload.get("max_pax")
+        if raw_max is None or raw_max == "":
+            package.max_pax = None
+        else:
+            try:
+                package.max_pax = max(1, int(raw_max))
+            except Exception:
+                return JsonResponse({"success": False, "message": "maxPax must be a number"}, status=400)
+        updated_fields.append("max_pax")
+    if "active" in payload:
+        package.active = bool(payload.get("active"))
+        updated_fields.append("active")
+
+    items_payload = payload.get("items") if isinstance(payload, dict) else None
+    if items_payload is not None:
+        if not isinstance(items_payload, list):
+            return JsonResponse({"success": False, "message": "items must be a list"}, status=400)
+
+        menu_item_ids = [
+            item.get("menuItemId") or item.get("menu_item_id")
+            for item in items_payload
+            if isinstance(item, dict) and (item.get("menuItemId") or item.get("menu_item_id"))
+        ]
+        menu_item_ids = [mid for mid in menu_item_ids if mid]
+        menu_items_map = {}
+        if menu_item_ids:
+            qs = MenuItem.objects.filter(id__in=menu_item_ids)
+            menu_items_map = {str(mi.id): mi for mi in qs}
+
+        normalized_items = []
+        for index, item in enumerate(items_payload):
+            if not isinstance(item, dict):
+                continue
+            menu_item_id = item.get("menuItemId") or item.get("menu_item_id")
+            menu_item = menu_items_map.get(str(menu_item_id)) if menu_item_id else None
+            item_name = (item.get("name") or (menu_item.name if menu_item else "") or "").strip()
+            if not item_name:
+                return JsonResponse(
+                    {"success": False, "message": "Each item requires a name or menuItemId"},
+                    status=400,
+                )
+            quantity_per_pax = _decimal(
+                item.get("quantityPerPax") or item.get("quantity_per_pax") or 0
+            )
+            if quantity_per_pax <= 0:
+                return JsonResponse(
+                    {"success": False, "message": "quantityPerPax must be greater than 0"},
+                    status=400,
+                )
+            normalized_items.append(
+                {
+                    "menu_item": menu_item,
+                    "name": item_name,
+                    "quantity_per_pax": quantity_per_pax,
+                    "notes": (item.get("notes") or "").strip(),
+                    "sort_order": int(item.get("sortOrder") or item.get("sort_order") or index),
+                }
+            )
+
+        with transaction.atomic():
+            package.items.all().delete()
+            for item in normalized_items:
+                CateringPackageItem.objects.create(package=package, **item)
+
+    if updated_fields:
+        updated_fields.append("updated_at")
+        package.save(update_fields=updated_fields)
+
+    package.refresh_from_db()
+    package = CateringPackage.objects.prefetch_related("items", "items__menu_item").get(pk=package.id)
+    return JsonResponse({"success": True, "data": _serialize_package(package, include_items=True)})
 
 
 @require_http_methods(["GET", "POST"])
@@ -293,6 +604,21 @@ def catering_events(request):
 
     deposit_paid = payload.get("depositPaid", False)
     payment_status = (payload.get("paymentStatus") or "unpaid").strip()
+    package_id = payload.get("packageId") or payload.get("package_id")
+    package = None
+
+    if package_id:
+        try:
+            package = CateringPackage.objects.get(pk=package_id)
+        except (CateringPackage.DoesNotExist, ValueError):
+            return JsonResponse({"success": False, "message": "Invalid packageId"}, status=400)
+        if not package.active:
+            return JsonResponse({"success": False, "message": "Package is inactive"}, status=400)
+        if guest_count <= 0:
+            return JsonResponse(
+                {"success": False, "message": "guestCount must be greater than 0 for packages"},
+                status=400,
+            )
 
     actor_id = _actor_uuid(actor)
 
@@ -318,6 +644,16 @@ def catering_events(request):
             created_by_id=actor_id if actor_id else None,
             updated_by_id=actor_id if actor_id else None,
         )
+
+    if package:
+        apply_catering_package(
+            event,
+            package,
+            guest_count=guest_count,
+            actor_id=actor_id,
+            use_item_price=False,
+        )
+        event.refresh_from_db()
 
     return JsonResponse({"success": True, "data": _serialize_event(event)})
 
@@ -362,6 +698,7 @@ def catering_event_detail(request, event_id):
         payload = {}
 
     updated_fields = []
+    guest_count_updated = False
 
     if "name" in payload or "eventName" in payload:
         event.name = (payload.get("name") or payload.get("eventName") or event.name).strip()
@@ -395,6 +732,7 @@ def catering_event_detail(request, event_id):
         except Exception:
             return JsonResponse({"success": False, "message": "attendees must be a number"}, status=400)
         updated_fields.append("guest_count")
+        guest_count_updated = True
     if "status" in payload:
         status = (payload.get("status") or "").strip()
         if status not in dict(CateringEvent.STATUS_CHOICES):
@@ -445,6 +783,7 @@ def catering_event_detail(request, event_id):
             event.payment_status = payment_status
             updated_fields.append("payment_status")
 
+    actor_id = None
     if updated_fields:
         actor_id = _actor_uuid(actor)
         event.updated_by_id = actor_id if actor_id else None
@@ -452,6 +791,66 @@ def catering_event_detail(request, event_id):
         updated_fields.append("updated_at")
         event.save(update_fields=updated_fields)
 
+    if guest_count_updated and event.package_id:
+        package = CateringPackage.objects.filter(pk=event.package_id).first()
+        if package:
+            apply_catering_package(
+                event,
+                package,
+                guest_count=event.guest_count,
+                actor_id=actor_id or _actor_uuid(actor),
+                use_item_price=False,
+            )
+
+    event.refresh_from_db()
+    return JsonResponse({"success": True, "data": _serialize_event(event, include_items=True)})
+
+
+@require_http_methods(["PUT", "POST"])
+def catering_event_package(request, event_id):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+
+    if not (_has_permission(actor, "catering.manage") or _has_permission(actor, "all")):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        event = CateringEvent.objects.prefetch_related("items").filter(deleted_at__isnull=True).get(pk=event_id)
+    except CateringEvent.DoesNotExist:
+        return JsonResponse({"success": False, "message": "Event not found"}, status=404)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    package_id = payload.get("packageId") or payload.get("package_id")
+    if not package_id:
+        return JsonResponse({"success": False, "message": "packageId is required"}, status=400)
+
+    guest_count = payload.get("guestCount") or payload.get("guest_count") or event.guest_count
+    try:
+        guest_count = int(guest_count or 0)
+    except Exception:
+        return JsonResponse({"success": False, "message": "guestCount must be a number"}, status=400)
+    if guest_count <= 0:
+        return JsonResponse({"success": False, "message": "guestCount must be greater than 0"}, status=400)
+
+    try:
+        package = CateringPackage.objects.get(pk=package_id)
+    except (CateringPackage.DoesNotExist, ValueError):
+        return JsonResponse({"success": False, "message": "Invalid packageId"}, status=400)
+    if not package.active and str(event.package_id) != str(package.id):
+        return JsonResponse({"success": False, "message": "Package is inactive"}, status=400)
+
+    apply_catering_package(
+        event,
+        package,
+        guest_count=guest_count,
+        actor_id=_actor_uuid(actor),
+        use_item_price=False,
+    )
     event.refresh_from_db()
     return JsonResponse({"success": True, "data": _serialize_event(event, include_items=True)})
 
@@ -539,8 +938,23 @@ def catering_event_menu_items(request, event_id):
         event.estimated_total = total_amount
         # Automatically set deposit_amount to 50% of total
         event.deposit_amount = total_amount * Decimal("0.5")
+        event.package = None
+        event.package_name = ""
+        event.package_price_per_pax = Decimal("0")
+        event.package_snapshot = []
         event.updated_by_id = actor_id if actor_id else None
-        event.save(update_fields=["estimated_total", "deposit_amount", "updated_by", "updated_at"])
+        event.save(
+            update_fields=[
+                "estimated_total",
+                "deposit_amount",
+                "package",
+                "package_name",
+                "package_price_per_pax",
+                "package_snapshot",
+                "updated_by",
+                "updated_at",
+            ]
+        )
 
     event.refresh_from_db()
     return JsonResponse({"success": True, "data": _serialize_event(event, include_items=True)})

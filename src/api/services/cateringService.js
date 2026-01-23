@@ -20,6 +20,27 @@ class CateringService {
     return apiClient.get(`/catering/events${query}`);
   }
 
+  async listPackages(params = {}) {
+    const query = buildQueryString(params);
+    return apiClient.get(`/catering/packages${query}`);
+  }
+
+  async getPackage(packageId) {
+    return apiClient.get(`/catering/packages/${packageId}`);
+  }
+
+  async createPackage(payload) {
+    return apiClient.post('/catering/packages', payload);
+  }
+
+  async updatePackage(packageId, payload) {
+    return apiClient.patch(`/catering/packages/${packageId}`, payload);
+  }
+
+  async deactivatePackage(packageId) {
+    return apiClient.delete(`/catering/packages/${packageId}`);
+  }
+
   async getEvent(eventId, params = {}) {
     const query = buildQueryString(params);
     return apiClient.get(`/catering/events/${eventId}${query}`);
@@ -41,6 +62,10 @@ class CateringService {
     return apiClient.put(`/catering/events/${eventId}/menu-items`, {
       items,
     });
+  }
+
+  async setEventPackage(eventId, payload) {
+    return apiClient.put(`/catering/events/${eventId}/package`, payload);
   }
 
   async submitPayment(eventId, payload) {

@@ -40,6 +40,7 @@ class PendingUserGateMiddleware:
         "/api/orders/apply-voucher/",
         '/api/menu/menu-items/',
         "/api/accounts/change-password/",
+        "/api/accounts/update-avatar/",
         "/api/create_order/",
         "/api/feedback/",
         "/orders/user-credit-points/",
@@ -60,6 +61,7 @@ class PendingUserGateMiddleware:
         "/api/auth/login",
         "/api/auth/logout",
         "/api/auth/register",
+        "/api/payments/proofs",
         "/api/auth/google",
         "/api/auth/verify-email",
         "/api/auth/resend-verification",
@@ -67,6 +69,7 @@ class PendingUserGateMiddleware:
         "/api/auth/reset-password",
         "/api/auth/reset-password-code",
         "/api/auth/verify-reset-code",
+        "/api/auth/me",
         "/api/auth/password-reset/",
         "/api/auth/refresh-token",
         "/api/auth/face-login",
@@ -81,13 +84,21 @@ class PendingUserGateMiddleware:
     }
 
     APPROVED_ROLES = {"admin", "manager", "staff"}
+    FACE_BYPASS_PREFIXES = (
+        "/api/auth/face-register",
+        "/api/auth/face-unregister",
+    )
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         path = request.path or ""
+        if path.startswith("/api/feedback"):
+            return self.get_response(request)
         if path.startswith("/api/orders/"):
+            return self.get_response(request)
+        if path.startswith("/api/payments/proofs"):
             return self.get_response(request)
 
         # Only enforce for API routes
@@ -102,7 +113,16 @@ class PendingUserGateMiddleware:
             # Only allow active + approved role
             status = (user.status or "").lower()
             role = (user.role or "").lower()
+            if (
+                status == "active"
+                and request.method == "GET"
+                and path.startswith("/api/catering/packages")
+            ):
+                return self.get_response(request)
             if status != "active" or role not in self.APPROVED_ROLES:
+                if path.startswith(self.FACE_BYPASS_PREFIXES):
+                    if status == "active":
+                        return self.get_response(request)
                 # Provide clearer messaging for deactivated accounts
                 if status == "deactivated":
                     return JsonResponse(
@@ -125,8 +145,12 @@ class PendingUserGateMiddleware:
         return self.get_response(request)
 
     def _is_public(self, path: str) -> bool:
+        normalized = (path or "/").rstrip("/") or "/"
         for prefix in self.PUBLIC_PATHS:
-            if path.startswith(prefix):
+            prefix_normalized = (prefix or "/").rstrip("/") or "/"
+            if normalized == prefix_normalized:
+                return True
+            if normalized.startswith(f"{prefix_normalized}/"):
                 return True
         return False
 
@@ -137,12 +161,19 @@ class PendingUserGateMiddleware:
         token = auth.split(" ", 1)[1].strip()
         if not token:
             return None
+        payload = None
         try:
             payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         except Exception:
-            return None
+            payload = None
+        if payload is None:
+            try:
+                from rest_framework_simplejwt.tokens import AccessToken
+                payload = AccessToken(token).payload
+            except Exception:
+                return None
 
-        user_id = str(payload.get("sub") or "")
+        user_id = str(payload.get("sub") or payload.get("user_id") or payload.get("id") or "")
         email = (payload.get("email") or "").lower().strip()
         try:
             from .models import AppUser

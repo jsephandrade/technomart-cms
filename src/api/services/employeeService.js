@@ -1,15 +1,24 @@
 import apiClient from '../client';
-
 class EmployeeService {
   _normalizeEmployee(e = {}) {
+    const normalizeHireDate = (value) => {
+      if (!value) return '';
+      const raw = String(value);
+      return raw.includes('T') ? raw.split('T')[0] : raw;
+    };
     return {
       id: e.id,
       name: e.name || '',
       position: e.position || '',
-      hourlyRate: Number(e.hourlyRate ?? e.hourly_rate ?? e.rate ?? 0),
+      hireDate: normalizeHireDate(e.hireDate ?? e.hire_date),
       contact: e.contact || '',
       status: (e.status || 'active').toLowerCase(),
       avatar: e.avatar || '/placeholder.svg',
+      userId: e.userId || e.user_id || '',
+      userName: e.userName || e.user_name || e.user?.name || '',
+      userEmail: e.userEmail || e.user_email || e.user?.email || '',
+      userRole: e.userRole || e.user_role || e.user?.role || '',
+      userStatus: e.userStatus || e.user_status || e.user?.status || '',
     };
   }
 
@@ -102,7 +111,7 @@ class EmployeeService {
     const payload = {
       name: employee?.name || '',
       position: employee?.position || '',
-      hourlyRate: Number(employee?.hourlyRate ?? 0),
+      hireDate: employee?.hireDate || employee?.hire_date || '',
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
     };
@@ -117,9 +126,10 @@ class EmployeeService {
     const payload = {
       name: employee?.name || '',
       position: employee?.position || '',
-      hourlyRate: Number(employee?.hourlyRate ?? 0),
+      hireDate: employee?.hireDate || employee?.hire_date || '',
       contact: employee?.contact || '',
       status: (employee?.status || 'active').toLowerCase(),
+      userId: employee?.userId || employee?.user_id || '',
       schedule: Array.isArray(employee?.schedule) ? employee.schedule : [],
     };
     const res = await apiClient.post('/employees/with-schedule', payload, {
@@ -160,6 +170,34 @@ class EmployeeService {
       startTime: s.startTime,
       endTime: s.endTime,
     }));
+  }
+
+  async getRoleTargets(params = {}) {
+    const query = this._buildQueryString(params);
+    return await apiClient.get(`/schedule/role-targets${query}`);
+  }
+
+  async updateRoleTargets(payload = {}) {
+    return await apiClient.put('/schedule/role-targets', payload);
+  }
+
+  async getRoleExceptions(params = {}) {
+    const query = this._buildQueryString(params);
+    return await apiClient.get(`/schedule/role-exceptions${query}`);
+  }
+
+  async createRoleException(payload = {}) {
+    return await apiClient.post('/schedule/role-exceptions', payload);
+  }
+
+  async deleteRoleException(id) {
+    return await apiClient.delete(
+      `/schedule/role-exceptions/${encodeURIComponent(id)}`
+    );
+  }
+
+  async clearRoleExceptions() {
+    return await apiClient.delete('/schedule/role-exceptions?clear=all');
   }
 
   async getScheduleAnalytics(params = {}) {
@@ -225,6 +263,17 @@ class EmployeeService {
 
   async deleteSchedule(id) {
     await apiClient.delete(`/schedule/${id}`, { retry: { retries: 1 } });
+    return true;
+  }
+
+  async deleteScheduleByMeta(params = {}) {
+    const query = this._buildQueryString(params);
+    await apiClient.delete(`/schedule${query}`, { retry: { retries: 1 } });
+    return true;
+  }
+
+  async clearSchedule() {
+    await apiClient.delete('/schedule?clear=all', { retry: { retries: 1 } });
     return true;
   }
 }

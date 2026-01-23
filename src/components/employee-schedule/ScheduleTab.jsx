@@ -8,6 +8,10 @@ const ScheduleTab = ({
   employeeDirectory,
   schedule,
   canManage,
+  calendarExceptions,
+  calendarExceptionsLoading,
+  onCreateCalendarException,
+  onDeleteCalendarException,
   setEditingSchedule,
   handleDeleteSchedule,
   lookupEmployeeName,
@@ -16,6 +20,8 @@ const ScheduleTab = ({
   defaultScheduleEntry,
   onOpenManageEmployees,
   onOpenAddSchedule,
+  onClearAllSchedules,
+  onEditDaySchedule,
 }) => (
   <div className="mt-2 space-y-6">
     <div className="grid gap-2 items-start lg:grid-cols-[minmax(0,1.6fr)_minmax(0,0.6fr)] 2xl:grid-cols-[minmax(0,1.8fr)_minmax(0,0.6fr)]">
@@ -47,11 +53,18 @@ const ScheduleTab = ({
           }
         }}
         canManage={canManage}
+        onClearAllSchedules={onClearAllSchedules}
+        onEditDaySchedule={onEditDaySchedule}
       />
       <div className="space-y-6 lg:w-full lg:max-w-md lg:justify-self-end">
         <ScheduleCalendar
           schedule={schedule}
           employeeList={displayEmployees}
+          calendarExceptions={calendarExceptions}
+          calendarExceptionsLoading={calendarExceptionsLoading}
+          canManage={canManage}
+          onCreateCalendarException={onCreateCalendarException}
+          onDeleteCalendarException={onDeleteCalendarException}
           className="w-full max-w-none lg:max-w-sm lg:ml-auto"
         />
       </div>

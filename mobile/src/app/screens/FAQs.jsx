@@ -11,13 +11,21 @@ import {
   TextInput,
   StyleSheet,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking'; // ✅ Added for Telegram link
 
-// ✅ Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+const isNewArchitectureEnabled =
+  Boolean(global?.nativeFabricUIManager) ||
+  Boolean(global?.RN$Bridgeless) ||
+  Boolean(UIManager.getConstants?.()?.fabric);
+
+// Enable LayoutAnimation on Android for the old architecture only.
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental &&
+  !isNewArchitectureEnabled
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -134,7 +142,6 @@ const DEFAULT_FAQS = [
 ];
 
 export default function FAQsScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState(null);
@@ -149,7 +156,7 @@ export default function FAQsScreen() {
   }, [query]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>

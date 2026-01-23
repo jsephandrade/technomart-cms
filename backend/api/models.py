@@ -39,6 +39,8 @@ class AppUser(models.Model):
         default=Decimal("0.00"),
         help_text="Loyalty credits available for purchases.",
     )
+    no_show_count = models.PositiveIntegerField(default=0)
+    no_show_locked_until = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(blank=True, null=True)
@@ -99,6 +101,12 @@ def _headshot_upload_path(instance, filename):
     ext = ext if ext else ".bin"
     return f"access_requests/{instance.user_id}/{uuid4().hex}{ext}"
 
+def _headshot_multi_upload_path(instance, filename):
+    base, ext = os.path.splitext(filename or "")
+    ext = ext if ext else ".jpg"
+    user_id = getattr(instance.request, "user_id", "unknown")
+    return f"access_requests/{user_id}/shots/{uuid4().hex}{ext}"
+
 
 class AccessRequest(models.Model):
     STATUS_PENDING = "pending"
@@ -157,6 +165,29 @@ class AccessRequest(models.Model):
         if note:
             self.notes = (self.notes or "") + ("\n" if self.notes else "") + note
         self.save(update_fields=["status", "verified_at", "verified_by", "notes"]) 
+
+
+class AccessRequestHeadshot(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    request = models.ForeignKey(
+        AccessRequest,
+        on_delete=models.CASCADE,
+        related_name="headshots",
+    )
+    image = models.FileField(
+        upload_to=_headshot_multi_upload_path,
+        blank=True,
+        null=True,
+        storage=PrivateMediaStorage() if PrivateMediaStorage else None,
+    )
+    position = models.CharField(max_length=32, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "access_request_headshot"
+        indexes = [
+            models.Index(fields=["request", "created_at"]),
+        ]
 
 
 class RefreshToken(models.Model):
@@ -361,7 +392,7 @@ class Employee(models.Model):
     )
     name = models.CharField(max_length=255)
     position = models.CharField(max_length=128, blank=True)
-    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    hire_date = models.DateField(null=True, blank=True)
     contact = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=32, default="active")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -415,6 +446,131 @@ class ScheduleEntry(models.Model):
         indexes = [
             models.Index(fields=["employee", "day"]),
         ]
+
+
+# -----------------------------
+# Team Composition Targets
+# -----------------------------
+
+
+class TeamCompositionTarget(models.Model):
+    """Daily role caps for scheduling."""
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    day = models.CharField(max_length=16)
+    role = models.CharField(max_length=64)
+    target_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_composition_targets_created",
+    )
+    updated_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_composition_targets_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "team_composition_target"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["day", "role"], name="team_composition_target_day_role_uniq"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["day", "role"], name="team_comp_target_day_role_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.day}: {self.role} ({self.target_count})"
+
+
+class TeamCompositionException(models.Model):
+    """Exception request when daily role caps are exceeded."""
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    day = models.CharField(max_length=16)
+    role = models.CharField(max_length=64)
+    message = models.TextField(blank=True)
+    requested_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_composition_exceptions",
+    )
+    requested_by_label = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "team_composition_exception"
+        indexes = [
+            models.Index(fields=["day", "role"], name="team_comp_exc_day_role_idx"),
+            models.Index(fields=["created_at"], name="team_comp_exc_created_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.day}: {self.role}"
+
+
+# -----------------------------
+# Calendar Exceptions
+# -----------------------------
+
+
+class CalendarException(models.Model):
+    """Calendar-level exceptions such as holidays and no-work days."""
+
+    KIND_HOLIDAY = "holiday"
+    KIND_NO_WORK = "no_work"
+    KIND_CHOICES = [
+        (KIND_HOLIDAY, "Holiday"),
+        (KIND_NO_WORK, "No work day"),
+    ]
+
+    SCOPE_ALL = "all"
+    SCOPE_ROLES = "roles"
+    SCOPE_CHOICES = [
+        (SCOPE_ALL, "All staff"),
+        (SCOPE_ROLES, "Roles only"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    date = models.DateField()
+    name = models.CharField(max_length=255)
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_HOLIDAY)
+    scope = models.CharField(max_length=16, choices=SCOPE_CHOICES, default=SCOPE_ALL)
+    roles = models.CharField(max_length=255, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    is_workday_override = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendar_exceptions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "calendar_exception"
+        indexes = [
+            models.Index(fields=["date"], name="calendar_exc_date_idx"),
+            models.Index(fields=["kind", "date"], name="calendar_exc_kind_date_idx"),
+        ]
+        ordering = ["date", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.date}: {self.name}"
 
 
 # -----------------------------
@@ -597,6 +753,61 @@ class PaymentTransaction(models.Model):
         ]
 
 
+def _payment_proof_upload_path(instance, filename):
+    base, ext = os.path.splitext(filename or "")
+    ext = ext.lower() if ext else ".jpg"
+    return f"payment_proofs/{instance.order_id}/{uuid4().hex}{ext}"
+
+
+class PaymentProof(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_VERIFIED = "verified"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_VERIFIED, "Verified"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    order = models.ForeignKey(
+        "Order",
+        on_delete=models.CASCADE,
+        related_name="payment_proofs",
+    )
+    submitted_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_proofs",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reference_number = models.CharField(max_length=64, blank=True)
+    proof_image = models.ImageField(upload_to=_payment_proof_upload_path)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    reviewed_by = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_proofs_reviewed",
+    )
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    reviewed_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "payment_proof"
+        indexes = [
+            models.Index(fields=["order", "status"]),
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+
 class PaymentMethodConfig(models.Model):
     id = models.SmallIntegerField(primary_key=True, default=1, editable=False)
     cash_enabled = models.BooleanField(default=True)
@@ -608,6 +819,64 @@ class PaymentMethodConfig(models.Model):
     class Meta:
         db_table = "payment_method_config"
 
+
+# -----------------------------
+# Checkout Sessions
+# -----------------------------
+
+
+class CheckoutSession(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_AWAITING_CASH = "awaiting_cash"
+    STATUS_PAID = "paid"
+    STATUS_FINALIZED = "finalized"
+    STATUS_EXPIRED = "expired"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_AWAITING_CASH, "Awaiting Cash"),
+        (STATUS_PAID, "Paid"),
+        (STATUS_FINALIZED, "Finalized"),
+        (STATUS_EXPIRED, "Expired"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    user = models.ForeignKey(
+        AppUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="checkout_sessions",
+    )
+    order_id = models.UUIDField(null=True, blank=True)
+    order_number = models.CharField(max_length=32, blank=True)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit_points_used = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0
+    )
+    order_type = models.CharField(max_length=32, blank=True)
+    customer_name = models.CharField(max_length=255, blank=True)
+    promised_time = models.DateTimeField(blank=True, null=True)
+    payload = models.JSONField(default=dict, blank=True)
+    idempotency_key = models.CharField(max_length=64, blank=True)
+    expires_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "checkout_session"
+        indexes = [
+            models.Index(
+                fields=["status", "created_at"],
+                name="checkout_status_created_idx",
+            ),
+            models.Index(fields=["order_number"], name="checkout_order_number_idx"),
+            models.Index(fields=["idempotency_key"], name="checkout_idempotency_idx"),
+        ]
 
 # -----------------------------
 # Attendance & Leave
@@ -889,6 +1158,10 @@ class MenuItem(models.Model):
     image = models.ImageField(upload_to="menu_items/", blank=True, null=True)
     ingredients = models.JSONField(default=list, blank=True)
     preparation_time = models.PositiveIntegerField(default=0, help_text="Minutes")
+    pax_per_preparation = models.PositiveIntegerField(
+        default=0,
+        help_text="Estimated number of pax available per batch",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -903,6 +1176,66 @@ class MenuItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.category})"
+
+
+# -----------------------------
+# Catering Packages
+# -----------------------------
+
+
+class CateringPackage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    price_per_pax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    min_pax = models.PositiveIntegerField(default=1)
+    max_pax = models.PositiveIntegerField(blank=True, null=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "catering_package"
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["active"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CateringPackageItem(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    package = models.ForeignKey(
+        CateringPackage,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    menu_item = models.ForeignKey(
+        MenuItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="catering_package_items",
+    )
+    name = models.CharField(max_length=255)
+    quantity_per_pax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    notes = models.CharField(max_length=255, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "catering_package_item"
+        indexes = [
+            models.Index(fields=["package"]),
+            models.Index(fields=["menu_item"]),
+        ]
+        ordering = ["sort_order", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.package.name}: {self.name}"
 
 
 # -----------------------------
@@ -934,6 +1267,16 @@ class CateringEvent(models.Model):
     end_time = models.TimeField(blank=True, null=True)
     location = models.CharField(max_length=255, blank=True)
     guest_count = models.PositiveIntegerField(default=0)
+    package = models.ForeignKey(
+        CateringPackage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    package_name = models.CharField(max_length=255, blank=True)
+    package_price_per_pax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    package_snapshot = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_SCHEDULED)
     notes = models.TextField(blank=True)
     estimated_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -1050,6 +1393,16 @@ class Order(models.Model):
         (STATUS_VOIDED, "Voided"),
         (STATUS_REFUNDED, "Refunded"),
     ]
+    PAYMENT_UNPAID = "unpaid"
+    PAYMENT_PENDING = "pending"
+    PAYMENT_PAID = "paid"
+    PAYMENT_REJECTED = "rejected"
+    PAYMENT_STATUS_CHOICES = [
+        (PAYMENT_UNPAID, "Unpaid"),
+        (PAYMENT_PENDING, "Pending Verification"),
+        (PAYMENT_PAID, "Paid"),
+        (PAYMENT_REJECTED, "Rejected"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     order_number = models.CharField(max_length=32, unique=True)
@@ -1060,6 +1413,9 @@ class Order(models.Model):
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=16, blank=True)  # cash/card/mobile
+    payment_status = models.CharField(
+        max_length=16, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_UNPAID
+    )
     placed_by = models.ForeignKey('AppUser', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     completed_at = models.DateTimeField(blank=True, null=True)
     promised_time = models.DateTimeField(blank=True, null=True)

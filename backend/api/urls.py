@@ -16,6 +16,7 @@ from . import views_reports as rpt_views
 from . import views_cash as cash_views
 from . import views_diag as diag_views
 from . import views_catering as catering_views
+from . import views_calendar as calendar_views
 from django.urls import path, include
 
 urlpatterns = [
@@ -62,6 +63,7 @@ urlpatterns = [
     path("verify/requests", verify_views.verify_requests, name="verify_requests"),
     path("verify/approve", verify_views.verify_approve, name="verify_approve"),
     path("verify/reject", verify_views.verify_reject, name="verify_reject"),
+    path("verify/headshots/<uuid:request_id>", verify_views.verify_headshots, name="verify_headshots"),
     path("verify/headshot/<uuid:request_id>", verify_views.verify_headshot, name="verify_headshot"),
 
     # Menu endpoints
@@ -142,8 +144,21 @@ urlpatterns = [
     path("employees/<uuid:emp_id>", emp_views.employee_detail, name="employee_detail"),
     path("employees/with-schedule", emp_views.employees_with_schedule, name="employees_with_schedule"),
     path("schedule", emp_views.schedule, name="schedule"),
+    path("schedule/role-targets", emp_views.schedule_role_targets, name="schedule_role_targets"),
+    path("schedule/role-exceptions", emp_views.schedule_role_exceptions, name="schedule_role_exceptions"),
+    path(
+        "schedule/role-exceptions/<uuid:eid>",
+        emp_views.schedule_role_exception_detail,
+        name="schedule_role_exception_detail",
+    ),
     path("schedule/analytics", emp_views.schedule_analytics, name="schedule_analytics"),
-    path("schedule/<uuid:sid>", emp_views.schedule_detail, name="schedule_detail"),
+    path("schedule/<str:sid>", emp_views.schedule_detail, name="schedule_detail"),
+    path("calendar/exceptions", calendar_views.calendar_exceptions, name="calendar_exceptions"),
+    path(
+        "calendar/exceptions/<uuid:exc_id>",
+        calendar_views.calendar_exception_detail,
+        name="calendar_exception_detail",
+    ),
 
     # Attendance & Leaves
     path("attendance", att_views.attendance, name="attendance"),
@@ -168,8 +183,15 @@ urlpatterns = [
     path("inventory/ledger", inv_views.inventory_ledger, name="inventory_ledger"),
 
     # Catering events
+    path("catering/packages", catering_views.catering_packages, name="catering_packages"),
+    path("catering/packages/<uuid:package_id>", catering_views.catering_package_detail, name="catering_package_detail"),
     path("catering/events", catering_views.catering_events, name="catering_events"),
     path("catering/events/<uuid:event_id>", catering_views.catering_event_detail, name="catering_event_detail"),
+    path(
+        "catering/events/<uuid:event_id>/package",
+        catering_views.catering_event_package,
+        name="catering_event_package",
+    ),
     path(
         "catering/events/<uuid:event_id>/menu-items",
         catering_views.catering_event_menu_items,

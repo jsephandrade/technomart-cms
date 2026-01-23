@@ -7,8 +7,10 @@ import {
   StyleSheet,
   ImageBackground,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -27,11 +29,12 @@ export default function AccountPasswordResetScreen() {
   const [resetStep, setResetStep] = useState(1); // 1 = enter email, 2 = enter code + new password
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
 
   // Load fonts
-  let [fontsLoaded] = useFonts({
+  const [fontsLoaded] = useFonts({
     Roboto_400Regular,
     Roboto_700Bold,
     Roboto_900Black,
@@ -40,24 +43,36 @@ export default function AccountPasswordResetScreen() {
 
   // Step 1: Request reset code
   const handleRequestReset = async () => {
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email');
+    const trimmedEmail = email.trim();
+    if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
+      setErrors({ email: 'Invalid email address' });
       return;
     }
-    setError('');
+    setErrors({});
     setLoading(true);
 
     try {
-      const response = await requestPasswordReset({ email: email.trim() });
-      if (response?.data?.message) {
-        Alert.alert('Reset Email Sent', `A reset code has been sent to ${email}`);
-        setResetStep(2); // Move to next step
-      } else {
-        Alert.alert('Error', response?.data?.message || 'Email not found');
+      const response = await requestPasswordReset({ email: trimmedEmail });
+      const status = response?.status;
+      const message = response?.data?.message;
+
+      if (!status) {
+        setErrors({ form: message || 'Network error or server unreachable' });
+        return;
       }
+      if (status >= 400) {
+        setErrors({ email: message || 'Email not found' });
+        return;
+      }
+
+      Alert.alert(
+        'Reset Email Sent',
+        `A reset code has been sent to ${trimmedEmail}`
+      );
+      setResetStep(2);
     } catch (err) {
       console.error(err);
-      Alert.alert('Error', 'Network error or server unreachable');
+      setErrors({ form: 'Network error or server unreachable' });
     } finally {
       setLoading(false);
     }
@@ -65,32 +80,79 @@ export default function AccountPasswordResetScreen() {
 
   // Step 2: Confirm code & set new password
   const handleConfirmReset = async () => {
-    if (!resetCode || !newPassword) {
-      setError('Please fill all fields');
+    const trimmedCode = resetCode.trim();
+    const nextErrors = {};
+
+    if (!trimmedCode) nextErrors.resetCode = 'Reset code is required';
+    if (!newPassword) nextErrors.newPassword = 'New password is required';
+    if (newPassword && newPassword.length < 6) {
+      nextErrors.newPassword = 'Password must be at least 6 characters';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-    setError('');
+
+    setErrors({});
     setLoading(true);
 
     try {
       const response = await confirmPasswordReset({
         email: email.trim(),
-        reset_code: resetCode.trim(),
+        reset_code: trimmedCode,
         new_password: newPassword,
       });
-      if (response?.data?.message) {
-        Alert.alert('Success', response.data.message);
-          router.push('/account-login');
-      } else {
-        Alert.alert('Error', response?.data?.message || 'Reset failed');
+      const status = response?.status;
+      const message = response?.data?.message;
+      const normalizedMessage = String(message || '').toLowerCase();
+
+      if (status && status >= 400) {
+        if (normalizedMessage.includes('invalid reset code')) {
+          setErrors({
+            resetCode:
+              'Reset code does not match. Check the email and try again.',
+          });
+          return;
+        }
+        if (normalizedMessage.includes('expired')) {
+          setErrors({
+            resetCode: 'Reset code expired. Request a new code.',
+          });
+          return;
+        }
+        setErrors({ form: message || 'Reset failed' });
+        return;
       }
+
+      if (!status) {
+        if (normalizedMessage.includes('invalid reset code')) {
+          setErrors({
+            resetCode:
+              'Reset code does not match. Check the email and try again.',
+          });
+          return;
+        }
+        if (normalizedMessage.includes('expired')) {
+          setErrors({
+            resetCode: 'Reset code expired. Request a new code.',
+          });
+          return;
+        }
+        setErrors({ form: message || 'Reset failed' });
+        return;
+      }
+
+      if (message) {
+        Alert.alert('Success', message);
+        router.push('/account-login');
+        return;
+      }
+
+      setErrors({ form: 'Reset failed' });
     } catch (err) {
       console.error(err);
-      Alert.alert('Error', 'Network error or server unreachable');
+      setErrors({ form: 'Network error or server unreachable' });
     } finally {
       setLoading(false);
     }
@@ -112,91 +174,191 @@ export default function AccountPasswordResetScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.container}>
-          <Text style={styles.title}>Forgot Password</Text>
-          <Text style={styles.subtitle}>
-            {resetStep === 1
-              ? 'Enter your email to reset your password'
-              : 'Enter the code sent to your email and your new password'}
-          </Text>
-
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View>
+                <Text style={styles.title}>
+                  {resetStep === 1 ? 'Forgot Password?' : 'Reset Password'}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {resetStep === 1
+                    ? 'Enter your email to receive a reset code.'
+                    : `Enter the code sent to ${
+                        email.trim() || 'your email'
+                      } and choose a new password.`}
+                </Text>
+              </View>
+            </View>
             {resetStep === 1 ? (
               <>
                 {/* Email Input */}
-                <View style={styles.inputWrapper}>
-                  <MaterialCommunityIcons name="email-outline" size={20} color="#888" />
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'email' && styles.inputWrapperFocused,
+                    errors.email && styles.inputWrapperError,
+                  ]}
+                >
+                  <Ionicons name="mail-outline" size={20} color="#888" />
                   <TextInput
                     placeholder="Email Address"
                     keyboardType="email-address"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(value) => {
+                      setEmail(value);
+                      if (errors.email || errors.form) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          email: null,
+                          form: null,
+                        }));
+                      }
+                    }}
+                    onFocus={() => setFocusedField('email')}
+                    onBlur={() => setFocusedField(null)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    returnKeyType="done"
                     style={styles.input}
                   />
                 </View>
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {errors.email ? (
+                  <Text style={styles.errorText}>{errors.email}</Text>
+                ) : null}
+                {errors.form ? (
+                  <Text style={styles.errorText}>{errors.form}</Text>
+                ) : null}
 
                 {/* Reset Button */}
                 <TouchableOpacity
-                  style={styles.button}
+                  style={[
+                    styles.primaryButton,
+                    loading && styles.primaryButtonDisabled,
+                  ]}
                   onPress={handleRequestReset}
                   disabled={loading}
                 >
-                  <Text style={styles.buttonText}>
-                    {loading ? 'Sending...' : 'Send Reset Code'}
-                  </Text>
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <View style={styles.primaryContent}>
+                      <Ionicons name="send-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryText}>Send Reset Code</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 {/* Reset Code Input */}
-                <View style={styles.inputWrapper}>
-                  <MaterialCommunityIcons name="key-outline" size={20} color="#888" />
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'resetCode' && styles.inputWrapperFocused,
+                    errors.resetCode && styles.inputWrapperError,
+                  ]}
+                >
+                  <Ionicons name="key-outline" size={20} color="#888" />
                   <TextInput
                     placeholder="Reset Code"
                     value={resetCode}
-                    onChangeText={setResetCode}
+                    onChangeText={(value) => {
+                      setResetCode(value);
+                      if (errors.resetCode || errors.form) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          resetCode: null,
+                          form: null,
+                        }));
+                      }
+                    }}
+                    onFocus={() => setFocusedField('resetCode')}
+                    onBlur={() => setFocusedField(null)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    textContentType="oneTimeCode"
+                    returnKeyType="next"
                     style={styles.input}
                   />
                 </View>
+                {errors.resetCode ? (
+                  <Text style={styles.errorText}>{errors.resetCode}</Text>
+                ) : null}
                 {/* New Password Input */}
-                <View style={styles.inputWrapper}>
-                  <MaterialCommunityIcons name="lock-outline" size={20} color="#888" />
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    focusedField === 'newPassword' &&
+                      styles.inputWrapperFocused,
+                    errors.newPassword && styles.inputWrapperError,
+                  ]}
+                >
+                  <Ionicons name="lock-closed-outline" size={20} color="#888" />
                   <TextInput
                     placeholder="New Password"
                     value={newPassword}
-                    onChangeText={setNewPassword}
+                    onChangeText={(value) => {
+                      setNewPassword(value);
+                      if (errors.newPassword || errors.form) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          newPassword: null,
+                          form: null,
+                        }));
+                      }
+                    }}
+                    onFocus={() => setFocusedField('newPassword')}
+                    onBlur={() => setFocusedField(null)}
                     secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="newPassword"
+                    returnKeyType="done"
                     style={styles.input}
                   />
                 </View>
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {errors.newPassword ? (
+                  <Text style={styles.errorText}>{errors.newPassword}</Text>
+                ) : null}
+                {errors.form ? (
+                  <Text style={styles.errorText}>{errors.form}</Text>
+                ) : null}
 
                 {/* Confirm Button */}
                 <TouchableOpacity
-                  style={styles.button}
+                  style={[
+                    styles.primaryButton,
+                    loading && styles.primaryButtonDisabled,
+                  ]}
                   onPress={handleConfirmReset}
                   disabled={loading}
                 >
-                  <Text style={styles.buttonText}>
-                    {loading ? 'Submitting...' : 'Reset Password'}
-                  </Text>
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <View style={styles.primaryContent}>
+                      <Ionicons name="key-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryText}>Reset Password</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </>
             )}
 
             {/* Back to Login */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                marginTop: 20,
-              }}
-            >
-              <Text style={{ color: '#666' }}>Remembered your password? </Text>
+            <View style={styles.linkRow}>
+              <Text style={styles.linkMuted}>Remembered your password? </Text>
               <TouchableOpacity onPress={() => router.push('/account-login')}>
-                <Text style={{ color: '#FF8C00', fontFamily: 'Roboto_700Bold' }}>
-                  Login
-                </Text>
+                <Text style={styles.linkStrong}>Login</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -210,60 +372,109 @@ const styles = StyleSheet.create({
   background: { flex: 1 },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 25,
-    paddingVertical: 40,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
   },
-  container: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  container: { alignItems: 'center', justifyContent: 'flex-start', flex: 1 },
+  logo: { width: 170, height: 170, marginTop: 24, marginBottom: 8 },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
   title: {
     fontSize: 28,
     fontFamily: 'Roboto_900Black',
     color: '#333',
-    marginBottom: 6,
+    marginBottom: 2,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+    textAlign: 'left',
     fontFamily: 'Roboto_400Regular',
-    color: '#555',
-    marginBottom: 20,
-    textAlign: 'center',
   },
   card: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 20,
-    padding: 25,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 24,
+    padding: 22,
+    elevation: 4,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,140,0,0.12)',
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    backgroundColor: '#F5F5F5',
+    borderColor: '#F3D6B7',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    marginBottom: 15,
+    backgroundColor: '#FFF7ED',
+  },
+  inputWrapperFocused: {
+    borderColor: '#F97316',
+    backgroundColor: '#FFF3E4',
+  },
+  inputWrapperError: {
+    borderColor: '#EF4444',
   },
   input: {
     flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 5,
     fontSize: 16,
     color: '#333',
     fontFamily: 'Roboto_400Regular',
   },
-  errorText: { color: 'red', marginBottom: 5, marginLeft: 5 },
-  button: {
+  errorText: {
+    color: '#DC2626',
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    marginLeft: 5,
+    fontSize: 13,
+  },
+  primaryButton: {
     backgroundColor: '#FF8C00',
     paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 10,
+    borderRadius: 14,
     alignItems: 'center',
+    marginVertical: 10,
   },
-  buttonText: { color: '#fff', fontFamily: 'Roboto_700Bold', fontSize: 16 },
+  primaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  primaryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryText: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    marginLeft: 8,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  linkMuted: {
+    color: '#666',
+    fontSize: 14,
+    fontFamily: 'Roboto_400Regular',
+  },
+  linkStrong: {
+    color: '#FF8C00',
+    fontFamily: 'Roboto_700Bold',
+    fontSize: 14,
+  },
 });

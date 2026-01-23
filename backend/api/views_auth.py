@@ -6,6 +6,7 @@ import os
 import logging
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from django.db import connection
@@ -16,6 +17,56 @@ import secrets
 import requests as _requests
 
 logger = logging.getLogger(__name__)
+INVALID_AUTH_MESSAGE = "Invalid email and password"
+REJECTED_LOGIN_MESSAGE = (
+    "Your account request was rejected. Please contact the admin."
+)
+
+
+def _is_rejected_email(email: str) -> bool:
+    if not email:
+        return False
+    try:
+        from .models import AuditLog
+
+        return AuditLog.objects.filter(
+            meta__verificationStatus="rejected",
+            meta__targetEmail=email,
+        ).exists()
+    except Exception:
+        return False
+
+
+def _rejected_login_response():
+    return JsonResponse(
+        {
+            "success": False,
+            "rejected": True,
+            "status": "rejected",
+            "message": REJECTED_LOGIN_MESSAGE,
+        }
+    )
+
+
+def _no_show_lock_response(locked_until):
+    unlock_at = None
+    try:
+        unlock_at = locked_until.isoformat() if locked_until else None
+    except Exception:
+        unlock_at = None
+    return JsonResponse(
+        {
+            "success": False,
+            "message": (
+                "Your account is temporarily locked for violating the pickup policy. "
+                "You missed 3 pickup orders without showing up and paying. "
+                "Please try again later."
+            ),
+            "reason": "no_show_lock",
+            "unlockAt": unlock_at,
+        },
+        status=403,
+    )
 
 
 def _wants_cookie_auth(request, data=None):
@@ -31,6 +82,24 @@ def _wants_cookie_auth(request, data=None):
             or ""
         )
         if str(mode).lower() == "cookie":
+            return True
+    return False
+
+
+def _wants_auth_optional(request, data=None):
+    header_mode = (request.META.get("HTTP_X_AUTH_OPTIONAL", "") or "").lower()
+    if header_mode in {"1", "true", "yes", "on"}:
+        return True
+    query_mode = (request.GET.get("auth_optional") or request.GET.get("silent") or "").lower()
+    if query_mode in {"1", "true", "yes", "on"}:
+        return True
+    if data and isinstance(data, dict):
+        mode = data.get("authOptional")
+        if mode is None:
+            mode = data.get("auth_optional")
+        if mode is None:
+            mode = data.get("silent")
+        if str(mode).lower() in {"1", "true", "yes", "on"}:
             return True
     return False
 
@@ -58,6 +127,7 @@ from .views_common import (
     _revoke_all_refresh_tokens_mem,
     _issue_verify_token_from_db,
     _issue_verify_token_from_dict,
+    _maybe_unlock_no_show_user,
 )
 from .utils_audit import record_audit
 from .utils_login_otp import (
@@ -197,7 +267,7 @@ def auth_login(request):
             )
         except Exception:
             pass
-        return JsonResponse({"success": False, "message": "Invalid email or password."}, status=401)
+        return JsonResponse({"success": False, "message": INVALID_AUTH_MESSAGE}, status=401)
 
     # Try DB first
     user_exists = False
@@ -208,9 +278,23 @@ def auth_login(request):
         if db_user:
             user_exists = True
         if db_user and db_user.password_hash and password and check_password(password, db_user.password_hash):
+            locked_until = _maybe_unlock_no_show_user(db_user)
             status_l = (db_user.status or "").lower()
             safe_user = _safe_user_from_db(db_user)
             # Block deactivated accounts
+            if locked_until:
+                try:
+                    record_audit(
+                        request,
+                        user=db_user,
+                        type="security",
+                        action="Login blocked (no-show lock)",
+                        details="Password login",
+                        severity="warning",
+                    )
+                except Exception:
+                    pass
+                return _no_show_lock_response(locked_until)
             if status_l == "deactivated":
                 try:
                     record_audit(
@@ -232,6 +316,12 @@ def auth_login(request):
                 )
             # Pending or other non-active states: return pending without issuing tokens
             if status_l != "active":
+                try:
+                    ar = getattr(db_user, "access_request", None)
+                    if ar and ar.status == "rejected":
+                        return _rejected_login_response()
+                except Exception:
+                    pass
                 try:
                     vtok = _issue_verify_token_from_db(db_user)
                 except Exception:
@@ -389,6 +479,8 @@ def auth_login(request):
         return resp
 
     # Record failed attempt and maybe lock
+    if _is_rejected_email(email):
+        return _rejected_login_response()
     locked, retry_after = _lockout_check_and_touch(email, ip, success=False)
     if locked:
         try:
@@ -419,7 +511,7 @@ def auth_login(request):
     except Exception:
         pass
     return JsonResponse(
-        {"success": False, "message": "Invalid email or password."},
+        {"success": False, "message": INVALID_AUTH_MESSAGE},
         status=401,
     )
 
@@ -461,7 +553,10 @@ def auth_login_verify_otp(request):
         return JsonResponse({"success": False, "message": message or "Invalid code."}, status=401)
 
     db_user = otp.user
+    locked_until = _maybe_unlock_no_show_user(db_user)
     status_l = (getattr(db_user, "status", "") or "").lower()
+    if locked_until:
+        return _no_show_lock_response(locked_until)
     if status_l == "deactivated":
         return JsonResponse(
             {
@@ -644,17 +739,46 @@ def auth_logout(request):
     return resp
 
 
+@ensure_csrf_cookie
 @require_http_methods(["GET"]) 
 def auth_me(request):
+    optional = _wants_auth_optional(request)
     auth = request.META.get("HTTP_AUTHORIZATION", "")
     if not auth.startswith("Bearer "):
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "missing_token",
+                    "message": "Missing token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Missing token"}, status=401)
     token = auth.split(" ", 1)[1].strip()
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "token_expired",
+                    "message": "Token expired",
+                }
+            )
         return JsonResponse({"success": False, "message": "Token expired"}, status=401)
     except Exception:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "invalid_token",
+                    "message": "Invalid token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Invalid token"}, status=401)
 
     user_id = str(payload.get("sub") or "")
@@ -668,6 +792,15 @@ def auth_me(request):
         if not u and email:
             u = AppUser.objects.filter(email=email).first()
         if not u:
+            if optional:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "authenticated": False,
+                        "reason": "user_not_found",
+                        "message": "User not found",
+                    }
+                )
             raise OperationalError("not found")
         return JsonResponse({"success": True, "user": _safe_user_from_db(u)})
     except (OperationalError, ProgrammingError):
@@ -682,6 +815,15 @@ def auth_me(request):
     if not user and user_id:
         user = next((x for x in USERS if str(x.get("id")) == user_id), None)
     if not user:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "authenticated": False,
+                    "reason": "user_not_found",
+                    "message": "User not found",
+                }
+            )
         return JsonResponse({"success": False, "message": "User not found"}, status=404)
     safe_user = {k: v for k, v in user.items() if k != "password"}
     return JsonResponse({"success": True, "user": safe_user})
@@ -759,6 +901,8 @@ def auth_google(request):
     # Community best-practice: require verified email claim for Google sign-in
     if idinfo.get("email_verified") is False:
         return JsonResponse({"success": False, "message": "Google email not verified"}, status=401)
+    if _is_rejected_email(email):
+        return _rejected_login_response()
 
     try:
         from .models import AppUser, AccessRequest
@@ -789,7 +933,21 @@ def auth_google(request):
             pass
 
         safe_user = _safe_user_from_db(db_user)
+        locked_until = _maybe_unlock_no_show_user(db_user)
         status_l = (db_user.status or "").lower()
+        if locked_until:
+            try:
+                record_audit(
+                    request,
+                    user=db_user,
+                    type="security",
+                    action="Login blocked (no-show lock)",
+                    details="Google login",
+                    severity="warning",
+                )
+            except Exception:
+                pass
+            return _no_show_lock_response(locked_until)
         if status_l == "deactivated":
             try:
                 record_audit(
@@ -1331,10 +1489,19 @@ def refresh_token(request):
     except Exception:
         data = {}
     return_tokens = not _wants_cookie_auth(request, data)
+    optional = _wants_auth_optional(request, data)
     rtoken = (data.get("refreshToken") or "").strip()
     if not rtoken:
         rtoken = _get_refresh_token_from_request(request)
     if not rtoken:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "reason": "missing_refresh_token",
+                    "message": "Missing refresh token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Missing refresh token"}, status=400)
 
     try:
@@ -1343,9 +1510,20 @@ def refresh_token(request):
         rhash = hashlib.sha256(rtoken.encode("utf-8")).hexdigest()
         rt = RefreshToken.objects.select_related("user").filter(token_hash=rhash).first()
         if not rt or not rt.is_active:
+            if optional:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "reason": "invalid_refresh_token",
+                        "message": "Invalid or expired refresh token",
+                    }
+                )
             return JsonResponse({"success": False, "message": "Invalid or expired refresh token"}, status=401)
         user = rt.user
+        locked_until = _maybe_unlock_no_show_user(user)
         status_l = (user.status or "").lower()
+        if locked_until:
+            return _no_show_lock_response(locked_until)
         if status_l == "deactivated":
             return JsonResponse({
                 "success": False,
@@ -1389,6 +1567,14 @@ def refresh_token(request):
 
     out = _rotate_refresh_token_mem(rtoken, request=request)
     if not out:
+        if optional:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "reason": "invalid_refresh_token",
+                    "message": "Invalid or expired refresh token",
+                }
+            )
         return JsonResponse({"success": False, "message": "Invalid or expired refresh token"}, status=401)
     try:
         # We don't have DB user here; capture via token decode in _rotate helper is absent

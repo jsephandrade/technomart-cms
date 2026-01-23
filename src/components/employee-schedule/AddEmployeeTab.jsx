@@ -10,6 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Archive,
   Check,
   ChevronsUpDown,
@@ -22,6 +29,12 @@ import {
 import { cn } from '@/lib/utils';
 import { useUsers } from '@/hooks/useUsers';
 import { useAuth } from '@/components/AuthContext';
+import {
+  CANTEEN_ROLE_OPTIONS,
+  mergeRoleOptions,
+  normalizeRoleValue,
+  resolveRoleLabel,
+} from '@/lib/canteenRoles';
 import {
   Popover,
   PopoverContent,
@@ -114,6 +127,17 @@ const isStaffEligible = (user) => {
   return values.some((value) => value === 'staff' || value === 'manager');
 };
 
+const isActiveUser = (user) => {
+  const status =
+    user?.status ||
+    user?.statusName ||
+    user?.status_name ||
+    user?.userStatus ||
+    user?.user_status ||
+    '';
+  return String(status).trim().toLowerCase() === 'active';
+};
+
 const AddEmployeeTab = ({
   quickAdd,
   setQuickAdd,
@@ -128,8 +152,17 @@ const AddEmployeeTab = ({
   onArchiveEmployee,
   onOpenManageEmployees,
   onOpenArchivedEmployees,
+  getRoleCapacityForRole = () => null,
 }) => {
-  const { users = [] } = useUsers();
+  const userQuery = useMemo(
+    () => ({
+      context: 'employee-schedule',
+    }),
+    []
+  );
+  const { users = [] } = useUsers(userQuery, {
+    autoFetch: canManage,
+  });
   const { user: currentUser } = useAuth();
   const [copyFromOpen, setCopyFromOpen] = useState(false);
   const [copyFromSelection, setCopyFromSelection] = useState('');
@@ -176,19 +209,50 @@ const AddEmployeeTab = ({
     return Array.from(map.values());
   }, [users, currentUser]);
   const staffUsers = useMemo(
-    () => appUsers.filter((user) => isStaffEligible(user)),
+    () =>
+      appUsers.filter((user) => isStaffEligible(user) && isActiveUser(user)),
     [appUsers]
+  );
+  const roleOptions = useMemo(() => {
+    const employeeRoles = employees.map((emp) => emp.position);
+    const staffRoles = staffUsers.map(
+      (staff) => staff.role || resolvePrimaryRole(staff)
+    );
+    return mergeRoleOptions(CANTEEN_ROLE_OPTIONS, [
+      ...employeeRoles,
+      ...staffRoles,
+      quickAdd.position,
+    ]);
+  }, [employees, staffUsers, quickAdd.position]);
+  const normalizedRepeatDays = useMemo(() => {
+    if (!Array.isArray(quickAdd.repeatDays)) return [];
+    return Array.from(
+      new Set(quickAdd.repeatDays.filter((day) => Boolean(day)))
+    );
+  }, [quickAdd.repeatDays]);
+
+  const selectedRoleKey = useMemo(() => {
+    const roleLabel =
+      resolveRoleLabel(quickAdd.position, roleOptions) || quickAdd.position;
+    return normalizeRoleValue(roleLabel || '');
+  }, [quickAdd.position, roleOptions]);
+
+  const availableRepeatDays = useMemo(() => {
+    if (!selectedRoleKey) return normalizedRepeatDays;
+    return normalizedRepeatDays.filter((day) => {
+      const status = getRoleCapacityForRole(day, selectedRoleKey)?.status;
+      return status !== 'full';
+    });
+  }, [normalizedRepeatDays, selectedRoleKey, getRoleCapacityForRole]);
+
+  const selectedRepeatDaysSet = useMemo(
+    () => new Set(availableRepeatDays),
+    [availableRepeatDays]
   );
   const normalizedTeamSearch = teamSearch.trim().toLowerCase();
   const filteredEmployees = normalizedTeamSearch
     ? employees.filter((emp) => {
-        const haystack = [
-          emp.name,
-          emp.position,
-          emp.contact,
-          emp.status,
-          emp.hourlyRate != null ? String(emp.hourlyRate) : '',
-        ]
+        const haystack = [emp.name, emp.position, emp.contact, emp.status]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
@@ -200,14 +264,6 @@ const AddEmployeeTab = ({
       return 'Start with blank profile';
     }
     const [type, id] = copyFromSelection.split(':');
-    if (type === 'employee') {
-      const match = employees.find((emp) => emp.id === id);
-      if (match) {
-        return `${match.name || 'Unnamed employee'} · ${
-          match.position || 'No role'
-        }`;
-      }
-    }
     if (type === 'user') {
       const match = staffUsers.find((user) => user.id === id);
       if (match) {
@@ -216,7 +272,7 @@ const AddEmployeeTab = ({
       }
     }
     return 'Start with blank profile';
-  }, [copyFromSelection, employees, staffUsers]);
+  }, [copyFromSelection, staffUsers]);
 
   const handleCopyFromChange = (value) => {
     setCopyFromSelection(value);
@@ -225,27 +281,25 @@ const AddEmployeeTab = ({
         ...prev,
         name: '',
         position: '',
+        hireDate: '',
+        userId: '',
+        contact: '',
       }));
       return;
     }
     const [type, id] = value.split(':');
-    if (type === 'employee') {
-      const match = employees.find((emp) => emp.id === id);
-      if (match) {
-        setQuickAdd((prev) => ({
-          ...prev,
-          name: match.name || prev.name,
-          position: match.position || prev.position,
-        }));
-      }
-    } else if (type === 'user') {
+    if (type === 'user') {
       const match = staffUsers.find((user) => user.id === id);
       if (match) {
         const roleLabel = match.role || resolvePrimaryRole(match);
         setQuickAdd((prev) => ({
           ...prev,
           name: match.name || prev.name,
-          position: roleLabel || match.role || prev.position,
+          userId: match.id || prev.userId,
+          contact: match.email || prev.contact || '',
+          position:
+            resolveRoleLabel(roleLabel || match.role, roleOptions) ||
+            prev.position,
         }));
       }
     }
@@ -311,7 +365,7 @@ const AddEmployeeTab = ({
                   align="start"
                 >
                   <Command>
-                    <CommandInput placeholder="Search employees or staff..." />
+                    <CommandInput placeholder="Search staff..." />
                     <CommandList className="max-h-64 overflow-y-auto">
                       <CommandEmpty>No matches found.</CommandEmpty>
                       <CommandGroup heading="Quick start">
@@ -331,55 +385,6 @@ const AddEmployeeTab = ({
                           />
                           Start with blank profile
                         </CommandItem>
-                      </CommandGroup>
-                      <CommandSeparator />
-                      <CommandGroup
-                        heading={`Existing employees (${employees.length})`}
-                      >
-                        {employees.length ? (
-                          employees.map((emp) => {
-                            const value = `employee:${emp.id}`;
-                            const selected = copyFromSelection === value;
-                            return (
-                              <CommandItem
-                                key={emp.id}
-                                value={[
-                                  emp.name,
-                                  emp.position,
-                                  emp.contact,
-                                  emp.status,
-                                  emp.hourlyRate != null
-                                    ? String(emp.hourlyRate)
-                                    : '',
-                                ]
-                                  .filter(Boolean)
-                                  .join(' ')}
-                                onSelect={() => {
-                                  handleCopyFromChange(value);
-                                  setCopyFromOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    'mr-2 h-4 w-4',
-                                    selected ? 'opacity-100' : 'opacity-0'
-                                  )}
-                                  aria-hidden="true"
-                                />
-                                <span className="truncate">
-                                  {emp.name || 'Unnamed employee'}
-                                </span>
-                                <span className="ml-auto text-xs text-muted-foreground">
-                                  {emp.position || 'No role'}
-                                </span>
-                              </CommandItem>
-                            );
-                          })
-                        ) : (
-                          <CommandItem disabled>
-                            No employees available
-                          </CommandItem>
-                        )}
                       </CommandGroup>
                       <CommandSeparator />
                       <CommandGroup
@@ -430,27 +435,42 @@ const AddEmployeeTab = ({
               </Popover>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">Name *</Label>
+              <Label className="text-xs uppercase tracking-wide">
+                Hire date
+              </Label>
               <Input
-                value={quickAdd.name}
-                onChange={(e) =>
-                  setQuickAdd((prev) => ({ ...prev, name: e.target.value }))
-                }
-                placeholder="Jane Smith"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs uppercase tracking-wide">Role</Label>
-              <Input
-                value={quickAdd.position}
+                type="date"
+                value={quickAdd.hireDate || ''}
                 onChange={(e) =>
                   setQuickAdd((prev) => ({
                     ...prev,
-                    position: e.target.value,
+                    hireDate: e.target.value,
                   }))
                 }
-                placeholder="Barista"
               />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs uppercase tracking-wide">Role *</Label>
+              <Select
+                value={resolveRoleLabel(quickAdd.position, roleOptions)}
+                onValueChange={(value) =>
+                  setQuickAdd((prev) => ({
+                    ...prev,
+                    position: value,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
@@ -460,9 +480,14 @@ const AddEmployeeTab = ({
                 {(daysOfWeek || [])
                   .filter((day) => String(day || '').toLowerCase() !== 'sunday')
                   .map((day) => {
-                    const selected =
-                      Array.isArray(quickAdd.repeatDays) &&
-                      quickAdd.repeatDays.includes(day);
+                    const capacity = selectedRoleKey
+                      ? getRoleCapacityForRole(day, selectedRoleKey)
+                      : null;
+                    const isDayAtCapacity = capacity?.status === 'full';
+                    const buttonTitle = isDayAtCapacity
+                      ? `${capacity?.roleLabel || 'Role'} capacity reached on ${day}`
+                      : undefined;
+                    const isSelected = selectedRepeatDaysSet.has(day);
                     return (
                       <Button
                         type="button"
@@ -470,12 +495,15 @@ const AddEmployeeTab = ({
                         variant="outline"
                         className={cn(
                           'h-8 w-full rounded-full px-0 text-[11px] font-semibold uppercase',
-                          selected
+                          isSelected
                             ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
                             : 'border-border/60 bg-background text-foreground hover:bg-muted/40'
                         )}
                         key={day}
+                        title={buttonTitle}
+                        disabled={isDayAtCapacity}
                         onClick={() => {
+                          if (isDayAtCapacity) return;
                           setQuickAdd((prev) => {
                             const nextDays = new Set(prev.repeatDays || []);
                             if (nextDays.has(day)) {
@@ -625,10 +653,6 @@ const AddEmployeeTab = ({
                   : 'Active';
                 const initials = getInitials(emp.name || '');
                 const roleLabel = String(emp.position || 'No role');
-                const hourlyRate = Number(emp.hourlyRate ?? 0);
-                const hourlyRateLabel = Number.isFinite(hourlyRate)
-                  ? hourlyRate.toFixed(2)
-                  : '0.00';
                 const contactLabel = emp.contact || 'N/A';
                 return (
                   <div
@@ -660,11 +684,11 @@ const AddEmployeeTab = ({
                           </span>
                           <span className="text-muted-foreground/60">|</span>
                           <span className="whitespace-nowrap">
-                            Hourly rate: {hourlyRateLabel}
+                            Contact: {contactLabel}
                           </span>
                           <span className="text-muted-foreground/60">|</span>
                           <span className="whitespace-nowrap">
-                            Contact: {contactLabel}
+                            Hire date: {emp.hireDate || 'Not set'}
                           </span>
                         </div>
                       </div>

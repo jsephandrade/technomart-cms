@@ -1,10 +1,23 @@
 import React, { useMemo, useState } from 'react';
 import UserManagementCard from '@/components/users/UserManagementCard';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarRange, ChevronDown } from 'lucide-react';
+import {
+  CalendarRange,
+  ChevronDown,
+  MoreHorizontal,
+  Trash2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const DEFAULT_DAY_OPTIONS = [
   'Monday',
@@ -91,9 +104,14 @@ const WeeklyScheduleCard = ({
   employeeDirectory,
   schedule = [],
   overview,
-  overviewLoading = false,
   scheduleLoading = false,
   filters,
+  onOpenAddSchedule,
+  onOpenManageEmployees,
+  onDeleteSchedule,
+  onClearAllSchedules,
+  onEditDaySchedule,
+  canManage = false,
 }) => {
   const filteredDays = daysOfWeek.length ? daysOfWeek : DEFAULT_DAY_OPTIONS;
   const selectableDays = (filteredDays || []).filter(
@@ -238,6 +256,8 @@ const WeeklyScheduleCard = ({
     const employee =
       entry?.employee || employeeMap.get(String(entry?.employeeId));
     const initials = getInitials(employee?.name || entry?.employeeName);
+    const canDelete =
+      canManage && typeof onDeleteSchedule === 'function' && entry;
 
     return (
       <div
@@ -267,9 +287,23 @@ const WeeklyScheduleCard = ({
                   'Team member'}
               </p>
             </div>
-            <Badge variant="outline" className="text-[11px]">
-              {formatDurationLabel(entry?.startTime, entry?.endTime)}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[11px]">
+                {formatDurationLabel(entry?.startTime, entry?.endTime)}
+              </Badge>
+              {canDelete ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={() => onDeleteSchedule(entry)}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Remove shift</span>
+                </Button>
+              ) : null}
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             {entry?.startTime} - {entry?.endTime}
@@ -286,6 +320,43 @@ const WeeklyScheduleCard = ({
         titleStyle="accent"
         titleIcon={CalendarRange}
         description="Plan coverage, assign teammates, and publish this week's roster from a single view."
+        headerActions={
+          canManage ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 w-9 rounded-full p-0"
+                >
+                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Show roster actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onOpenManageEmployees}>
+                  Edit Employee
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenAddSchedule}>
+                  Add schedule
+                </DropdownMenuItem>
+                {typeof onEditDaySchedule === 'function' ? (
+                  <DropdownMenuItem onClick={onEditDaySchedule}>
+                    Edit day times
+                  </DropdownMenuItem>
+                ) : null}
+                {typeof onClearAllSchedules === 'function' ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onClearAllSchedules}>
+                      Clear roster
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null
+        }
         decor={
           <div
             className="pointer-events-none absolute -right-16 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl"
@@ -352,7 +423,7 @@ const WeeklyScheduleCard = ({
                     </div>
                   </div>
                   {!isCollapsed ? (
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       {entries.length ? (
                         entries.map((entry) => renderShiftCard(entry))
                       ) : (

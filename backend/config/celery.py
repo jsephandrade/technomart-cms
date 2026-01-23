@@ -42,6 +42,18 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.auto_advance_orders',
         'schedule': 10.0,  # Every 10 seconds
     },
+    'auto-expire-no-show-orders': {
+        'task': 'api.tasks.auto_expire_no_show_orders',
+        'schedule': 60.0,  # Every 60 seconds
+    },
+    'auto-unlock-no-show-accounts': {
+        'task': 'api.tasks.auto_unlock_no_show_accounts',
+        'schedule': 300.0,  # Every 5 minutes
+    },
+    'auto-mark-absent-attendance': {
+        'task': 'api.tasks.auto_mark_absent_attendance',
+        'schedule': 300.0,  # Every 5 minutes
+    },
     'cleanup-old-notifications': {
         'task': 'api.tasks.cleanup_old_notifications',
         'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM

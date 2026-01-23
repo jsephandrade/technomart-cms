@@ -29,29 +29,13 @@ export const useFeedback = () => {
       setFeedback((prev) =>
         prev.map((item) => (item.id === id ? updatedFeedback : item))
       );
-      toast.success('Feedback marked as resolved');
+      toast.success('Feedback status updated');
       return updatedFeedback;
     } catch (err) {
       const errorMessage =
         err instanceof Error
           ? err.message
           : 'Failed to mark feedback as resolved';
-      toast.error(errorMessage);
-      throw err;
-    }
-  };
-
-  const updateFeedback = async (id, updates) => {
-    try {
-      const updatedFeedback = await feedbackService.updateFeedback(id, updates);
-      setFeedback((prev) =>
-        prev.map((item) => (item.id === id ? updatedFeedback : item))
-      );
-      toast.success('Feedback updated successfully');
-      return updatedFeedback;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to update feedback';
       toast.error(errorMessage);
       throw err;
     }
@@ -80,7 +64,6 @@ export const useFeedback = () => {
     loading,
     error,
     markResolved,
-    updateFeedback,
     createFeedback,
     refetch: fetchFeedback,
   };

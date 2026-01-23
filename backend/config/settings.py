@@ -16,9 +16,15 @@ if load_dotenv:
         pass
 
 # Core settings
-DEBUG = os.getenv("DJANGO_DEBUG", "1") in {"1", "true", "True"}
+DEBUG = os.getenv("DJANGO_DEBUG", "0") in {"1", "true", "True"}
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-secret-key")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(
+    os.getenv("DJANGO_DATA_UPLOAD_MAX_MEMORY_SIZE", str(15 * 1024 * 1024))
+)
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(
+    os.getenv("DJANGO_FILE_UPLOAD_MAX_MEMORY_SIZE", str(15 * 1024 * 1024))
+)
 
 # Minimal apps to avoid DB usage
 INSTALLED_APPS = [
@@ -67,9 +73,11 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "api.middleware.CookieAuthMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "api.middleware.RequestIdMiddleware",
     # Gate API routes for pending/unauthorized users (JWT-aware)
@@ -146,6 +154,25 @@ REST_FRAMEWORK = {
 ORDER_QUEUE_PUBLIC = (
     os.getenv("ORDER_QUEUE_PUBLIC", "0").lower() in {"1", "true", "yes", "on"}
     or DEBUG
+)
+
+ORDER_PICKUP_WINDOW_MINUTES = max(
+    1, int(os.getenv("ORDER_PICKUP_WINDOW_MINUTES", "30") or 30)
+)
+ORDER_PICKUP_GRACE_MINUTES = max(
+    0, int(os.getenv("ORDER_PICKUP_GRACE_MINUTES", "15") or 15)
+)
+ORDER_NO_SHOW_LIMIT = max(1, int(os.getenv("ORDER_NO_SHOW_LIMIT", "3") or 3))
+ORDER_NO_SHOW_LOCK_HOURS = max(1, int(os.getenv("ORDER_NO_SHOW_LOCK_HOURS", "24") or 24))
+
+# Face login tuning
+FACE_LOGIN_THRESHOLD = float(os.getenv("FACE_LOGIN_THRESHOLD", "0.35") or 0.35)
+FACE_LOGIN_REQUIRED_FRAMES = max(
+    1, int(os.getenv("FACE_LOGIN_REQUIRED_FRAMES", "3") or 3)
+)
+FACE_LOGIN_MAX_FRAMES = max(
+    FACE_LOGIN_REQUIRED_FRAMES,
+    int(os.getenv("FACE_LOGIN_MAX_FRAMES", "5") or 5),
 )
 
 # Password validation
@@ -255,3 +282,7 @@ SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "0" if DEBUG else "1") in
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "0" if DEBUG else "1") in {"1","true","True","yes","on"}
 CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "0" if DEBUG else "1") in {"1","true","True","yes","on"}
 CSRF_TRUSTED_ORIGINS = [o for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+if DEBUG:
+    for origin in CORS_ALLOWED_ORIGINS:
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)

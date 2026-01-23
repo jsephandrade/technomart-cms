@@ -36,6 +36,31 @@ def _serialize_mem(e):
         "createdAt": e.get("createdAt") or dj_timezone.now().isoformat(),
     }
 
+ADMIN_NOTIFICATION_EVENT_TYPES = {
+    "new_user_registration",
+    "role_changed",
+    "verification_submitted",
+    "verification_approved",
+    "verification_rejected",
+    "system_maintenance",
+    "backup_completed",
+    "backup_failed",
+    "test_notification",
+}
+
+def _actor_role(actor):
+    try:
+        role = getattr(actor, "role", "")
+    except Exception:
+        role = ""
+    if not role and isinstance(actor, dict):
+        role = actor.get("role") or ""
+    return str(role or "").lower()
+
+def _wants_admin_scope(request, actor):
+    scope = (request.GET.get("scope") or request.GET.get("category") or "").lower()
+    return scope == "admin" and _actor_role(actor) == "admin"
+
 
 @require_http_methods(["GET", "POST"])  # list or create
 @rate_limit(limit=120, window_seconds=60)
@@ -48,9 +73,19 @@ def notifications(request):
     if request.method == "GET":
         limit = int(request.GET.get("limit") or 50)
         page = int(request.GET.get("page") or 1)
+        read_q = (request.GET.get("read") or "").strip().lower()
+        read_filter = None
+        if read_q in {"true", "1", "yes"}:
+            read_filter = True
+        elif read_q in {"false", "0", "no"}:
+            read_filter = False
         try:
             from .models import Notification
             qs = Notification.objects.filter(user=actor).order_by("-created_at")
+            if read_filter is not None:
+                qs = qs.filter(read=read_filter)
+            if _wants_admin_scope(request, actor):
+                qs = qs.filter(meta__event_type__in=ADMIN_NOTIFICATION_EVENT_TYPES)
             total = qs.count()
             start = max(0, (page - 1) * max(1, limit))
             end = start + max(1, limit)
@@ -68,7 +103,23 @@ def notifications(request):
         except (OperationalError, ProgrammingError):
             pass
         # Memory fallback filtered to actor (email match not stored; show all)
-        items = [_serialize_mem(x) for x in sorted(NOTIFS_MEM, key=lambda y: y.get("createdAt", ""), reverse=True)]
+        mem_items = list(NOTIFS_MEM)
+        if _wants_admin_scope(request, actor):
+            filtered = []
+            for item in mem_items:
+                meta = item.get("meta") or {}
+                event_type = str(meta.get("event_type") or "").lower()
+                if event_type and event_type in ADMIN_NOTIFICATION_EVENT_TYPES:
+                    filtered.append(item)
+            mem_items = filtered
+        if read_filter is not None:
+            mem_items = [
+                item for item in mem_items if bool(item.get("read")) is read_filter
+            ]
+        items = [
+            _serialize_mem(x)
+            for x in sorted(mem_items, key=lambda y: y.get("createdAt", ""), reverse=True)
+        ]
         total = len(items)
         start = max(0, (page - 1) * max(1, limit))
         end = start + max(1, limit)

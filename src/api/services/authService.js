@@ -51,6 +51,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       pending: Boolean(data?.pending ?? false),
+      rejected: Boolean(data?.rejected ?? false),
       user,
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
@@ -97,6 +98,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       pending: Boolean(data?.pending ?? false),
+      rejected: Boolean(data?.rejected ?? false),
       user,
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
@@ -209,6 +211,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       pending: Boolean(data?.pending ?? false),
+      rejected: Boolean(data?.rejected ?? false),
       user,
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
@@ -381,15 +384,22 @@ class AuthService {
     return res?.data || { success: true };
   }
 
-  async me() {
+  async me(options = {}) {
     if (USE_MOCKS) {
       return { success: false };
     }
-    const res = await apiClient.get('/auth/me', { retry: { retries: 1 } });
+    const silent = Boolean(options?.silent);
+    const endpoint = silent ? '/auth/me?silent=1' : '/auth/me';
+    const res = await apiClient.get(endpoint, { retry: { retries: 1 } });
     const data = res?.data || res;
     if (!data) return { success: false };
     if (data?.success === false) {
-      return { success: false, message: data?.message || 'Unauthorized' };
+      return {
+        success: false,
+        message: data?.message || 'Unauthorized',
+        reason: data?.reason || null,
+        authenticated: Boolean(data?.authenticated ?? false),
+      };
     }
     const rawUser = data.user || data;
     const user = {
@@ -405,6 +415,7 @@ class AuthService {
     return {
       success: Boolean(data?.success ?? true),
       user,
+      authenticated: true,
     };
   }
 
@@ -521,7 +532,7 @@ class AuthService {
     return res?.data || res;
   }
 
-  async refreshToken(refreshToken) {
+  async refreshToken(refreshTokenOrOptions) {
     if (USE_MOCKS) {
       await mockDelay(300);
       return {
@@ -530,14 +541,27 @@ class AuthService {
         refreshToken: 'mock-rtok-' + Date.now(),
       };
     }
+    let refreshToken = null;
+    let options = {};
+    if (typeof refreshTokenOrOptions === 'string') {
+      refreshToken = refreshTokenOrOptions;
+    } else if (
+      refreshTokenOrOptions &&
+      typeof refreshTokenOrOptions === 'object'
+    ) {
+      refreshToken = refreshTokenOrOptions.refreshToken || null;
+      options = refreshTokenOrOptions;
+    }
     const payload = { authMode: 'cookie' };
     if (refreshToken) payload.refreshToken = refreshToken;
+    if (options?.silent) payload.silent = true;
     const res = await apiClient.post('/auth/refresh-token', payload);
     const data = res?.data || res;
     return {
       success: Boolean(data?.success ?? true),
       token: data.token || data.accessToken || null,
       refreshToken: data.refreshToken || null,
+      reason: data?.reason || null,
     };
   }
 

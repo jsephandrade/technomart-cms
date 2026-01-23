@@ -4,7 +4,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
@@ -14,12 +14,12 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
-  Legend
+  Legend,
 } from 'recharts';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+const COLORS = ['#0088fe', '#00c49f', '#ffbb28', '#ff8042'];
 
 const PaymentReport = ({ paymentMethodData, payments }) => {
   const getTotalAmount = (status = 'all') => {
@@ -100,9 +100,7 @@ const PaymentReport = ({ paymentMethodData, payments }) => {
         <Card>
           <CardHeader>
             <CardTitle>Payment Method Distribution</CardTitle>
-            <CardDescription>
-              How customers prefer to pay
-            </CardDescription>
+            <CardDescription>How customers prefer to pay</CardDescription>
           </CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -120,7 +118,10 @@ const PaymentReport = ({ paymentMethodData, payments }) => {
                   dataKey="value"
                 >
                   {paymentMethodData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -157,9 +158,9 @@ const PaymentReport = ({ paymentMethodData, payments }) => {
                   ₱{getTotalAmount('refunded')}
                 </span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border-t-2 border-blue-200">
+              <div className="flex justify-between items-center p-3 bg-primary/5 rounded-lg border-t-2 border-primary/20">
                 <span className="font-bold">Total Revenue</span>
-                <span className="text-blue-600 font-bold text-lg">
+                <span className="text-primary font-bold text-lg">
                   ₱{getTotalAmount('all')}
                 </span>
               </div>

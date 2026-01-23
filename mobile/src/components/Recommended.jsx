@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Dimensions,
@@ -6,6 +12,7 @@ import {
   Image,
   Modal,
   Pressable,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -16,30 +23,117 @@ import {
 } from '@expo-google-fonts/roboto';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../styles/cn';
+import { resolveImageSource } from '../utils/image';
+import { useCart } from '../context/CartContext';
+import { getPaxRemaining, isPaxAvailable } from '../utils/pax';
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = Math.min(width * 0.78, 320);
+const CARD_HEIGHT = Math.round(CARD_WIDTH * 0.62);
+const CARD_SPACING = 16;
+const COLLAGE_GAP = 6;
 
 const formatCurrency = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return 'PHP --';
+    return '\u20b1 --';
   }
-  return `PHP ${numeric.toFixed(2)}`;
+  return `\u20b1 ${numeric.toFixed(2)}`;
 };
 
-const imageSource = (image) => {
-  if (!image) {
-    return require('../../assets/reco1.jpg');
+const resolveItemImage = (item) => {
+  if (!item) return '';
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.thumbnail,
+    item?.image?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
   }
-  if (typeof image === 'string') {
-    return { uri: image };
-  }
-  return image;
+  return '';
 };
 
-export default function Recommended({ items = [] }) {
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboItem = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients = resolveIngredientEntries(item);
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveItemImage(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  return sources.filter((src, index, arr) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return arr.indexOf(src) === index;
+  });
+};
+
+export default function Recommended({ items = [], allItems = [] }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [focusedItem, setFocusedItem] = useState(null);
+  const { addToCart } = useCart();
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -49,9 +143,21 @@ export default function Recommended({ items = [] }) {
 
   const [fontsLoaded] = useFonts({ Roboto_400Regular, Roboto_700Bold });
 
+  const imageById = useMemo(() => {
+    const map = new Map();
+    const sourceItems =
+      Array.isArray(allItems) && allItems.length > 0 ? allItems : items;
+    sourceItems.forEach((entry) => {
+      if (!entry || entry.id === undefined || entry.id === null) return;
+      const src = resolveItemImage(entry);
+      if (src) map.set(String(entry.id), src);
+    });
+    return map;
+  }, [allItems, items]);
+
   const data = useMemo(() => {
     return items
-      .filter((entry) => entry && !entry.archived && entry.available !== false)
+      .filter((entry) => entry && !entry.archived && isPaxAvailable(entry))
       .map((item, index) => {
         const ratingValue =
           item.rating != null && Number.isFinite(Number(item.rating))
@@ -62,6 +168,10 @@ export default function Recommended({ items = [] }) {
             ? Number(item.reviews)
             : null;
 
+        const collageSources = isComboItem(item)
+          ? resolveComboImages(item, imageById).slice(0, 3)
+          : [];
+
         return {
           id: item.id || `recommended-${index}`,
           image: item.image || item.thumbnail || null,
@@ -70,9 +180,12 @@ export default function Recommended({ items = [] }) {
           rating: ratingValue,
           reviews: reviewsValue,
           description: item.description || '',
+          paxRemaining: getPaxRemaining(item),
+          source: item,
+          collageSources,
         };
       });
-  }, [items]);
+  }, [imageById, items]);
 
   useEffect(() => {
     if (focusedItem || data.length <= 1) {
@@ -104,6 +217,22 @@ export default function Recommended({ items = [] }) {
       }
     },
     []
+  );
+
+  const handleAddToCart = useCallback(
+    (item) => {
+      if (!item) return;
+      const source = item.source || {};
+      if (!isPaxAvailable(source)) return;
+      addToCart({
+        ...source,
+        id: source.id ?? item.id,
+        name: source.name || item.title || 'Menu Item',
+        price: source.price ?? item.price ?? 0,
+        image: source.image || source.thumbnail || item.image || null,
+      });
+    },
+    [addToCart]
   );
 
   if (!fontsLoaded || data.length === 0) {
@@ -139,11 +268,16 @@ export default function Recommended({ items = [] }) {
   };
 
   return (
-    <View className="mt-4 px-2">
-      <Text className="font-heading text-xl text-neutral-900">
-        Recommended For You
-      </Text>
-      <View className="mt-1 h-1 w-14 rounded-full bg-primary-500" />
+    <View style={styles.section}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.headerTitle}>Recommended For You</Text>
+          <Text style={styles.headerSubtitle}>Handpicked favorites today</Text>
+        </View>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>{data.length} items</Text>
+        </View>
+      </View>
       <FlatList
         ref={flatListRef}
         data={data}
@@ -151,50 +285,112 @@ export default function Recommended({ items = [] }) {
         showsHorizontalScrollIndicator={false}
         pagingEnabled
         snapToAlignment="start"
-        snapToInterval={width * 0.7 + 16}
+        snapToInterval={CARD_WIDTH + CARD_SPACING}
         decelerationRate="fast"
-        contentContainerClassName="px-2 mt-3"
+        contentContainerStyle={styles.listContent}
         onScroll={(e) => {
           const index = Math.round(
-            e.nativeEvent.contentOffset.x / (width * 0.7 + 16)
+            e.nativeEvent.contentOffset.x / (CARD_WIDTH + CARD_SPACING)
           );
           if (Number.isFinite(index)) {
             setActiveIndex(index);
           }
         }}
-        renderItem={({ item }) => (
-          <Pressable onLongPress={() => handleLongPress(item)}>
-            <View
-              className="mx-2 overflow-hidden rounded-2xl shadow-lg"
-              style={{
-                width: width * 0.7,
-                height: width * 0.45,
-                elevation: 5,
-              }} // NativeWind: dynamic card sizing & Android elevation require inline style
+        renderItem={({ item }) => {
+          const showCollage =
+            Array.isArray(item.collageSources) &&
+            item.collageSources.length === 3;
+          return (
+            <Pressable
+              onPress={() => handleAddToCart(item)}
+              onLongPress={() => handleLongPress(item)}
+              style={({ pressed }) => [
+                styles.cardWrap,
+                pressed && styles.cardPressed,
+              ]}
             >
-              <Image
-                source={imageSource(item.image)}
-                className="h-full w-full"
-              />
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.6)']}
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  width: '100%',
-                  height: '40%',
-                }} // NativeWind: expo-linear-gradient requires style prop
-              />
-              <Text className="absolute bottom-3 left-3 font-heading text-lg text-white">
-                {item.title}
-              </Text>
-            </View>
-          </Pressable>
-        )}
+              <View style={styles.card}>
+                {showCollage ? (
+                  <View style={styles.collageGrid}>
+                    <View style={styles.collageMain}>
+                      <Image
+                        source={{ uri: item.collageSources[0] }}
+                        style={styles.collageImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.collageSide}>
+                      <View style={[styles.collageTile, styles.collageTileTop]}>
+                        <Image
+                          source={{ uri: item.collageSources[1] }}
+                          style={styles.collageImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                      <View style={styles.collageTile}>
+                        <Image
+                          source={{ uri: item.collageSources[2] }}
+                          style={styles.collageImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <Image
+                    source={resolveImageSource(item.image)}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
+                )}
+                <LinearGradient
+                  colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
+                  style={styles.cardOverlay}
+                />
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <View style={styles.cardMetaRow}>
+                    <View style={styles.pricePill}>
+                      <Text style={styles.priceText}>
+                        {formatCurrency(item.price)}
+                      </Text>
+                    </View>
+                    {item.paxRemaining !== null && (
+                      <View
+                        style={[
+                          styles.paxPill,
+                          item.paxRemaining === 0 && styles.paxPillEmpty,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.paxPillText,
+                            item.paxRemaining === 0 && styles.paxPillTextEmpty,
+                          ]}
+                        >
+                          {item.paxRemaining} pax
+                        </Text>
+                      </View>
+                    )}
+                    {Number.isFinite(item.rating) ? (
+                      <View style={styles.ratingPill}>
+                        <Text style={styles.ratingText}>
+                          {item.rating.toFixed(1)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            </Pressable>
+          );
+        }}
         keyExtractor={(item) => item.id}
       />
 
-      <View className="flex-row items-center justify-center">
+      <View style={styles.indicatorRow}>
         {Array.from({ length: data.length }).map((_, index) => (
           <View
             key={`indicator-${index}`}
@@ -226,9 +422,10 @@ export default function Recommended({ items = [] }) {
               ]}
             >
               <Image
-                source={imageSource(focusedItem.image)}
+                source={resolveImageSource(focusedItem.image)}
                 className="mb-4 w-full rounded-xl"
                 style={{ height: width * 0.5 }} // NativeWind: dynamic image height requires inline style
+                resizeMode="cover"
               />
               <View className="items-center">
                 <Text className="mb-1.5 font-heading text-xl text-neutral-900">
@@ -258,3 +455,161 @@ export default function Recommended({ items = [] }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  section: {
+    marginTop: 16,
+    paddingHorizontal: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontFamily: 'Roboto_700Bold',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  headerBadge: {
+    backgroundColor: '#FFE7C7',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  headerBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  listContent: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  cardWrap: {
+    marginRight: CARD_SPACING,
+  },
+  cardPressed: {
+    transform: [{ scale: 0.98 }],
+  },
+  card: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  collageGrid: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    padding: COLLAGE_GAP,
+    backgroundColor: '#F7EDE2',
+  },
+  collageMain: {
+    flex: 2,
+    marginRight: COLLAGE_GAP,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  collageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  collageTile: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  collageTileTop: {
+    marginBottom: COLLAGE_GAP,
+  },
+  collageImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F7EDE2',
+  },
+  cardOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+    height: '55%',
+  },
+  cardInfo: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 14,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontFamily: 'Roboto_700Bold',
+    color: '#fff',
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  pricePill: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  priceText: {
+    fontSize: 25,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  paxPill: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(224,242,254,0.9)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  paxPillEmpty: {
+    backgroundColor: 'rgba(254,226,226,0.95)',
+  },
+  paxPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#075985',
+  },
+  paxPillTextEmpty: {
+    color: '#B91C1C',
+  },
+  ratingPill: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(17,24,39,0.75)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  ratingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  indicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

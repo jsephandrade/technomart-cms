@@ -9,10 +9,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, ArrowLeft, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
-import CateringMenuSelection from './CateringMenuSelection';
-import CateringOrderSummary from './CateringOrderSummary';
+import CateringPackageSelection from './CateringPackageSelection';
+import CateringPackageSummary from './CateringPackageSummary';
 import PaymentModal from './PaymentModal';
-import useCateringMenu from '@/hooks/useCateringMenu';
+import useCateringPackages from '@/hooks/useCateringPackages';
 import cateringService from '@/api/services/cateringService';
 import FeaturePanelCard from '@/components/shared/FeaturePanelCard';
 import {
@@ -26,46 +26,32 @@ import {
 const CateringMenuPage = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const { categorizedMenu, isLoading, error, refetch } = useCateringMenu();
+  const { packages, isLoading, error, refetch } = useCateringPackages();
 
   const [event, setEvent] = useState(null);
   const [isLoadingEvent, setIsLoadingEvent] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedItems, setSelectedItems] = useState({});
-  const [discount, setDiscount] = useState('0');
-  const [discountType, setDiscountType] = useState('fixed');
+  const [selectedPackageId, setSelectedPackageId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isMobileOrderSheetOpen, setIsMobileOrderSheetOpen] = useState(false);
   const [isSyncingPayment, setIsSyncingPayment] = useState(false);
   const [hasSavedOrder, setHasSavedOrder] = useState(false);
   const initialSavedOrderRef = useRef(null);
-  const autoSaveTimeout = useRef(null);
-  const savePromiseRef = useRef(null);
-
-  const itemsArray = useMemo(() => {
-    return Object.values(selectedItems);
-  }, [selectedItems]);
+  const selectedPackage = useMemo(() => {
+    if (!selectedPackageId) return null;
+    return (
+      (packages || []).find(
+        (pkg) => String(pkg.id) === String(selectedPackageId)
+      ) || null
+    );
+  }, [packages, selectedPackageId]);
 
   const populateFromEvent = useCallback((eventData) => {
-    if (eventData?.items) {
-      const itemsMap = {};
-      eventData.items.forEach((item) => {
-        itemsMap[item.menuItemId || item.id] = {
-          id: item.menuItemId || item.id,
-          name: item.name,
-          price: item.unitPrice || 0,
-          quantity: item.quantity || 1,
-          category: '',
-        };
-      });
-      setSelectedItems(itemsMap);
-    }
-
-    if (eventData?.orderDiscount !== undefined) {
-      setDiscount(String(eventData.orderDiscount));
-      setDiscountType('fixed');
+    const packageId =
+      eventData?.packageId || eventData?.package_id || eventData?.package;
+    if (packageId) {
+      setSelectedPackageId(packageId);
     }
   }, []);
 
@@ -119,86 +105,22 @@ const CateringMenuPage = () => {
   useEffect(() => {
     initialSavedOrderRef.current = null;
     setHasSavedOrder(false);
+    setSelectedPackageId(null);
   }, [eventId]);
 
-  const handleAddToOrder = useCallback((item) => {
-    setSelectedItems((prev) => {
-      const existing = prev[item.id];
-      if (existing) {
-        return {
-          ...prev,
-          [item.id]: {
-            ...existing,
-            quantity: existing.quantity + 1,
-          },
-        };
-      }
-      return {
-        ...prev,
-        [item.id]: {
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: 1,
-          category: item.category || '',
-        },
-      };
-    });
-  }, []);
-
-  const handleUpdateQuantity = useCallback((itemId, newQuantity) => {
-    setSelectedItems((prev) => {
-      const item = prev[itemId];
-      if (!item) return prev;
-      return {
-        ...prev,
-        [itemId]: {
-          ...item,
-          quantity: Math.max(1, newQuantity),
-        },
-      };
-    });
-  }, []);
-
-  const handleRemoveItem = useCallback((itemId) => {
-    setSelectedItems((prev) => {
-      const newItems = { ...prev };
-      delete newItems[itemId];
-      return newItems;
-    });
-  }, []);
-
-  const handleClearAll = useCallback(() => {
-    setSelectedItems({});
-    setDiscount('0');
-  }, []);
-
-  const handleSaveOrder = useCallback(
-    async ({ withToast = false } = {}) => {
-      if (!eventId) {
-        return;
-      }
-
-      if (savePromiseRef.current) {
-        return savePromiseRef.current;
-      }
-
+  const handleSelectPackage = useCallback(
+    async (pkg) => {
+      if (!eventId || !pkg) return;
+      setSelectedPackageId(pkg.id);
       setIsSaving(true);
-      savePromiseRef.current = (async () => {
-        const items = itemsArray.map((item) => ({
-          menuItemId: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          unitPrice: item.price,
-        }));
-
-        const response = await cateringService.setEventMenuItems(
-          eventId,
-          items
-        );
+      try {
+        const response = await cateringService.setEventPackage(eventId, {
+          packageId: pkg.id,
+          guestCount: event?.guestCount ?? event?.attendees ?? 0,
+        });
 
         if (!response?.success) {
-          throw new Error(response?.message || 'Failed to save menu items');
+          throw new Error(response?.message || 'Failed to save package');
         }
 
         if (response?.data) {
@@ -206,69 +128,28 @@ const CateringMenuPage = () => {
           seedInitialSavedOrder(response.data);
         }
 
-        const discountValue = Number(discount) || 0;
-        if (discountValue !== (event?.orderDiscount || 0)) {
-          await cateringService.updateEvent(eventId, {
-            orderDiscount: discountValue,
-          });
+        toast.success(`Package "${pkg.name}" selected`);
+      } catch (err) {
+        const message =
+          err?.message ||
+          err?.details?.message ||
+          'Failed to save catering package';
+        toast.error(message);
+        try {
+          await fetchEventData({ populate: true });
+        } catch (refreshErr) {
+          // Ignore refresh failures after showing the original error.
         }
-
-        if (withToast) toast.success('Catering order saved automatically');
-      })()
-        .catch(async (err) => {
-          const message =
-            err?.message ||
-            err?.details?.message ||
-            'Failed to save catering order';
-          toast.error(message);
-          if (String(message).toLowerCase().includes('updated once')) {
-            try {
-              await fetchEventData({ populate: true });
-            } catch (refreshErr) {
-              // Ignore refresh failures after showing the original error.
-            }
-          }
-          throw err;
-        })
-        .finally(() => {
-          setIsSaving(false);
-          savePromiseRef.current = null;
-        });
-
-      return savePromiseRef.current;
-    },
-    [
-      eventId,
-      itemsArray,
-      discount,
-      event,
-      fetchEventData,
-      seedInitialSavedOrder,
-    ]
-  );
-
-  useEffect(() => {
-    if (!eventId || isLoadingEvent) return undefined;
-
-    if (autoSaveTimeout.current) {
-      clearTimeout(autoSaveTimeout.current);
-    }
-
-    autoSaveTimeout.current = setTimeout(() => {
-      handleSaveOrder({ withToast: false });
-    }, 800);
-
-    return () => {
-      if (autoSaveTimeout.current) {
-        clearTimeout(autoSaveTimeout.current);
+      } finally {
+        setIsSaving(false);
       }
-    };
-  }, [eventId, selectedItems, discount, isLoadingEvent, handleSaveOrder]);
+    },
+    [eventId, event, fetchEventData, seedInitialSavedOrder]
+  );
 
   const handleOpenPayment = useCallback(async () => {
     setIsSyncingPayment(true);
     try {
-      await handleSaveOrder({ withToast: false });
       await fetchEventData({ populate: true });
       setShowPaymentModal(true);
     } catch (err) {
@@ -278,31 +159,25 @@ const CateringMenuPage = () => {
     } finally {
       setIsSyncingPayment(false);
     }
-  }, [handleSaveOrder, fetchEventData]);
+  }, [fetchEventData]);
 
   const paymentTotals = useMemo(() => {
-    const subtotal = itemsArray.reduce((sum, item) => {
-      const price = Number(item.price) || 0;
-      const quantity = Number(item.quantity) || 0;
-      return sum + price * quantity;
-    }, 0);
-
-    const discountValue = Number(discount) || 0;
-    const discountAmount =
-      discountType === 'percentage'
-        ? (subtotal * discountValue) / 100
-        : discountValue;
-
+    const guestCount = Number(event?.attendees ?? event?.guestCount ?? 0);
+    const packagePrice = Number(
+      selectedPackage?.pricePerPax ?? event?.packagePricePerPax ?? 0
+    );
+    const storedTotal = Number(event?.estimatedTotal ?? event?.total ?? 0);
+    const subtotal = storedTotal > 0 ? storedTotal : packagePrice * guestCount;
+    const discountAmount = Number(event?.orderDiscount ?? 0);
     const total = Math.max(0, subtotal - discountAmount);
-
     return { subtotal, discountAmount, total };
-  }, [itemsArray, discount, discountType]);
+  }, [event, selectedPackage]);
 
-  const itemCount = useMemo(() => {
-    return Object.keys(selectedItems).length;
-  }, [selectedItems]);
-  const hasItems = itemCount > 0;
-  const paymentEnabled = paymentTotals.total > 0 || itemsArray.length > 0;
+  const hasPackage = Boolean(
+    selectedPackageId || event?.packageId || event?.package_id || event?.package
+  );
+  const packageCount = hasPackage ? 1 : 0;
+  const paymentEnabled = paymentTotals.total > 0 && hasPackage;
 
   const handlePaymentSubmit = async (paymentData) => {
     try {
@@ -354,7 +229,7 @@ const CateringMenuPage = () => {
     <div className="grid gap-4">
       {/* Header Card */}
       <FeaturePanelCard
-        title={`Catering Menu - ${event.name || event.clientName}`}
+        title={`Catering Package - ${event.name || event.clientName}`}
         description={`${event.client || event.clientName} • ${event.attendees || event.guestCount} attendees`}
         headerActions={
           <div className="flex items-center gap-2">
@@ -371,15 +246,15 @@ const CateringMenuPage = () => {
               onClick={() => setIsMobileOrderSheetOpen(true)}
               className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
               aria-label={
-                itemCount > 0
-                  ? `View selected items (${itemCount})`
-                  : 'View selected items'
+                packageCount > 0
+                  ? `View package summary (${packageCount})`
+                  : 'View package summary'
               }
             >
               <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-              {itemCount > 0 && (
+              {packageCount > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 min-h-[1.1rem] min-w-[1.1rem] rounded-full bg-destructive px-1 text-[11px] font-semibold leading-[1.1rem] text-destructive-foreground">
-                  {itemCount > 99 ? '99+' : itemCount}
+                  {packageCount > 99 ? '99+' : packageCount}
                 </span>
               )}
             </button>
@@ -388,16 +263,16 @@ const CateringMenuPage = () => {
       >
         <div
           className={`grid grid-cols-1 gap-6 ${
-            hasItems ? 'lg:grid-cols-2' : 'lg:grid-cols-1'
+            hasPackage ? 'lg:grid-cols-2' : 'lg:grid-cols-1'
           }`}
         >
-          {/* Left Panel: Menu Selection */}
+          {/* Left Panel: Package Selection */}
           <div>
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-                  <p className="text-muted-foreground">Loading menu...</p>
+                  <p className="text-muted-foreground">Loading packages...</p>
                 </div>
               </div>
             ) : error ? (
@@ -411,34 +286,28 @@ const CateringMenuPage = () => {
                 </div>
               </div>
             ) : (
-              <CateringMenuSelection
-                categories={categorizedMenu}
-                activeCategory={activeCategory}
-                setActiveCategory={setActiveCategory}
+              <CateringPackageSelection
+                packages={packages}
+                selectedPackageId={selectedPackageId}
+                onSelectPackage={handleSelectPackage}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
-                onAddToOrder={handleAddToOrder}
                 eventName={event.name || event.clientName}
                 attendees={event.attendees || event.guestCount}
+                isSaving={isSaving}
               />
             )}
           </div>
 
-          {/* Right Panel: Order Summary */}
-          {hasItems ? (
+          {/* Right Panel: Package Summary */}
+          {hasPackage ? (
             <div className="hidden lg:block">
-              <CateringOrderSummary
-                selectedItems={selectedItems}
-                onUpdateQuantity={handleUpdateQuantity}
-                onRemoveItem={handleRemoveItem}
-                onClearAll={handleClearAll}
-                discount={discount}
-                discountType={discountType}
-                onDiscountChange={setDiscount}
-                onDiscountTypeChange={setDiscountType}
+              <CateringPackageSummary
+                event={event}
+                selectedPackage={selectedPackage}
                 canProcessPayment={paymentEnabled}
                 onProcessPayment={handleOpenPayment}
-                itemCount={itemCount}
+                isSaving={isSaving}
               />
             </div>
           ) : null}
@@ -456,7 +325,7 @@ const CateringMenuPage = () => {
           <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 pb-3 pt-4">
             <SheetHeader className="space-y-1 text-left">
               <SheetTitle className="text-base font-semibold text-foreground">
-                Catering Order Summary
+                Catering Package Summary
               </SheetTitle>
               <SheetDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {event.name || event.clientName} -{' '}
@@ -465,21 +334,15 @@ const CateringMenuPage = () => {
             </SheetHeader>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-5">
-            <CateringOrderSummary
-              selectedItems={selectedItems}
-              onUpdateQuantity={handleUpdateQuantity}
-              onRemoveItem={handleRemoveItem}
-              onClearAll={handleClearAll}
-              discount={discount}
-              discountType={discountType}
-              onDiscountChange={setDiscount}
-              onDiscountTypeChange={setDiscountType}
+            <CateringPackageSummary
+              event={event}
+              selectedPackage={selectedPackage}
               canProcessPayment={paymentEnabled}
               onProcessPayment={() => {
                 setIsMobileOrderSheetOpen(false);
                 handleOpenPayment();
               }}
-              itemCount={itemCount}
+              isSaving={isSaving}
             />
           </div>
         </SheetContent>

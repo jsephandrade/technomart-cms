@@ -11,6 +11,7 @@ import { useAuth } from '@/components/AuthContext';
 // Lazy load pages for better performance
 const Index = lazy(() => import('../../pages/Index'));
 const LoginPage = lazy(() => import('../../pages/LoginPage'));
+const StillPendingPage = lazy(() => import('../../pages/StillPendingPage'));
 const SignupPage = lazy(() => import('../../pages/SignupPage'));
 const ForgotPasswordPage = lazy(() => import('../../pages/ForgotPasswordPage'));
 const ResetCodePage = lazy(() => import('../../pages/ResetCodePage'));
@@ -24,6 +25,12 @@ const FaceRegistrationPage = lazy(
   () => import('../../pages/FaceRegistrationPage')
 );
 const VerifyIdentityPage = lazy(() => import('../../pages/VerifyIdentityPage'));
+const VerifyIdentityPendingPage = lazy(
+  () => import('../../pages/VerifyIdentityPendingPage')
+);
+const VerifyIdentityRejectedPage = lazy(
+  () => import('../../pages/VerifyIdentityRejectedPage')
+);
 const VerifyEmailPage = lazy(() => import('../../pages/VerifyEmailPage'));
 const NotFound = lazy(() => import('../../pages/NotFound'));
 import HelpPage from '../../pages/HelpPage';
@@ -113,6 +120,7 @@ const AppRoutes = () => {
       const map = {
         '/': 'Dashboard',
         '/login': 'Login',
+        '/still-pending': 'Approval Pending',
         '/signup': 'Sign Up',
         '/forgot-password': 'Forgot Password',
         '/reset-code': 'Reset Code',
@@ -122,6 +130,8 @@ const AppRoutes = () => {
         '/face-scan': 'Face Scan',
         '/face-registration': 'Face Registration',
         '/verify': 'Verify Identity',
+        '/verify/pending-confirmation': 'Verification Pending',
+        '/verify/rejected': 'Verification Rejected',
         '/verify-email': 'Verify Email',
         '/menu': 'Menu Management',
         '/analytics': 'Analytics',
@@ -157,6 +167,14 @@ const AppRoutes = () => {
             element={
               <PublicRoute>
                 <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/still-pending"
+            element={
+              <PublicRoute>
+                <StillPendingPage />
               </PublicRoute>
             }
           />
@@ -229,6 +247,22 @@ const AppRoutes = () => {
             element={
               <PublicRoute>
                 <VerifyIdentityPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/verify/pending-confirmation"
+            element={
+              <PublicRoute>
+                <VerifyIdentityPendingPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/verify/rejected"
+            element={
+              <PublicRoute>
+                <VerifyIdentityRejectedPage />
               </PublicRoute>
             }
           />

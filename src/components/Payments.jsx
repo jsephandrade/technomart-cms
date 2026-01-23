@@ -554,7 +554,7 @@ const Payments = () => {
 
             <div className="flex items-center justify-between rounded-md border p-3">
               <div className="flex items-center gap-3">
-                <CreditCard className="h-5 w-5 text-blue-600" />
+                <CreditCard className="h-5 w-5 text-primary" />
                 <div>
                   <p className="font-medium">Credit/Debit Cards</p>
                   <p className="text-xs text-muted-foreground">

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Clock, LogOut } from 'lucide-react';
@@ -50,7 +56,46 @@ const writeLocalAttendance = (employeeId, date, data) => {
   }
 };
 
-const AttendanceTimeCard = ({ user, className }) => {
+const getManilaNow = () =>
+  new Date(
+    new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Manila',
+    })
+  );
+
+const createManilaDateFromTime = (timeStr, referenceDate) => {
+  if (!timeStr) return null;
+  const segments = timeStr.split(':');
+  if (segments.length < 2) return null;
+  const [hours = '0', minutes = '0', seconds = '0'] = segments;
+  const h = Number.parseInt(hours, 10);
+  const m = Number.parseInt(minutes, 10);
+  const s = Number.parseInt(seconds, 10) || 0;
+  if ([h, m, s].some((value) => Number.isNaN(value))) return null;
+  const reference =
+    referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+      ? new Date(referenceDate)
+      : getManilaNow();
+  reference.setHours(h, m, s, 0);
+  return reference;
+};
+
+const toLocalDateStr = (d) => {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+    return '';
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+};
+
+const AttendanceTimeCard = ({
+  user,
+  className,
+  dailySchedule,
+  calendarException,
+}) => {
   const { updateProfile } = useAuth();
   const subjectEmployeeId = useMemo(() => {
     if (!user) return null;
@@ -82,30 +127,39 @@ const AttendanceTimeCard = ({ user, className }) => {
     [updateProfile, user?.employeeId]
   );
 
-  const toLocalDateStr = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
-  };
-  const todayStr = () => toLocalDateStr(new Date());
-  const nowTime = () => {
-    const current = new Date();
+  const initialTodayKey = toLocalDateStr(getManilaNow());
+  const [currentTime, setCurrentTime] = useState(() => getManilaNow());
+  const today = useMemo(() => toLocalDateStr(currentTime), [currentTime]);
+  const [localStatus, setLocalStatus] = useState(() =>
+    readLocalAttendance(subjectEmployeeId, initialTodayKey)
+  );
+  const nowTime = useCallback(() => {
+    const current = getManilaNow();
     return `${String(current.getHours()).padStart(2, '0')}:${String(
       current.getMinutes()
     ).padStart(2, '0')}:${String(current.getSeconds()).padStart(2, '0')}`;
-  };
+  }, []);
 
-  const today = todayStr();
-  const [currentTime, setCurrentTime] = useState(() => new Date());
-  const [localStatus, setLocalStatus] = useState(() =>
-    readLocalAttendance(subjectEmployeeId, today)
+  const resolveStatusForCheckIn = useCallback(
+    (checkInTime) => {
+      if (!dailySchedule?.startTime || !checkInTime) return 'present';
+      const scheduledStart = createManilaDateFromTime(
+        dailySchedule.startTime,
+        currentTime
+      );
+      const checkInDate = createManilaDateFromTime(checkInTime, currentTime);
+      if (!scheduledStart || !checkInDate) return 'present';
+      return checkInDate.getTime() > scheduledStart.getTime()
+        ? 'late'
+        : 'present';
+    },
+    [currentTime, dailySchedule?.startTime]
   );
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const interval = window.setInterval(() => {
-      setCurrentTime(new Date());
+      setCurrentTime(getManilaNow());
     }, 1000);
     return () => window.clearInterval(interval);
   }, []);
@@ -132,6 +186,11 @@ const AttendanceTimeCard = ({ user, className }) => {
     setLocalStatus(readLocalAttendance(subjectEmployeeId, today));
   }, [subjectEmployeeId, today, todayRecord?.checkIn, todayRecord?.checkOut]);
 
+  const localStatusLabel = useMemo(() => {
+    if (!localStatus.checkInAt) return 'present';
+    return resolveStatusForCheckIn(localStatus.checkInAt);
+  }, [localStatus.checkInAt, resolveStatusForCheckIn]);
+
   const effectiveRecord = useMemo(() => {
     if (todayRecord) return todayRecord;
     if (!subjectEmployeeId) return null;
@@ -144,16 +203,127 @@ const AttendanceTimeCard = ({ user, className }) => {
           localStatus.checkInAt || (localStatus.checkIn ? 'local' : null),
         checkOut:
           localStatus.checkOutAt || (localStatus.checkOut ? 'local' : null),
-        status: 'present',
+        status: localStatusLabel,
       };
     }
     return null;
-  }, [todayRecord, localStatus, subjectEmployeeId, today]);
+  }, [todayRecord, localStatus, localStatusLabel, subjectEmployeeId, today]);
+
+  const shiftEndDate = useMemo(
+    () => createManilaDateFromTime(dailySchedule?.endTime, currentTime),
+    [dailySchedule, currentTime]
+  );
+  const isNoWorkDay = useMemo(() => {
+    if (!calendarException) return false;
+    const kind = String(calendarException.kind || calendarException.type || '')
+      .trim()
+      .toLowerCase();
+    if (kind === 'no_work') return true;
+    if (kind === 'holiday' && !calendarException.isWorkdayOverride) {
+      return true;
+    }
+    return false;
+  }, [calendarException]);
+  const attendanceWindowClosed = Boolean(
+    dailySchedule?.endTime &&
+      shiftEndDate &&
+      currentTime.getTime() > shiftEndDate.getTime()
+  );
+  const autoAbsentRef = useRef(false);
+  const autoClockOutRef = useRef(false);
+
+  useEffect(() => {
+    autoAbsentRef.current = false;
+    autoClockOutRef.current = false;
+  }, [dailySchedule, today]);
+
+  useEffect(() => {
+    if (
+      !dailySchedule ||
+      !attendanceWindowClosed ||
+      !subjectEmployeeId ||
+      !today ||
+      isNoWorkDay
+    ) {
+      return;
+    }
+    const markAbsent = async () => {
+      try {
+        await createRecord({
+          employeeId: subjectEmployeeId,
+          employeeName: user?.name || '',
+          date: today,
+          status: 'absent',
+          notes: 'Shift window closed without clock-in',
+        });
+      } catch (error) {
+        console.error('Auto-mark absent failed', error);
+        autoAbsentRef.current = false;
+      }
+    };
+    const markAbsentNoClockOut = async () => {
+      if (!effectiveRecord) return;
+      const hasRemoteId =
+        Boolean(effectiveRecord.id) &&
+        !String(effectiveRecord.id).startsWith('local-');
+      const checkInValue =
+        effectiveRecord.checkIn && String(effectiveRecord.checkIn).includes(':')
+          ? effectiveRecord.checkIn
+          : null;
+      try {
+        if (hasRemoteId) {
+          await updateRecord(effectiveRecord.id, {
+            status: 'absent',
+            notes: 'Shift window closed without clock-out',
+          });
+        } else {
+          await createRecord({
+            employeeId: subjectEmployeeId,
+            employeeName: user?.name || '',
+            date: today,
+            status: 'absent',
+            checkIn: checkInValue,
+            notes: 'Shift window closed without clock-out',
+          });
+        }
+      } catch (error) {
+        console.error('Auto-mark absent failed', error);
+        autoClockOutRef.current = false;
+      }
+    };
+    if (!effectiveRecord?.checkIn && !autoAbsentRef.current) {
+      autoAbsentRef.current = true;
+      markAbsent();
+      return;
+    }
+    if (
+      effectiveRecord?.checkIn &&
+      !effectiveRecord?.checkOut &&
+      !autoClockOutRef.current
+    ) {
+      autoClockOutRef.current = true;
+      markAbsentNoClockOut();
+    }
+  }, [
+    attendanceWindowClosed,
+    createRecord,
+    dailySchedule,
+    effectiveRecord,
+    subjectEmployeeId,
+    today,
+    updateRecord,
+    user?.name,
+    isNoWorkDay,
+  ]);
 
   const handleTimeIn = async () => {
     const selectedEmployeeId = subjectEmployeeId;
     if (!selectedEmployeeId) {
       toast.error('Unable to identify user for attendance.');
+      return;
+    }
+    if (isNoWorkDay) {
+      toast.error('Today is a no work day. Attendance is disabled.');
       return;
     }
     if (effectiveRecord?.checkIn) {
@@ -163,12 +333,13 @@ const AttendanceTimeCard = ({ user, className }) => {
 
     try {
       const checkInTime = nowTime();
+      const resolvedStatus = resolveStatusForCheckIn(checkInTime);
       const created = await createRecord({
         employeeId: selectedEmployeeId,
         employeeName: user?.name || '',
-        date: todayStr(),
+        date: today,
         checkIn: checkInTime,
-        status: 'present',
+        status: resolvedStatus,
       });
       const resolvedEmployeeId = created?.employeeId || selectedEmployeeId;
       await syncEmployeeId(created?.employeeId);
@@ -196,6 +367,10 @@ const AttendanceTimeCard = ({ user, className }) => {
       toast.error('Unable to identify user for attendance.');
       return;
     }
+    if (isNoWorkDay) {
+      toast.error('Today is a no work day. Attendance is disabled.');
+      return;
+    }
     if (!effectiveRecord || !effectiveRecord.checkIn) {
       toast.error('No active time-in record today');
       return;
@@ -215,14 +390,16 @@ const AttendanceTimeCard = ({ user, className }) => {
         null;
       const recordId = effectiveRecord?.id;
       const isLocalRecord = !recordId || String(recordId).startsWith('local-');
+      const recordStatus =
+        effectiveRecord?.status || resolveStatusForCheckIn(checkInTimeValue);
       let updated = null;
       if (isLocalRecord) {
         const payload = {
           employeeId: selectedEmployeeId,
           employeeName: user?.name || '',
-          date: todayStr(),
+          date: today,
           checkOut: checkOutTime,
-          status: 'present',
+          status: recordStatus || 'present',
         };
         if (checkInTimeValue) {
           payload.checkIn = checkInTimeValue;
@@ -238,9 +415,9 @@ const AttendanceTimeCard = ({ user, className }) => {
             const payload = {
               employeeId: selectedEmployeeId,
               employeeName: user?.name || '',
-              date: todayStr(),
+              date: today,
               checkOut: checkOutTime,
-              status: 'present',
+              status: recordStatus || 'present',
             };
             if (checkInTimeValue) {
               payload.checkIn = checkInTimeValue;
@@ -328,7 +505,13 @@ const AttendanceTimeCard = ({ user, className }) => {
 
   const statusConfig = useMemo(() => {
     if (!effectiveRecord) {
+      if (isNoWorkDay) {
+        return { label: 'No work day', className: 'text-amber-600' };
+      }
       return { label: 'Not Clocked In', className: 'text-muted-foreground' };
+    }
+    if (effectiveRecord.status === 'absent') {
+      return { label: 'Absent', className: 'text-red-600' };
     }
     if (effectiveRecord.checkIn && !effectiveRecord.checkOut) {
       return { label: 'Clocked In', className: 'text-emerald-600' };
@@ -340,7 +523,7 @@ const AttendanceTimeCard = ({ user, className }) => {
       label: effectiveRecord.status || 'Unknown Status',
       className: 'text-muted-foreground',
     };
-  }, [effectiveRecord]);
+  }, [effectiveRecord, isNoWorkDay]);
 
   const hasTimedInToday = Boolean(effectiveRecord?.checkIn);
   const isClockedIn = Boolean(
@@ -377,7 +560,7 @@ const AttendanceTimeCard = ({ user, className }) => {
             'flex-1 min-w-[140px] border-2 border-emerald-600 bg-emerald-600 text-white transition-colors hover:bg-emerald-600/90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-600 disabled:cursor-not-allowed disabled:opacity-60'
           )}
           onClick={handleTimeIn}
-          disabled={hasTimedInToday}
+          disabled={hasTimedInToday || attendanceWindowClosed || isNoWorkDay}
         >
           <Clock className="mr-2 h-4 w-4" aria-hidden="true" />
           Time In
@@ -386,14 +569,37 @@ const AttendanceTimeCard = ({ user, className }) => {
           size="lg"
           className={cn(
             'flex-1 min-w-[140px] border-2 bg-red-500 text-white transition-opacity hover:bg-red-500/90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500',
-            !canTimeOut ? 'cursor-not-allowed opacity-70' : 'opacity-100'
+            !canTimeOut || attendanceWindowClosed || isNoWorkDay
+              ? 'cursor-not-allowed opacity-70'
+              : 'opacity-100'
           )}
           onClick={handleTimeOut}
-          disabled={!canTimeOut}
+          disabled={!canTimeOut || attendanceWindowClosed || isNoWorkDay}
         >
           <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
           Time Out
         </Button>
+      </div>
+
+      <div className="space-y-1 text-center text-xs text-muted-foreground">
+        {isNoWorkDay ? (
+          <p className="text-amber-700">
+            {calendarException?.kind === 'holiday' ? 'Holiday' : 'No work day'}
+            {calendarException?.name ? `: ${calendarException.name}` : ''}.
+            Attendance is disabled.
+          </p>
+        ) : dailySchedule ? (
+          <p>
+            Scheduled: {dailySchedule.startTime} - {dailySchedule.endTime}
+          </p>
+        ) : (
+          <p>No scheduled shift found for today.</p>
+        )}
+        {attendanceWindowClosed && !isNoWorkDay ? (
+          <p className="text-destructive">
+            Shift window closed - attendance locked and auto recorded.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-1 text-center text-sm text-muted-foreground">

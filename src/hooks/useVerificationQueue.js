@@ -55,7 +55,7 @@ export const useVerificationQueue = (params = {}) => {
       refreshUsers();
       broadcastUsersUpdated({ type: 'approve' });
       toast.success('Approved', {
-        description: 'Access granted and role assigned.',
+        description: 'Access granted.',
       });
     },
     onError: (err) => {

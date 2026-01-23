@@ -141,6 +141,17 @@ const ItemList = ({
         while (collageSlots.length < 3) collageSlots.push(null);
         const showCollage = ingredientIds.length > 0;
         const category = item.category || item.categoryName || 'Uncategorized';
+        const rawPax =
+          item?.estimatedPax ??
+          item?.paxPerPreparation ??
+          item?.pax_per_preparation;
+        const paxValue = Number.isFinite(Number(rawPax))
+          ? Math.max(0, Math.floor(Number(rawPax)))
+          : null;
+        const isAvailable =
+          mode !== 'archived' &&
+          Boolean(item.available) &&
+          (paxValue === null || paxValue > 0);
         const availabilityBadge =
           mode === 'archived'
             ? {
@@ -148,7 +159,7 @@ const ItemList = ({
                 className:
                   'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200',
               }
-            : item.available
+            : isAvailable
               ? {
                   label: 'Available',
                   className:

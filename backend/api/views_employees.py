@@ -5,12 +5,15 @@ checks via helpers in views_common, and JSON responses with { success, data }.
 """
 
 import json
-from datetime import time
+import uuid
+from datetime import date, datetime, time
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.db.models import CharField, F, Value
 from django.db.models.functions import Cast, Coalesce
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from .views_common import _actor_from_request, _has_permission, _paginate, _identifier_variants
 from .utils_employees import resolve_employee_ref
@@ -27,6 +30,34 @@ DAYS = [
 ]
 
 
+def _normalize_uuid_str(value):
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return str(uuid.UUID(raw))
+    except Exception:
+        return raw
+
+
+def _parse_uuid(value):
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(raw)
+    except Exception:
+        return None
+
+
 def _parse_time(val: str):
     try:
         h, m = str(val or "").split(":", 1)
@@ -39,14 +70,40 @@ def _parse_time(val: str):
     return None
 
 
+def _parse_date(val):
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    if isinstance(val, str):
+        raw = val.strip()
+        if not raw:
+            return None
+        parsed = parse_date(raw)
+        if parsed:
+            return parsed
+        parsed_dt = parse_datetime(raw)
+        if parsed_dt:
+            return parsed_dt.date()
+    return None
+
+
 def _safe_emp(e):
+    user = getattr(e, "user", None)
     return {
         "id": str(e.id),
         "name": e.name,
         "position": e.position,
-        "hourlyRate": float(e.hourly_rate or 0),
+        "hireDate": e.hire_date.isoformat() if getattr(e, "hire_date", None) else None,
         "contact": e.contact,
         "status": e.status,
+        "userId": str(user.id) if user else None,
+        "userName": getattr(user, "name", None) if user else None,
+        "userEmail": getattr(user, "email", None) if user else None,
+        "userRole": getattr(user, "role", None) if user else None,
+        "userStatus": getattr(user, "status", None) if user else None,
         "createdAt": e.created_at.isoformat() if e.created_at else None,
         "updatedAt": e.updated_at.isoformat() if e.updated_at else None,
     }
@@ -111,9 +168,13 @@ def _safe_sched(s):
         end_time = getattr(s, "end_time", None)
         created_at = getattr(s, "created_at", None)
         updated_at = getattr(s, "updated_at", None)
+    normalized_id = _normalize_uuid_str(sid) if sid is not None else None
+    normalized_employee_id = (
+        _normalize_uuid_str(employee_id) if employee_id is not None else None
+    )
     return {
-        "id": str(sid) if sid is not None else None,
-        "employeeId": str(employee_id) if employee_id is not None else None,
+        "id": normalized_id if normalized_id is not None else None,
+        "employeeId": normalized_employee_id if normalized_employee_id is not None else None,
         "employeeName": employee_name or "",
         "employeePosition": employee_position or "",
         "day": day,
@@ -122,6 +183,56 @@ def _safe_sched(s):
         "createdAt": _iso_or_str(created_at),
         "updatedAt": _iso_or_str(updated_at),
     }
+
+
+def _safe_role_target(t):
+    return {
+        "id": str(t.id),
+        "day": t.day,
+        "role": t.role,
+        "target": int(t.target_count or 0),
+        "createdAt": _iso_or_str(t.created_at),
+        "updatedAt": _iso_or_str(t.updated_at),
+    }
+
+
+def _safe_role_exception(e):
+    requested_by = getattr(e.requested_by, "name", "") or getattr(e.requested_by, "email", "")
+    return {
+        "id": str(e.id),
+        "day": e.day,
+        "role": e.role,
+        "message": e.message or "",
+        "requestedBy": e.requested_by_label or requested_by or "",
+        "requestedAt": _iso_or_str(e.created_at),
+    }
+
+
+def _targets_by_day(items):
+    result = {day: [] for day in DAYS}
+    for entry in items:
+        day = entry.get("day") if isinstance(entry, dict) else getattr(entry, "day", None)
+        if not day:
+            continue
+        if day not in result:
+            result[day] = []
+        if isinstance(entry, dict):
+            result[day].append(
+                {
+                    "id": entry.get("id"),
+                    "role": entry.get("role"),
+                    "target": entry.get("target"),
+                }
+            )
+        else:
+            result[day].append(
+                {
+                    "id": str(entry.id),
+                    "role": entry.role,
+                    "target": int(entry.target_count or 0),
+                }
+            )
+    return result
 
 
 @require_http_methods(["GET", "POST"])
@@ -145,7 +256,7 @@ def employees(request):
             limit = request.GET.get("limit", 50)
 
             # Query only explicitly created employees (no auto-sync)
-            qs = Employee.objects.all()
+            qs = Employee.objects.select_related("user").all()
             # Confidentiality: Staff should only see themselves
             role_l = (getattr(actor, "role", "") or "").lower()
             if role_l not in {"admin", "manager"} and not _has_permission(actor, "employees.manage"):
@@ -228,9 +339,14 @@ def employees_with_schedule(request):
     if not name:
         return JsonResponse({"success": False, "message": "Name is required"}, status=400)
 
+    raw_user_id = payload.get("userId") or payload.get("user_id") or payload.get("user")
+    contact = (payload.get("contact") or "").strip()
     schedule_payload = payload.get("schedule") or []
     if not isinstance(schedule_payload, list):
         schedule_payload = []
+
+    raw_hire_date = payload.get("hireDate") if "hireDate" in payload else payload.get("hire_date")
+    hire_date = _parse_date(raw_hire_date)
 
     valid_rows = []
     for entry in schedule_payload:
@@ -241,15 +357,58 @@ def employees_with_schedule(request):
             valid_rows.append({"day": day, "start_time": st, "end_time": et})
 
     try:
-        from .models import Employee, ScheduleEntry
-        with transaction.atomic():
-            emp = Employee.objects.create(
-                name=name,
-                position=(payload.get("position") or "").strip(),
-                hourly_rate=float(payload.get("hourlyRate") or 0),
-                contact=(payload.get("contact") or "").strip(),
-                status=(payload.get("status") or "active").lower(),
+        from .models import AppUser, Employee, ScheduleEntry
+        user = None
+        parsed_user_id = _parse_uuid(raw_user_id)
+        if parsed_user_id:
+            user = AppUser.objects.filter(id=parsed_user_id).first()
+        existing = None
+        if user:
+            existing = (
+                Employee.objects.select_related("user")
+                .filter(user_id=user.id)
+                .first()
             )
+        if not existing and contact:
+            existing = (
+                Employee.objects.select_related("user")
+                .filter(contact__iexact=contact)
+                .first()
+            )
+        if existing and user and existing.user_id and existing.user_id != user.id:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Employee already linked to a different user",
+                },
+                status=409,
+            )
+        with transaction.atomic():
+            if existing:
+                emp = existing
+                if user and not emp.user_id:
+                    emp.user = user
+                position = (payload.get("position") or "").strip()
+                status_value = (payload.get("status") or "").lower().strip()
+                emp.name = name
+                if position:
+                    emp.position = position
+                if hire_date:
+                    emp.hire_date = hire_date
+                if contact:
+                    emp.contact = contact
+                if status_value:
+                    emp.status = status_value
+                emp.save()
+            else:
+                emp = Employee.objects.create(
+                    name=name,
+                    position=(payload.get("position") or "").strip(),
+                    hire_date=hire_date or timezone.now().date(),
+                    contact=contact,
+                    status=(payload.get("status") or "active").lower(),
+                    user=user if user else None,
+                )
             created_schedule = []
             for row in valid_rows:
                 entry = ScheduleEntry.objects.create(
@@ -276,7 +435,7 @@ def employee_detail(request, emp_id):
         return err
     try:
         from .models import Employee
-        emp = Employee.objects.filter(id=emp_id).first()
+        emp = Employee.objects.select_related("user").filter(id=emp_id).first()
         if not emp:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
         if request.method == "GET":
@@ -300,11 +459,14 @@ def employee_detail(request, emp_id):
             emp.name = str(payload["name"]).strip(); changed = True
         if "position" in payload and payload["position"] is not None:
             emp.position = str(payload["position"]).strip(); changed = True
-        if "hourlyRate" in payload and payload["hourlyRate"] is not None:
-            try:
-                emp.hourly_rate = float(payload["hourlyRate"]) ; changed = True
-            except Exception:
-                pass
+        if "hireDate" in payload or "hire_date" in payload:
+            raw = payload.get("hireDate") if "hireDate" in payload else payload.get("hire_date")
+            if raw is None or raw == "":
+                emp.hire_date = None; changed = True
+            else:
+                parsed = _parse_date(raw)
+                if parsed:
+                    emp.hire_date = parsed; changed = True
         if "contact" in payload and payload["contact"] is not None:
             emp.contact = str(payload["contact"]).strip(); changed = True
         if "status" in payload and payload["status"] is not None:
@@ -316,7 +478,7 @@ def employee_detail(request, emp_id):
         return JsonResponse({"success": False, "message": "Server error"}, status=500)
 
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "DELETE"])
 def schedule(request):
     """List/create schedule entries.
 
@@ -376,6 +538,61 @@ def schedule(request):
             items = [_safe_sched(row) for row in rows]
             return JsonResponse({"success": True, "data": items})
 
+        if request.method == "DELETE":
+            clear_all = (request.GET.get("clear") or "").lower() in {
+                "1",
+                "true",
+                "all",
+            }
+            if clear_all:
+                deleted_count, _ = ScheduleEntry.objects.all().delete()
+                return JsonResponse(
+                    {"success": True, "deleted": deleted_count}
+                )
+
+            employee_id_param = request.GET.get("employeeId") or request.GET.get(
+                "employee_id"
+            )
+            day = request.GET.get("day")
+            st = _parse_time(
+                request.GET.get("startTime") or request.GET.get("start_time")
+            )
+            et = _parse_time(
+                request.GET.get("endTime") or request.GET.get("end_time")
+            )
+
+            if not employee_id_param:
+                return JsonResponse(
+                    {"success": False, "message": "employeeId is required"},
+                    status=400,
+                )
+            if day not in DAYS:
+                return JsonResponse(
+                    {"success": False, "message": "Invalid day"},
+                    status=400,
+                )
+            if not st or not et or st >= et:
+                return JsonResponse(
+                    {"success": False, "message": "Invalid start/end time"},
+                    status=400,
+                )
+
+            qs = ScheduleEntry.objects.filter(day=day, start_time=st, end_time=et)
+            variants = _identifier_variants(employee_id_param)
+            if variants:
+                qs = qs.annotate(
+                    employee_id_str=Cast("employee_id", CharField())
+                ).filter(employee_id_str__in=variants)
+            else:
+                qs = qs.filter(employee_id=employee_id_param)
+
+            deleted_count, _ = qs.delete()
+            if deleted_count == 0:
+                return JsonResponse(
+                    {"success": False, "message": "Not found"}, status=404
+                )
+            return JsonResponse({"success": True, "deleted": deleted_count})
+
         # POST create
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -434,7 +651,10 @@ def schedule_detail(request, sid):
         return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
     try:
         from .models import ScheduleEntry, Employee
-        s = ScheduleEntry.objects.select_related("employee").filter(id=sid).first()
+        parsed_sid = _parse_uuid(sid)
+        if not parsed_sid:
+            return JsonResponse({"success": False, "message": "Not found"}, status=404)
+        s = ScheduleEntry.objects.select_related("employee").filter(id=parsed_sid).first()
         if not s:
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
         if request.method == "DELETE":
@@ -475,10 +695,169 @@ def schedule_detail(request, sid):
         return JsonResponse({"success": False, "message": "Server error"}, status=500)
 
 
+@require_http_methods(["GET", "PUT"])
+def schedule_role_targets(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "schedule.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        from .models import TeamCompositionTarget
+        if request.method == "GET":
+            day = request.GET.get("day")
+            qs = TeamCompositionTarget.objects.all()
+            if day:
+                qs = qs.filter(day=day)
+            qs = qs.order_by("day", "role")
+            items = [_safe_role_target(t) for t in qs]
+            return JsonResponse(
+                {"success": True, "data": {"items": items, "targetsByDay": _targets_by_day(items)}}
+            )
+
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+
+        day = payload.get("day")
+        targets_by_day = payload.get("targetsByDay")
+        targets = payload.get("targets")
+
+        update_map = {}
+        if day:
+            if day not in DAYS:
+                return JsonResponse({"success": False, "message": "Invalid day"}, status=400)
+            update_map[day] = targets if isinstance(targets, list) else []
+        elif isinstance(targets_by_day, dict):
+            update_map = targets_by_day
+        elif isinstance(targets, list):
+            for entry in targets:
+                entry_day = entry.get("day")
+                if not entry_day:
+                    continue
+                update_map.setdefault(entry_day, []).append(entry)
+        else:
+            return JsonResponse({"success": False, "message": "No targets provided"}, status=400)
+
+        for entry_day in update_map.keys():
+            if entry_day not in DAYS:
+                return JsonResponse(
+                    {"success": False, "message": f"Invalid day: {entry_day}"},
+                    status=400,
+                )
+
+        with transaction.atomic():
+            for entry_day, entries in update_map.items():
+                TeamCompositionTarget.objects.filter(day=entry_day).delete()
+                for entry in entries or []:
+                    role = str(entry.get("role") or "").strip()
+                    target = entry.get("target")
+                    try:
+                        target = int(target)
+                    except Exception:
+                        target = 0
+                    if not role or target <= 0:
+                        continue
+                    TeamCompositionTarget.objects.create(
+                        day=entry_day,
+                        role=role,
+                        target_count=target,
+                        created_by=actor,
+                        updated_by=actor,
+                    )
+
+        qs = TeamCompositionTarget.objects.order_by("day", "role")
+        items = [_safe_role_target(t) for t in qs]
+        return JsonResponse(
+            {"success": True, "data": {"items": items, "targetsByDay": _targets_by_day(items)}}
+        )
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
+@require_http_methods(["GET", "POST", "DELETE"])
+def schedule_role_exceptions(request):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "schedule.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+
+    try:
+        from .models import TeamCompositionException
+        if request.method == "GET":
+            day = request.GET.get("day")
+            qs = TeamCompositionException.objects.all()
+            if day:
+                qs = qs.filter(day=day)
+            qs = qs.order_by("-created_at")
+            items = [_safe_role_exception(e) for e in qs]
+            return JsonResponse({"success": True, "data": items})
+
+        if request.method == "DELETE":
+            clear_all = (request.GET.get("clear") or "").lower() in {"1", "true", "all"}
+            if clear_all:
+                TeamCompositionException.objects.all().delete()
+                return JsonResponse({"success": True})
+            return JsonResponse({"success": False, "message": "Missing clear=all"}, status=400)
+
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+
+        day = payload.get("day")
+        role = str(payload.get("role") or "").strip()
+        message = str(payload.get("message") or "").strip()
+        requested_by_label = str(payload.get("requestedBy") or "").strip()
+
+        if day not in DAYS:
+            return JsonResponse({"success": False, "message": "Invalid day"}, status=400)
+        if not role:
+            return JsonResponse({"success": False, "message": "Role is required"}, status=400)
+
+        entry = TeamCompositionException.objects.create(
+            day=day,
+            role=role,
+            message=message,
+            requested_by=actor,
+            requested_by_label=requested_by_label,
+        )
+        return JsonResponse({"success": True, "data": _safe_role_exception(entry)})
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
+@require_http_methods(["DELETE"])
+def schedule_role_exception_detail(request, eid):
+    actor, err = _actor_from_request(request)
+    if not actor:
+        return err
+    role_l = getattr(actor, "role", "").lower()
+    if not (_has_permission(actor, "schedule.manage") or role_l in {"admin", "manager"}):
+        return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+    try:
+        from .models import TeamCompositionException
+        entry = TeamCompositionException.objects.filter(id=eid).first()
+        if not entry:
+            return JsonResponse({"success": False, "message": "Not found"}, status=404)
+        entry.delete()
+        return JsonResponse({"success": True})
+    except Exception:
+        return JsonResponse({"success": False, "message": "Server error"}, status=500)
+
+
 __all__ = [
     "employees",
     "employees_with_schedule",
     "employee_detail",
     "schedule",
     "schedule_detail",
+    "schedule_role_targets",
+    "schedule_role_exceptions",
+    "schedule_role_exception_detail",
 ]

@@ -1,12 +1,10 @@
 {
   "expo": {
-    "name": "MOBILE_CAPSTONE",
-    "slug": "mobile_capstone",
+    "name": "TechnoMart",
+    "slug": "technomart",
     "version": "1.0.0",
-
-    "scheme": "mobilecapstone",
-
-    "platforms": ["ios", "android"],
+    "scheme": "technomart",
+    "platforms": ["ios", "android", "web"],
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -16,21 +14,31 @@
     },
 
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.joseph224.TechnoMart",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
 
     "android": {
+      "package": "com.joseph224.TechnoMart",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "googleServicesFile": "./google-services.json"
     },
 
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      "@react-native-firebase/app",
+      ["expo-build-properties"]
+    ],
 
     "extra": {
-      "apiUrl": "http://192.168.1.6:8000",
-      "apiPrefix": "/api/v1"
+      "eas": {
+        "projectId": "21ae84c5-ea43-48c9-be6e-1aa4a8d7d641"
+      }
     }
   }
 }

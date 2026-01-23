@@ -21,11 +21,12 @@ from .views_common import (
     normalize_role_permissions,
     _set_role_config_override,
     _invalidate_role_config_cache,
+    ROLE_VALUES,
 )
 from .utils_audit import record_audit
 
 
-ALLOWED_ROLES = {"admin", "manager", "staff"}
+ALLOWED_ROLES = ROLE_VALUES
 
 
 def _log_user_action(request, actor, target_user, action: str, *, details: str = "", meta=None):
@@ -63,7 +64,13 @@ def users(request):
         actor_role = (current.role or "").lower() if current else None
     except Exception:
         actor_role = (tp.get("role") or "").lower()
-    if actor_role != "admin":
+    context = (request.GET.get("context") or "").lower()
+    allow_manager = (
+        request.method == "GET"
+        and actor_role == "manager"
+        and context in {"employee-schedule", "employee_schedule", "schedule"}
+    )
+    if actor_role != "admin" and not allow_manager:
         return JsonResponse(
             {
                 "success": False,
@@ -91,6 +98,8 @@ def users(request):
                 qs = qs.filter(role=role)
             if status:
                 qs = qs.filter(status=status)
+            if allow_manager:
+                qs = qs.filter(role__in=["staff", "manager"])
 
             field_map = {
                 "name": "name",
@@ -136,6 +145,8 @@ def users(request):
             data = [u for u in data if (u.get("role", "").lower() == role)]
         if status:
             data = [u for u in data if (u.get("status", "").lower() == status)]
+        if allow_manager:
+            data = [u for u in data if (u.get("role", "").lower() in {"staff", "manager"})]
         reverse = sort_dir == "desc"
         try:
             data = sorted(data, key=lambda x: str(x.get(sort_by, "")).lower(), reverse=reverse)

@@ -137,14 +137,27 @@ export function AuthProvider({ children }) {
     let active = true;
     const hydrateUser = async () => {
       try {
-        const res = await authService.me();
+        const res = await authService.me({ silent: true });
         if (!active) return;
         if (res?.success && res?.user) {
           persistUser(res.user);
-        } else {
-          setUser(null);
-          clearStoredAuth();
+          return;
         }
+        const reason = res?.reason || null;
+        if (reason && reason !== 'missing_token') {
+          const refreshed = await authService.refreshToken({ silent: true });
+          if (!active) return;
+          if (refreshed?.success) {
+            const me = await authService.me({ silent: true });
+            if (!active) return;
+            if (me?.success && me?.user) {
+              persistUser(me.user);
+              return;
+            }
+          }
+        }
+        setUser(null);
+        clearStoredAuth();
       } catch {
         if (!active) return;
         setUser(null);
@@ -292,9 +305,9 @@ export function AuthProvider({ children }) {
 
   const refreshToken = useCallback(async () => {
     try {
-      const res = await authService.refreshToken();
+      const res = await authService.refreshToken({ silent: true });
       if (!res?.success) return false;
-      const me = await authService.me();
+      const me = await authService.me({ silent: true });
       if (me?.success && me?.user) {
         persistUser(me.user);
       }

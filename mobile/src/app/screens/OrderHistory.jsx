@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useDietary } from '../../context/DietaryContext';
 import { fetchUserOrders } from '../../api/api'; // API function to fetch orders
@@ -56,7 +55,6 @@ const OrderCard = ({ order, onRepeat }) => (
 );
 
 export default function OrderHistoryScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { preferences } = useDietary();
 
@@ -105,7 +103,6 @@ export default function OrderHistoryScreen() {
         style={[
           styles.container,
           {
-            paddingTop: insets.top,
             justifyContent: 'center',
             alignItems: 'center',
           },
@@ -120,7 +117,7 @@ export default function OrderHistoryScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()}>

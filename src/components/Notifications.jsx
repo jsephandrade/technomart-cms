@@ -9,7 +9,11 @@ import { Separator } from '@/components/ui/separator';
 import { createRealtime } from '@/lib/realtime';
 import { notificationsService } from '@/api/services/notificationsService';
 import { subscribePush, unsubscribePush } from '@/lib/push';
+import { useAuth } from '@/components/AuthContext';
 const Notifications = () => {
+  const { hasAnyRole } = useAuth();
+  const isAdmin = hasAnyRole(['admin']);
+  const scope = isAdmin ? 'admin' : undefined;
   const [notifications, setNotifications] = useState([]);
   const [settings, setSettings] = useState({
     emailEnabled: true,
@@ -36,7 +40,10 @@ const Notifications = () => {
 
   const refreshList = async () => {
     try {
-      const res = await notificationsService.getRecent(100);
+      const res = await notificationsService.getRecent({
+        limit: 100,
+        scope,
+      });
       const list = (res?.data || []).map((n) => ({
         id: n.id,
         title: n.title,
@@ -142,9 +149,6 @@ const Notifications = () => {
     };
   }, []);
   const markAllAsRead = async () => {
-    try {
-      await notificationsService.markAllRead?.();
-    } catch {}
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
   const markAsRead = async (id) => {
@@ -160,6 +164,9 @@ const Notifications = () => {
       await notificationsService.delete?.(id);
     } catch {}
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+  const removeAllNotifications = () => {
+    setNotifications([]);
   };
   const handleSettingChange = async (key) => {
     // Special handling for push: request permission before enabling
@@ -223,42 +230,50 @@ const Notifications = () => {
       </div>
       <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <Label>Low Stock Alerts</Label>
-          <p className="text-xs text-muted-foreground">When inventory is low</p>
-        </div>
-        <Switch
-          checked={settings.lowStock}
-          onCheckedChange={() => handleSettingChange('lowStock')}
-        />
-      </div>
-      <Separator />
+      {!isAdmin && (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Low Stock Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                When inventory is low
+              </p>
+            </div>
+            <Switch
+              checked={settings.lowStock}
+              onCheckedChange={() => handleSettingChange('lowStock')}
+            />
+          </div>
+          <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <Label>Order Alerts</Label>
-          <p className="text-xs text-muted-foreground">
-            New and updated orders
-          </p>
-        </div>
-        <Switch
-          checked={settings.order}
-          onCheckedChange={() => handleSettingChange('order')}
-        />
-      </div>
-      <Separator />
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Order Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                New and updated orders
+              </p>
+            </div>
+            <Switch
+              checked={settings.order}
+              onCheckedChange={() => handleSettingChange('order')}
+            />
+          </div>
+          <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <Label>Payment Alerts</Label>
-          <p className="text-xs text-muted-foreground">Payment confirmations</p>
-        </div>
-        <Switch
-          checked={settings.payment}
-          onCheckedChange={() => handleSettingChange('payment')}
-        />
-      </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label>Payment Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                Payment confirmations
+              </p>
+            </div>
+            <Switch
+              checked={settings.payment}
+              onCheckedChange={() => handleSettingChange('payment')}
+            />
+          </div>
+        </>
+      )}
     </>
   );
 
@@ -293,6 +308,14 @@ const Notifications = () => {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={removeAllNotifications}
+                  disabled={notifications.length === 0}
+                >
+                  Remove all
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="flex items-center gap-1"
                   onClick={refreshList}
                 >
@@ -315,7 +338,7 @@ const Notifications = () => {
                           <Bell className="h-5 w-5 text-orange-500" />
                         )}
                         {notification.type === 'info' && (
-                          <Bell className="h-5 w-5 text-blue-500" />
+                          <Bell className="h-5 w-5 text-primary" />
                         )}
                         {notification.type === 'success' && (
                           <CheckCircle className="h-5 w-5 text-green-500" />

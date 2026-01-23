@@ -111,18 +111,18 @@ const SalesChart = ({
               }}
               iconType="line"
             />
-            {/* Current period sales - Blue area chart with gradient */}
+            {/* Current period sales - Primary area chart with gradient */}
             <Area
               type="monotone"
               dataKey="today"
               name={timeRangeLabel}
-              stroke="hsl(var(--primary))"
+              stroke="hsl(var(--chart-primary))"
               strokeWidth={2}
               fill={`url(#${gradient.id})`}
               dot={false}
               activeDot={{
                 ...CHART_STYLES.activeDot,
-                fill: 'hsl(var(--primary))',
+                fill: 'hsl(var(--chart-primary))',
               }}
               isAnimationActive={true}
               animationDuration={800}

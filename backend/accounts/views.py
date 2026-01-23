@@ -1,4 +1,6 @@
 import random,string
+import os
+import uuid
 import base64
 from django.contrib.auth import get_user_model
 
@@ -6,7 +8,9 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.contrib.auth.hashers import make_password
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -14,7 +18,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.decorators import api_view, permission_classes
 
-from api.models import AppUser
+from api.models import AppUser, AccessRequest, AccessRequestHeadshot
+from api.views_common import _extract_dataurl_image, _issue_verify_token_from_db, _safe_user_from_db
 from .serializers import RegisterSerializer
 
 
@@ -27,9 +32,100 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            id_front = serializer.validated_data.get("id_front") or ""
+            id_back = serializer.validated_data.get("id_back") or ""
+            id_image = serializer.validated_data.get("id_image") or ""
+            image_sources = []
+            if id_front or id_back:
+                if id_front:
+                    image_sources.append(("Front", id_front))
+                if id_back:
+                    image_sources.append(("Back", id_back))
+            elif id_image:
+                image_sources.append(("Front", id_image))
+            if not image_sources:
+                return Response(
+                    {"success": False, "errors": {"id_image": ["ID photo is required."]}},
+                    status=400,
+                )
+            prepared_images = []
+            for label, data_url in image_sources:
+                mime, raw = _extract_dataurl_image(data_url)
+                if not raw:
+                    error_key = "id_front" if label.lower() == "front" else "id_back"
+                    return Response(
+                        {
+                            "success": False,
+                            "errors": {
+                                error_key: [
+                                    f"{label} ID photo must be a valid image."
+                                ]
+                            },
+                        },
+                        status=400,
+                    )
+                prepared_images.append((label, mime, raw))
+
+            try:
+                with transaction.atomic():
+                    user = serializer.save()
+                    ar, _ = AccessRequest.objects.get_or_create(user=user)
+
+                    try:
+                        for shot in ar.headshots.all():
+                            if shot.image:
+                                shot.image.delete(save=False)
+                    except Exception:
+                        pass
+                    ar.headshots.all().delete()
+
+                    if ar.headshot:
+                        try:
+                            ar.headshot.delete(save=False)
+                        except Exception:
+                            pass
+
+                    primary_name = ""
+                    for label, mime, raw in prepared_images:
+                        ext = ".jpg"
+                        if mime == "image/png":
+                            ext = ".png"
+                        elif mime in ("image/jpeg", "image/jpg"):
+                            ext = ".jpg"
+                        elif mime == "image/webp":
+                            ext = ".webp"
+
+                        filename = f"id_{uuid.uuid4().hex}{ext}"
+                        shot = AccessRequestHeadshot(request=ar, position=label)
+                        shot.image.save(filename, ContentFile(raw), save=False)
+                        shot.save()
+                        if not primary_name:
+                            primary_name = shot.image.name
+
+                    if primary_name:
+                        ar.headshot.name = primary_name
+                    ar.status = AccessRequest.STATUS_PENDING
+                    requested_role = str(user.role or "").strip().lower()
+                    if requested_role:
+                        extra = dict(ar.extra or {})
+                        extra["requestedRole"] = requested_role
+                        ar.extra = extra
+                    ar.save(update_fields=["headshot", "status", "extra", "updated_at"])
+            except Exception:
+                return Response(
+                    {"success": False, "message": "Failed to create account"},
+                    status=500,
+                )
+
+            safe_user = _safe_user_from_db(user)
             return Response(
-                {"success": True, "message": "Account created successfully"}, status=201
+                {
+                    "success": True,
+                    "pending": True,
+                    "user": safe_user,
+                    "verifyToken": _issue_verify_token_from_db(user),
+                },
+                status=201,
             )
         return Response({"success": False, "errors": serializer.errors}, status=400)
 
@@ -65,6 +161,85 @@ class LoginView(APIView):
 
 
 # ----------------------
+# GOOGLE LOGIN
+# ----------------------
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_login(request):
+    credential = (
+        request.data.get('credential')
+        or request.data.get('id_token')
+        or request.data.get('idToken')
+        or ''
+    )
+    credential = str(credential).strip()
+    if not credential:
+        return Response(
+            {"message": "Google credential is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    client_id = (settings.GOOGLE_CLIENT_ID or os.getenv('GOOGLE_CLIENT_ID', '')).strip()
+    if not client_id:
+        return Response(
+            {"message": "Server missing GOOGLE_CLIENT_ID"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    try:
+        from google.oauth2 import id_token as google_id_token
+        from google.auth.transport import requests as google_requests
+
+        req = google_requests.Request()
+        idinfo = google_id_token.verify_oauth2_token(credential, req, client_id)
+    except Exception as exc:
+        return Response(
+            {"message": f"Invalid Google credential: {exc}"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    email = (idinfo.get('email') or '').lower().strip()
+    if not email:
+        return Response(
+            {"message": "Google account missing email"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    name = (idinfo.get('name') or '').strip() or email
+    picture = idinfo.get('picture') or ''
+    email_verified = bool(idinfo.get('email_verified', False))
+
+    user, created = AppUser.objects.get_or_create(
+        email=email,
+        defaults={
+            "name": name,
+            "role": "customer",
+            "avatar": picture or "",
+            "email_verified": email_verified,
+        },
+    )
+
+    updates = {"last_login": timezone.now()}
+    if not created:
+        if name and name != user.name:
+            updates["name"] = name
+        if picture and picture != user.avatar:
+            updates["avatar"] = picture
+        if email_verified and not user.email_verified:
+            updates["email_verified"] = True
+
+    for key, value in updates.items():
+        setattr(user, key, value)
+    user.save(update_fields=list(updates.keys()))
+
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {"refresh": str(refresh), "access": str(refresh.access_token)},
+        status=status.HTTP_200_OK,
+    )
+
+
+# ----------------------
 # PROFILE
 # ----------------------
 class ProfileView(APIView):
@@ -72,6 +247,9 @@ class ProfileView(APIView):
 
     def get(self, request):
         user = request.user
+        avatar_value = user.avatar or None
+        if avatar_value and not str(avatar_value).startswith("http"):
+            avatar_value = request.build_absolute_uri(avatar_value)
         return Response({
             "id": user.id,
             "email": user.email,
@@ -79,7 +257,7 @@ class ProfileView(APIView):
             "role": user.role,
             "status": user.status,
             "credit_points": user.credit_points,
-            "avatar": request.build_absolute_uri(user.avatar.url) if user.avatar else None,
+            "avatar": avatar_value,
             "phone": user.phone,
         })
 
@@ -91,23 +269,39 @@ class ProfileView(APIView):
 @permission_classes([IsAuthenticated])
 def update_avatar(request):
     user = request.user
-    avatar_data = request.data.get('avatar')
-
-    if not avatar_data:
-        return Response({'error': 'Avatar image is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
     try:
-        # Handle base64 image
-        format, imgstr = avatar_data.split(';base64,')
-        ext = format.split('/')[-1]
-        filename = f"user_{user.id}_avatar.{ext}"
+        upload = request.FILES.get('avatar') or request.FILES.get('image')
+        if upload:
+            ext = (upload.name.rsplit('.', 1)[-1] or 'jpg').lower()
+            filename = f"avatars/{user.id}/{uuid.uuid4().hex}.{ext}"
+            path = default_storage.save(filename, upload)
+            avatar_url = default_storage.url(path)
+        else:
+            avatar_data = request.data.get('avatar')
+            if not avatar_data:
+                return Response({'error': 'Avatar image is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user.avatar.save(filename, ContentFile(base64.b64decode(imgstr)))
-        user.save()
+            if ';base64,' in avatar_data:
+                format, imgstr = avatar_data.split(';base64,')
+                ext = format.split('/')[-1] or 'jpg'
+            else:
+                imgstr = avatar_data
+                ext = 'jpg'
+
+            filename = f"avatars/{user.id}/{uuid.uuid4().hex}.{ext}"
+            decoded = base64.b64decode(imgstr)
+            path = default_storage.save(filename, ContentFile(decoded))
+            avatar_url = default_storage.url(path)
+
+        if avatar_url and not avatar_url.startswith('http'):
+            avatar_url = request.build_absolute_uri(avatar_url)
+
+        user.avatar = avatar_url
+        user.save(update_fields=['avatar'])
 
         return Response({
             "message": "Avatar updated successfully",
-            "avatar_url": request.build_absolute_uri(user.avatar.url)
+            "avatar_url": avatar_url
         }, status=status.HTTP_200_OK)
 
     except Exception as e:

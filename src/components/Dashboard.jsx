@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   ShoppingBag,
@@ -7,6 +8,13 @@ import {
   Clock3,
   CalendarRange,
   CalendarDays,
+  Users,
+  ShieldAlert,
+  UserCog,
+  FileText,
+  Server,
+  Bell,
+  AlertTriangle,
 } from 'lucide-react';
 import StatsCard from './dashboard/StatsCard';
 import SalesChart from './dashboard/SalesChart';
@@ -14,24 +22,78 @@ import CategoryChart from './dashboard/CategoryChart';
 import PopularItems from './dashboard/PopularItems';
 import RecentSales from './dashboard/RecentSales';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
+import AdminDashboardSkeleton from '@/components/dashboard/AdminDashboardSkeleton';
 import ErrorState from '@/components/shared/ErrorState';
-import { useVerificationQueue } from '@/hooks/useVerificationQueue';
 import { useAuth } from '@/components/AuthContext';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { inventoryService } from '@/api/services/inventoryService';
+import { calculateExpiringItems } from '@/components/analytics/utils/analyticsHelpers';
+
+const EXPIRY_WARNING_DAYS = 5;
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState('today');
-  const { stats, loading, error, refetch } = useDashboard(timeRange);
-  const { hasAnyRole, user } = useAuth();
-  const isVerifier = hasAnyRole(['admin', 'manager']);
-  const { requests: pendingRequests, pagination: verifyPagination } =
-    useVerificationQueue({
-      status: 'pending',
-      limit: 1,
-      enabled: isVerifier && Boolean(user),
-    });
+  const { hasAnyRole, user, can } = useAuth();
+  const isAdmin = hasAnyRole(['admin']);
+  const { stats, loading, error, refetch } = useDashboard(timeRange, {
+    enabled: !isAdmin,
+  });
+  const {
+    stats: adminStats,
+    loading: adminLoading,
+    error: adminError,
+    refetch: adminRefetch,
+  } = useAdminDashboard({ enabled: isAdmin });
+  const canViewInventory = can('inventory.view') && Boolean(user);
+  const [expiringCount, setExpiringCount] = useState(0);
+  const [expiringLoading, setExpiringLoading] = useState(false);
+  const [expiringError, setExpiringError] = useState(null);
+
+  React.useEffect(() => {
+    let active = true;
+    if (isAdmin || !canViewInventory) {
+      setExpiringCount(0);
+      setExpiringError(null);
+      return undefined;
+    }
+
+    const loadExpiring = async () => {
+      setExpiringLoading(true);
+      setExpiringError(null);
+      try {
+        const res = await inventoryService.getInventoryItems({ limit: 250 });
+        if (!res?.success) {
+          throw new Error('Failed to load inventory items');
+        }
+        const list = res?.data || [];
+        const normalized = list.map((item) => ({
+          ...item,
+          expiryDate: item.expiryDate || item.expiry_date || null,
+        }));
+        const expiring = calculateExpiringItems(
+          normalized,
+          EXPIRY_WARNING_DAYS
+        ).filter((item) => item.daysToExpiry >= 0);
+        if (!active) return;
+        setExpiringCount(expiring.length);
+      } catch (err) {
+        if (!active) return;
+        setExpiringError(err?.message || 'Unable to load inventory alerts');
+        setExpiringCount(0);
+      } finally {
+        if (active) setExpiringLoading(false);
+      }
+    };
+
+    loadExpiring();
+    return () => {
+      active = false;
+    };
+  }, [canViewInventory, isAdmin]);
 
   // Merge today and yesterday category sales data for comparison
   const categorySalesData = React.useMemo(() => {
@@ -147,6 +209,134 @@ const Dashboard = () => {
     });
   }, [stats?.salesByTime, stats?.salesByTimeYesterday, timeRange]);
 
+  const containerClassName =
+    'animate-fade-in container mx-auto w-full max-w-[1440px] space-y-6 px-3 py-4 sm:px-6 sm:py-6 lg:mx-0 lg:max-w-none lg:px-1 lg:py-1';
+
+  const formatNumber = (value) =>
+    new Intl.NumberFormat('en-US').format(Number(value) || 0);
+
+  if (isAdmin) {
+    if (adminLoading) {
+      return (
+        <div className={containerClassName}>
+          <AdminDashboardSkeleton />
+        </div>
+      );
+    }
+
+    if (adminError) {
+      return <ErrorState message={adminError} onRetry={adminRefetch} />;
+    }
+
+    const userCounts = adminStats?.users || {};
+    const totalUsers = userCounts.total || 0;
+    const activeUsers = userCounts.active || 0;
+    const pendingUsers = userCounts.pending || 0;
+    const deactivatedUsers = userCounts.deactivated || 0;
+
+    const pendingVerifications = adminStats?.pendingVerifications || 0;
+    const notificationsTotal = adminStats?.notifications?.total || 0;
+    const notificationsUnread = adminStats?.notifications?.unread || 0;
+    const rolePermissionChanges = adminStats?.rolePermissionChanges || 0;
+    const securityAlerts = adminStats?.securityAlerts || 0;
+    const adminActionsCount = adminStats?.adminActions?.count || 0;
+    const latestAction = adminStats?.adminActions?.latest;
+    const healthStatus = adminStats?.systemHealth?.status || 'Unknown';
+    const healthDetail =
+      adminStats?.systemHealth?.detail || 'Health checks unavailable';
+
+    const userDetail = `Active ${formatNumber(
+      activeUsers
+    )} · Pending ${formatNumber(pendingUsers)} · Deactivated ${formatNumber(
+      deactivatedUsers
+    )}`;
+    const pendingDetail = pendingVerifications
+      ? 'Awaiting review'
+      : 'No pending requests';
+    const notificationsDetail = notificationsTotal
+      ? `Unread ${formatNumber(notificationsUnread)} of ${formatNumber(
+          notificationsTotal
+        )}`
+      : 'No notifications';
+    const roleDetail = 'Last 7 days';
+    const alertsDetail = securityAlerts ? 'Open alerts' : 'No open alerts';
+    const actionsDetail = latestAction?.action
+      ? `Latest: ${latestAction.action}`
+      : 'No recent actions';
+
+    return (
+      <div className={containerClassName}>
+        <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6 lg:flex-nowrap lg:items-center lg:gap-0">
+          <div className="max-w-2xl space-y-1 lg:space-y-0">
+            <h1 className="text-[clamp(1.35rem,1.1vw+1.15rem,2rem)] font-bold tracking-tight text-foreground lg:text-3xl">
+              Admin Dashboard
+            </h1>
+            <p className="text-[clamp(0.85rem,1vw,1rem)] leading-relaxed text-muted-foreground lg:mt-1 lg:text-sm">
+              Monitor user access, verification flow, and security activity.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <StatsCard
+            title="User Accounts Overview"
+            value={totalUsers}
+            icon={Users}
+            formatter={formatNumber}
+            detail={userDetail}
+            onClick={() => navigate('/users')}
+          />
+          <StatsCard
+            title="Pending Verifications"
+            value={pendingVerifications}
+            icon={ShieldCheck}
+            formatter={formatNumber}
+            detail={pendingDetail}
+            onClick={() => navigate('/users')}
+          />
+          <StatsCard
+            title="Notifications"
+            value={notificationsUnread}
+            icon={Bell}
+            formatter={formatNumber}
+            detail={notificationsDetail}
+            onClick={() => navigate('/notifications')}
+          />
+          <StatsCard
+            title="Role & Permission Changes"
+            value={rolePermissionChanges}
+            icon={UserCog}
+            formatter={formatNumber}
+            detail={roleDetail}
+            onClick={() => navigate('/logs')}
+          />
+          <StatsCard
+            title="Security & Access Alerts"
+            value={securityAlerts}
+            icon={ShieldAlert}
+            formatter={formatNumber}
+            detail={alertsDetail}
+            onClick={() => navigate('/logs')}
+          />
+          <StatsCard
+            title="Recent Admin Actions"
+            value={adminActionsCount}
+            icon={FileText}
+            formatter={formatNumber}
+            detail={actionsDetail}
+            onClick={() => navigate('/logs')}
+          />
+          <StatsCard
+            title="System Health"
+            value={healthStatus}
+            icon={Server}
+            detail={healthDetail}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -183,7 +373,7 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="animate-fade-in container mx-auto w-full max-w-[1440px] space-y-6 px-3 py-4 sm:px-6 sm:py-6 lg:mx-0 lg:max-w-none lg:px-1 lg:py-1">
+    <div className={containerClassName}>
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6 lg:flex-nowrap lg:items-center lg:gap-0">
         <div className="max-w-2xl space-y-1 lg:space-y-0">
@@ -289,11 +479,19 @@ const Dashboard = () => {
           comparisonPeriod="yesterday"
           icon={ShoppingBag}
         />
-        {isVerifier ? (
+        {canViewInventory ? (
           <StatsCard
-            title="Pending Accounts"
-            value={verifyPagination?.total ?? (pendingRequests?.length || 0)}
-            icon={ShieldCheck}
+            title="Expiring Inventory"
+            value={expiringCount}
+            icon={AlertTriangle}
+            detail={
+              expiringLoading
+                ? 'Checking expiry dates...'
+                : expiringError
+                  ? expiringError
+                  : `Next ${EXPIRY_WARNING_DAYS} days`
+            }
+            onClick={() => navigate('/inventory')}
           />
         ) : null}
       </div>

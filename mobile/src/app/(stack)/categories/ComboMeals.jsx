@@ -1,5 +1,5 @@
 // ComboMeals.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -20,14 +20,124 @@ import {
 } from '@expo-google-fonts/roboto';
 import { useCart } from '../../../context/CartContext';
 import { fetchMenuItems } from '../../../api/api';
+import { getPaxRemaining, isPaxAvailable } from '../../../utils/pax';
+import { subscribeMenuRefresh } from '../../../utils/menuRefresh';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 40) / 2;
+const COLLAGE_GAP = 6;
+const COLLAGE_HEIGHT = 100;
+
+const resolveImageSrc = (item) => {
+  if (!item) return null;
+  const candidates = [
+    item.image,
+    item.imageUrl,
+    item.image_url,
+    item.photo,
+    item.picture,
+    item.thumbnail,
+    item.img,
+    item?.image?.url,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const resolveIngredientEntries = (item) => {
+  if (!item) return [];
+  const raw =
+    item.ingredients ||
+    item.ingredientIds ||
+    item.ingredient_ids ||
+    item.combo_items ||
+    item.comboItems;
+  return Array.isArray(raw) ? raw : [];
+};
+
+const isComboMeal = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients =
+    item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
+const resolveComboImages = (item, imageById) => {
+  const sources = [];
+  resolveIngredientEntries(item).forEach((entry) => {
+    if (!entry) return;
+    if (typeof entry === 'object') {
+      const direct = resolveImageSrc(entry);
+      if (direct) {
+        sources.push(direct);
+        return;
+      }
+      const id =
+        entry.id ||
+        entry.menuItemId ||
+        entry.itemId ||
+        entry.menu_item_id ||
+        null;
+      if (id !== null && id !== undefined) {
+        const mapped = imageById.get(String(id));
+        if (mapped) sources.push(mapped);
+      }
+      return;
+    }
+    const mapped = imageById.get(String(entry));
+    if (mapped) sources.push(mapped);
+  });
+
+  if (sources.length === 0) {
+    const fallback = resolveImageSrc(item);
+    if (fallback) sources.push(fallback);
+  }
+
+  return sources.filter((src) => {
+    if (!src) return false;
+    if (typeof src === 'string') {
+      const lower = src.toLowerCase();
+      if (lower.includes('.svg') || lower.startsWith('data:image/svg')) {
+        return false;
+      }
+    }
+    return true;
+  });
+};
+
+const toImageSource = (src) => {
+  if (!src) return null;
+  if (typeof src === 'string') return { uri: src };
+  if (typeof src === 'number') return src;
+  if (typeof src === 'object' && src.uri) return src;
+  return null;
+};
 
 export default function ComboMeals() {
   const router = useRouter();
-  const { cart, addToCart, decreaseQuantity } = useCart();
-  const [menuItems, setMenuItems] = useState([]);
+  const { cart, addToCart, decreaseQuantity, removeFromCart } = useCart();
+  const [comboMeals, setComboMeals] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [fontsLoaded] = useFonts({
@@ -35,52 +145,137 @@ export default function ComboMeals() {
     Roboto_700Bold,
   });
 
-  useEffect(() => {
-    loadComboMeals();
-  }, []);
-
-  const loadComboMeals = async () => {
+  const loadComboMeals = useCallback(async ({ silent = false } = {}) => {
     try {
+      if (!silent) setLoading(true);
       const items = await fetchMenuItems();
-      const filtered = items.filter(
-        (item) =>
-          item.category &&
-          item.category.toLowerCase().includes('combo meals')
-      );
-      setMenuItems(filtered);
+      const imageById = new Map();
+      (items || []).forEach((entry) => {
+        if (!entry || entry.id === undefined || entry.id === null) return;
+        const src = resolveImageSrc(entry);
+        if (src) imageById.set(String(entry.id), src);
+      });
+
+      const combos = (items || [])
+        .filter((entry) => isComboMeal(entry))
+        .map((entry) => {
+          const collageSources = resolveComboImages(entry, imageById).slice(
+            0,
+            3
+          );
+          return { ...entry, collageSources };
+        })
+        .filter((entry) => entry.collageSources.length === 3);
+
+      setComboMeals(combos);
     } catch (error) {
       console.error('Error fetching combo meals:', error);
+      setComboMeals([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadComboMeals();
+  }, [loadComboMeals]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeMenuRefresh(() => {
+      loadComboMeals({ silent: true });
+    });
+    return unsubscribe;
+  }, [loadComboMeals]);
 
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#e67e22" />
-        <Text style={{ marginTop: 8, color: '#e67e22', fontFamily: 'Roboto_700Bold' }}>
+        <Text
+          style={{
+            marginTop: 8,
+            color: '#e67e22',
+            fontFamily: 'Roboto_700Bold',
+          }}
+        >
           Loading Combo Meals...
         </Text>
       </View>
     );
   }
 
+  const handleDecrease = (itemId, qty) => {
+    if (qty <= 1) {
+      removeFromCart(itemId);
+      return;
+    }
+    decreaseQuantity(itemId);
+  };
+
   const renderItem = ({ item }) => {
     const qty = cart.find((i) => i.id === item.id)?.quantity || 0;
+    const paxRemaining = getPaxRemaining(item);
+    const isAvailable = isPaxAvailable(item);
+    const [mainSrc, topSrc, bottomSrc] = item.collageSources || [];
+    const mainImage = toImageSource(mainSrc);
+    const topImage = toImageSource(topSrc);
+    const bottomImage = toImageSource(bottomSrc);
+
+    if (!mainImage || !topImage || !bottomImage) {
+      return null;
+    }
 
     return (
-      <View style={styles.card}>
-        {item.image && (
-          <Image source={{ uri: item.image }} style={styles.image} />
-        )}
+      <View style={[styles.card, !isAvailable && styles.cardDisabled]}>
+        <View style={styles.collageGrid}>
+          <View style={styles.collageMain}>
+            <Image
+              source={mainImage}
+              style={styles.collageImage}
+              resizeMode="cover"
+            />
+          </View>
+          <View style={styles.collageSide}>
+            <View style={[styles.collageTile, styles.collageTileTop]}>
+              <Image
+                source={topImage}
+                style={styles.collageImage}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={styles.collageTile}>
+              <Image
+                source={bottomImage}
+                style={styles.collageImage}
+                resizeMode="cover"
+              />
+            </View>
+          </View>
+        </View>
         <Text style={styles.name}>{item.name}</Text>
+        {paxRemaining !== null && (
+          <View
+            style={[
+              styles.paxBadge,
+              paxRemaining === 0 && styles.paxBadgeEmpty,
+            ]}
+          >
+            <Text
+              style={[
+                styles.paxBadgeText,
+                paxRemaining === 0 && styles.paxBadgeTextEmpty,
+              ]}
+            >
+              {paxRemaining} pax
+            </Text>
+          </View>
+        )}
         <Text style={styles.price}>₱{item.price}</Text>
 
         <View style={styles.controls}>
           <TouchableOpacity
             style={styles.controlBtn}
-            onPress={() => decreaseQuantity(item.id)}
+            onPress={() => handleDecrease(item.id, qty)}
           >
             <Ionicons name="remove" size={18} color="#fff" />
           </TouchableOpacity>
@@ -88,12 +283,19 @@ export default function ComboMeals() {
           <Text style={styles.qty}>{qty}</Text>
 
           <TouchableOpacity
-            style={styles.controlBtn}
+            style={[
+              styles.controlBtn,
+              !isAvailable && styles.controlBtnDisabled,
+            ]}
             onPress={() => addToCart(item)}
+            disabled={!isAvailable}
           >
             <Ionicons name="add" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
+        {!isAvailable && (
+          <Text style={styles.unavailableText}>Unavailable</Text>
+        )}
       </View>
     );
   };
@@ -105,7 +307,7 @@ export default function ComboMeals() {
   };
 
   const handleAddMoreItems = () => {
-    router.push('/(tabs)');
+    router.push('/home-dashboard');
   };
 
   return (
@@ -129,11 +331,13 @@ export default function ComboMeals() {
       </ImageBackground>
 
       {/* Combo Meals List */}
-      {menuItems.length > 0 ? (
+      {comboMeals.length > 0 ? (
         <FlatList
-          data={menuItems}
+          data={comboMeals}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) =>
+            item?.id ? String(item.id) : `combo-${index}`
+          }
           numColumns={2}
           columnWrapperStyle={{ justifyContent: 'space-between' }}
           contentContainerStyle={{
@@ -152,7 +356,10 @@ export default function ComboMeals() {
       {/* Floating Cart */}
       {total > 0 && (
         <View style={styles.floatingContainer}>
-          <TouchableOpacity style={styles.floatingCart} onPress={handleCheckout}>
+          <TouchableOpacity
+            style={styles.floatingCart}
+            onPress={handleCheckout}
+          >
             <Ionicons name="cart-outline" size={22} color="#fff" />
             <Text style={styles.cartText}>₱{total} • Checkout</Text>
           </TouchableOpacity>
@@ -210,7 +417,38 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#f97316',
   },
-  image: { width: '100%', height: 100, borderRadius: 8, marginBottom: 8 },
+  cardDisabled: {
+    opacity: 0.55,
+    borderColor: '#E5E7EB',
+  },
+  collageGrid: {
+    width: '100%',
+    height: COLLAGE_HEIGHT,
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  collageMain: {
+    flex: 2,
+    marginRight: COLLAGE_GAP,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  collageSide: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  collageTile: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  collageTileTop: {
+    marginBottom: COLLAGE_GAP,
+  },
+  collageImage: {
+    width: '100%',
+    height: '100%',
+  },
   name: {
     fontSize: 16,
     fontFamily: 'Roboto_700Bold',
@@ -218,8 +456,26 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
+  paxBadge: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
+  paxBadgeEmpty: {
+    backgroundColor: '#FEE2E2',
+  },
+  paxBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Roboto_700Bold',
+    color: '#075985',
+  },
+  paxBadgeTextEmpty: {
+    color: '#B91C1C',
+  },
   price: {
-    fontSize: 14,
+    fontSize: 18,
     fontFamily: 'Roboto_400Regular',
     color: '#777',
     marginBottom: 8,
@@ -236,12 +492,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 6,
   },
+  controlBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
   qty: {
     fontSize: 16,
     fontFamily: 'Roboto_700Bold',
     color: '#333',
     minWidth: 20,
     textAlign: 'center',
+  },
+  unavailableText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: 'Roboto_700Bold',
+    color: '#B91C1C',
   },
   floatingContainer: {
     position: 'absolute',

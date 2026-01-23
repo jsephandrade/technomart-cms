@@ -7,11 +7,11 @@ Rules:
 
 import json
 import uuid
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
-from django.db.models import CharField, F, Value
+from django.db.models import CharField, F, Value, Q
 from django.db.models.functions import Cast, Coalesce
 from django.utils import timezone as dj_tz
 
@@ -47,6 +47,319 @@ def _parse_time(val):
         return time(hour=int(h), minute=int(m), second=int(s))
     except Exception:
         return None
+
+
+WEEK_DAYS = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+]
+WEEK_DAY_ORDER = {day: idx for idx, day in enumerate(WEEK_DAYS)}
+
+
+def _day_name(value):
+    if not value:
+        return None
+    try:
+        return value.strftime("%A")
+    except Exception:
+        return None
+
+
+def _days_in_range(start_date, end_date):
+    if not start_date or not end_date or end_date < start_date:
+        return []
+    days = []
+    seen = set()
+    cursor = start_date
+    while cursor <= end_date:
+        label = _day_name(cursor)
+        if label and label not in seen:
+            days.append(label)
+            seen.add(label)
+        cursor = cursor + timedelta(days=1)
+    return days
+
+
+def _time_overlaps(start_a, end_a, start_b, end_b):
+    try:
+        return start_a < end_b and end_a > start_b
+    except Exception:
+        return False
+
+
+def _actor_role(actor):
+    if isinstance(actor, dict):
+        return (actor.get("role") or "").lower()
+    return (getattr(actor, "role", "") or "").lower()
+
+
+def _is_manager_self(actor, employee_id):
+    if _actor_role(actor) != "manager":
+        return False
+    if not employee_id:
+        return False
+    _, actor_emp_id = resolve_employee_ref(actor, allow_fallback=True)
+    if not actor_emp_id:
+        return False
+    allowed = _identifier_variants(actor_emp_id) or {str(actor_emp_id)}
+    return str(employee_id) in allowed
+
+
+def _employee_role_match(employee):
+    position = (getattr(employee, "position", "") or "").strip()
+    if position:
+        return position, "position"
+    role = ""
+    user = getattr(employee, "user", None)
+    if user:
+        role = (getattr(user, "role", "") or "").strip()
+    if role:
+        return role, "role"
+    return "", None
+
+
+def _resolve_schedule_for_date(employee, record_date):
+    if not employee or not record_date:
+        return None
+    try:
+        from .models import ScheduleEntry
+    except Exception:
+        return None
+    try:
+        day_label = record_date.strftime("%A")
+    except Exception:
+        return None
+    if not day_label:
+        return None
+    return (
+        ScheduleEntry.objects.filter(employee=employee, day=day_label)
+        .order_by("start_time")
+        .first()
+    )
+
+
+def _calendar_exception_for_date(record_date):
+    if not record_date:
+        return None
+    try:
+        from .models import CalendarException
+    except Exception:
+        return None
+    return CalendarException.objects.filter(date=record_date).first()
+
+
+def _is_no_work_day(record_date):
+    entry = _calendar_exception_for_date(record_date)
+    if not entry:
+        return False
+    kind = (getattr(entry, "kind", "") or "").lower()
+    if kind == "no_work":
+        return True
+    if kind == "holiday" and not getattr(entry, "is_workday_override", False):
+        return True
+    return False
+
+
+def _attendance_status_for_checkin(employee, record_date, check_in_time, fallback="present"):
+    if not employee or not record_date or not check_in_time:
+        return fallback
+    try:
+        schedule_entry = _resolve_schedule_for_date(employee, record_date)
+        if not schedule_entry or not schedule_entry.start_time:
+            return fallback
+        if check_in_time > schedule_entry.start_time:
+            return "late"
+        return "present"
+    except Exception:
+        return fallback
+
+
+def _combine_date_time(record_date, time_value):
+    if not record_date or not time_value:
+        return None
+    try:
+        combined = datetime.combine(record_date, time_value)
+        if dj_tz.is_naive(combined):
+            combined = dj_tz.make_aware(combined, dj_tz.get_current_timezone())
+        return combined
+    except Exception:
+        return None
+
+
+def _auto_mark_absent_if_shift_passed(employee, record_date, now=None):
+    if not employee or not record_date:
+        return None
+    try:
+        from .models import AttendanceRecord
+    except Exception:
+        return None
+    try:
+        if _is_no_work_day(record_date):
+            return None
+        schedule_entry = _resolve_schedule_for_date(employee, record_date)
+        if not schedule_entry or not schedule_entry.end_time:
+            return None
+        now_dt = dj_tz.localtime(now or dj_tz.now())
+        shift_end = _combine_date_time(record_date, schedule_entry.end_time)
+        if not shift_end or now_dt <= shift_end:
+            return None
+        existing = AttendanceRecord.objects.filter(
+            employee=employee, date=record_date
+        ).first()
+        if existing:
+            update_fields = []
+            if existing.check_in and not existing.check_out:
+                if existing.status != "absent":
+                    existing.status = "absent"
+                    update_fields.append("status")
+                if not existing.notes:
+                    existing.notes = "Shift window closed without clock-out"
+                    update_fields.append("notes")
+            elif not existing.check_in:
+                if existing.status != "absent":
+                    existing.status = "absent"
+                    update_fields.append("status")
+                if not existing.notes:
+                    existing.notes = "Shift window closed without clock-in"
+                    update_fields.append("notes")
+            if update_fields:
+                update_fields.append("updated_at")
+                existing.save(update_fields=update_fields)
+            return existing
+        return AttendanceRecord.objects.create(
+            employee=employee,
+            date=record_date,
+            status="absent",
+            notes="Shift window closed without clock-in",
+        )
+    except Exception:
+        return None
+
+
+def _auto_assign_leave_coverage(leave_record):
+    try:
+        from .models import Employee, ScheduleEntry, LeaveRecord
+    except Exception:
+        return []
+
+    leave_employee = leave_record.employee
+    days = _days_in_range(leave_record.start_date, leave_record.end_date)
+    if not days:
+        return []
+
+    entries = list(
+        ScheduleEntry.objects.filter(employee=leave_employee, day__in=days)
+    )
+    if not entries:
+        return []
+
+    role_key, role_source = _employee_role_match(leave_employee)
+    candidate_qs = (
+        Employee.objects.select_related("user")
+        .filter(status="active")
+        .exclude(id=leave_employee.id)
+    )
+    candidate_qs = candidate_qs.filter(
+        Q(user__isnull=True)
+        | (Q(user__status__iexact="active") & Q(user__is_active=True))
+    )
+    if role_key and role_source == "position":
+        candidate_qs = candidate_qs.filter(position__iexact=role_key)
+    elif role_key and role_source == "role":
+        candidate_qs = candidate_qs.filter(user__role__iexact=role_key)
+
+    candidates = list(candidate_qs)
+    if not candidates:
+        return []
+
+    candidate_ids = [c.id for c in candidates]
+    on_leave_ids = set(
+        LeaveRecord.objects.filter(
+            employee_id__in=candidate_ids,
+            status=LeaveRecord.STATUS_APPROVED,
+            start_date__lte=leave_record.end_date,
+            end_date__gte=leave_record.start_date,
+        ).values_list("employee_id", flat=True)
+    )
+    candidates = [c for c in candidates if c.id not in on_leave_ids]
+    if not candidates:
+        return []
+
+    schedule_rows = list(
+        ScheduleEntry.objects.filter(employee_id__in=[c.id for c in candidates], day__in=days)
+    )
+    schedule_by_employee_day = {}
+    for row in schedule_rows:
+        schedule_by_employee_day.setdefault(row.employee_id, {}).setdefault(
+            row.day, []
+        ).append(row)
+
+    candidate_name_map = {
+        c.id: (c.name or "").strip().lower() for c in candidates
+    }
+    assignments = []
+    entries.sort(
+        key=lambda entry: (
+            WEEK_DAY_ORDER.get(entry.day, 99),
+            entry.start_time,
+            entry.end_time,
+        )
+    )
+
+    for entry in entries:
+        available = []
+        for candidate in candidates:
+            day_entries = schedule_by_employee_day.get(candidate.id, {}).get(
+                entry.day, []
+            )
+            if any(
+                _time_overlaps(
+                    entry.start_time,
+                    entry.end_time,
+                    other.start_time,
+                    other.end_time,
+                )
+                for other in day_entries
+            ):
+                continue
+            available.append(candidate)
+        if not available:
+            continue
+        available.sort(
+            key=lambda c: (
+                len(
+                    schedule_by_employee_day.get(c.id, {}).get(entry.day, [])
+                ),
+                candidate_name_map.get(c.id, ""),
+            )
+        )
+        chosen = available[0]
+        entry.employee = chosen
+        entry.save(update_fields=["employee"])
+        schedule_by_employee_day.setdefault(chosen.id, {}).setdefault(
+            entry.day, []
+        ).append(entry)
+        assignments.append(
+            {
+                "scheduleId": str(entry.id),
+                "day": entry.day,
+                "fromEmployeeId": str(leave_employee.id),
+                "toEmployeeId": str(chosen.id),
+            }
+        )
+        try:
+            from .notification_triggers import trigger_shift_assigned
+
+            trigger_shift_assigned(chosen, entry)
+        except Exception:
+            pass
+
+    return assignments
 
 
 def _normalize_uuid(value):
@@ -252,9 +565,17 @@ def attendance(request):
                 employee_name=Coalesce(F("employee__name"), Value("")),
             )
             if not can_manage:
-                _, self_emp_id = _employee_for_actor(actor, allow_fallback=True)
+                self_emp, self_emp_id = _employee_for_actor(
+                    actor, allow_fallback=True
+                )
                 if not self_emp_id:
                     return JsonResponse({"success": True, "data": []})
+                if not self_emp and self_emp_id:
+                    self_emp = Employee.objects.filter(id=self_emp_id).first()
+                if self_emp:
+                    _auto_mark_absent_if_shift_passed(
+                        self_emp, dj_tz.localdate()
+                    )
                 allowed_ids = _identifier_variants(self_emp_id) or {str(self_emp_id)}
                 qs = qs.filter(employee_id_str__in=allowed_ids)
             elif employee_id_param:
@@ -303,6 +624,14 @@ def attendance(request):
         if not d:
             return JsonResponse({"success": False, "message": "date is required"}, status=400)
 
+        exception_entry = _calendar_exception_for_date(d)
+        if exception_entry and _is_no_work_day(d):
+            label = "Holiday" if exception_entry.kind == "holiday" else "No work day"
+            return JsonResponse(
+                {"success": False, "message": f"{label} - attendance is disabled"},
+                status=403,
+            )
+
         if not can_manage:
             if emp_id:
                 allowed = _identifier_variants(self_employee_id)
@@ -337,11 +666,14 @@ def attendance(request):
                 emp = self_employee
                 emp_id = str(self_employee_id)
 
+        manager_self = can_manage and _is_manager_self(actor, emp_id)
+        can_manage_target = can_manage and not manager_self
+
         ci = _parse_time(payload.get("checkIn")) if payload.get("checkIn") else None
         co = _parse_time(payload.get("checkOut")) if payload.get("checkOut") else None
         status = (payload.get("status") or "present").lower()
-        if not can_manage:
-            status = "present"
+        if not can_manage_target:
+            status = _attendance_status_for_checkin(emp, d, ci, "present")
         notes = payload.get("notes") or ""
 
         with transaction.atomic():
@@ -359,11 +691,13 @@ def attendance(request):
             if created:
                 return JsonResponse({"success": True, "data": _safe_att(rec)})
 
-            if not can_manage:
+            if not can_manage_target:
                 updated = False
                 if ci and not rec.check_in:
                     rec.check_in = ci
-                    rec.status = status
+                    rec.status = _attendance_status_for_checkin(
+                        emp, rec.date, ci, rec.status or "present"
+                    )
                     updated = True
                 if co and not rec.check_out:
                     rec.check_out = co
@@ -408,14 +742,16 @@ def attendance_detail(request, rid):
             return JsonResponse({"success": False, "message": "Not found"}, status=404)
 
         can_manage = _has_permission(actor, "attendance.manage")
-        if not can_manage:
+        manager_self = can_manage and _is_manager_self(actor, rec.employee_id)
+        can_manage_target = can_manage and not manager_self
+        if not can_manage_target:
             self_employee, self_employee_id = _employee_for_actor(actor, allow_fallback=True)
             allowed = _identifier_variants(self_employee_id)
             if not self_employee_id or str(rec.employee_id) not in allowed:
                 return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
 
         if request.method == "DELETE":
-            if not can_manage:
+            if not can_manage_target:
                 return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
             rec.delete()
             return JsonResponse({"success": True})
@@ -425,7 +761,7 @@ def attendance_detail(request, rid):
         except Exception:
             payload = {}
 
-        if can_manage:
+        if can_manage_target:
             if "employeeId" in payload and payload["employeeId"]:
                 e = Employee.objects.filter(id=payload["employeeId"]).first()
                 if not e:
@@ -450,6 +786,10 @@ def attendance_detail(request, rid):
         updated = False
         if "checkIn" in payload:
             rec.check_in = _parse_time(payload["checkIn"]) if payload["checkIn"] else None
+            if rec.check_in:
+                rec.status = _attendance_status_for_checkin(
+                    rec.employee, rec.date, rec.check_in, rec.status or "present"
+                )
             updated = True
         if "checkOut" in payload:
             rec.check_out = _parse_time(payload["checkOut"]) if payload["checkOut"] else None
@@ -473,15 +813,27 @@ def leaves(request):
     try:
         from .models import LeaveRecord, Employee
         if request.method == "GET":
-            # Only managers/admins can view leave records
-            if not _has_permission(actor, "leave.manage"):
-                return JsonResponse({"success": False, "message": "Forbidden"}, status=403)
+            can_manage = _has_permission(actor, "leave.manage")
             employee_id = request.GET.get("employeeId")
             status = (request.GET.get("status") or "").lower()
             type_v = (request.GET.get("type") or "").lower()
             qs = LeaveRecord.objects.select_related("employee").all()
-            if employee_id:
-                qs = qs.filter(employee_id=employee_id)
+            if not can_manage:
+                self_employee, self_employee_id = _employee_for_actor(
+                    actor, allow_fallback=True
+                )
+                if not self_employee_id:
+                    return JsonResponse({"success": True, "data": []})
+                allowed_ids = _identifier_variants(self_employee_id) or {
+                    str(self_employee_id)
+                }
+                qs = qs.filter(employee_id__in=allowed_ids)
+            elif employee_id:
+                candidate_ids = _identifier_variants(employee_id)
+                if candidate_ids:
+                    qs = qs.filter(employee_id__in=candidate_ids)
+                else:
+                    qs = qs.filter(employee_id=employee_id)
             if status:
                 qs = qs.filter(status=status)
             if type_v:
@@ -561,32 +913,71 @@ def leave_detail(request, lid):
             payload = json.loads(request.body.decode("utf-8") or "{}")
         except Exception:
             payload = {}
-        if "employeeId" in payload and payload["employeeId"]:
-            e = Employee.objects.filter(id=payload["employeeId"]).first()
-            if not e:
-                return JsonResponse({"success": False, "message": "Employee not found"}, status=404)
-            rec.employee = e
-        if "startDate" in payload and payload["startDate"]:
-            sd = _parse_date(payload["startDate"]) 
-            if not sd:
-                return JsonResponse({"success": False, "message": "Invalid startDate"}, status=400)
-            rec.start_date = sd
-        if "endDate" in payload and payload["endDate"]:
-            ed = _parse_date(payload["endDate"]) 
-            if not ed:
-                return JsonResponse({"success": False, "message": "Invalid endDate"}, status=400)
-            rec.end_date = ed
-        if rec.end_date < rec.start_date:
-            return JsonResponse({"success": False, "message": "endDate must be after startDate"}, status=400)
-        if "type" in payload and payload["type"]:
-            rec.type = str(payload["type"]).lower()
-        if "status" in payload and payload["status"]:
-            rec.status = str(payload["status"]).lower()
-            rec.decided_by = getattr(actor, "email", "") or getattr(actor, "name", "") or ""
-            rec.decided_at = dj_tz.now()
-        if "reason" in payload and payload["reason"] is not None:
-            rec.reason = str(payload["reason"]) 
-        rec.save()
+        status_requested = (payload.get("status") or "").lower().strip()
+        if status_requested in {"approved", "rejected"}:
+            actor_role = _actor_role(actor)
+            _, actor_emp_id = resolve_employee_ref(actor, allow_fallback=True)
+            if actor_role == "manager" and actor_emp_id and str(actor_emp_id) == str(rec.employee_id):
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "You cannot approve or reject your own leave request.",
+                    },
+                    status=403,
+                )
+        old_status = rec.status
+        status_changed = False
+        assignments = []
+        with transaction.atomic():
+            if "employeeId" in payload and payload["employeeId"]:
+                e = Employee.objects.filter(id=payload["employeeId"]).first()
+                if not e:
+                    return JsonResponse(
+                        {"success": False, "message": "Employee not found"}, status=404
+                    )
+                rec.employee = e
+            if "startDate" in payload and payload["startDate"]:
+                sd = _parse_date(payload["startDate"])
+                if not sd:
+                    return JsonResponse(
+                        {"success": False, "message": "Invalid startDate"},
+                        status=400,
+                    )
+                rec.start_date = sd
+            if "endDate" in payload and payload["endDate"]:
+                ed = _parse_date(payload["endDate"])
+                if not ed:
+                    return JsonResponse(
+                        {"success": False, "message": "Invalid endDate"},
+                        status=400,
+                    )
+                rec.end_date = ed
+            if rec.end_date < rec.start_date:
+                return JsonResponse(
+                    {"success": False, "message": "endDate must be after startDate"},
+                    status=400,
+                )
+            if "type" in payload and payload["type"]:
+                rec.type = str(payload["type"]).lower()
+            if "status" in payload and payload["status"]:
+                rec.status = str(payload["status"]).lower()
+                rec.decided_by = (
+                    getattr(actor, "email", "") or getattr(actor, "name", "") or ""
+                )
+                rec.decided_at = dj_tz.now()
+            if "reason" in payload and payload["reason"] is not None:
+                rec.reason = str(payload["reason"])
+            rec.save()
+            status_changed = rec.status != old_status
+            if status_changed and rec.status == LeaveRecord.STATUS_APPROVED:
+                assignments = _auto_assign_leave_coverage(rec)
+        if status_changed:
+            try:
+                from .notification_triggers import trigger_leave_status_change
+
+                trigger_leave_status_change(rec)
+            except Exception:
+                pass
         return JsonResponse({"success": True, "data": _safe_leave(rec)})
     except Exception:
         return JsonResponse({"success": False, "message": "Server error"}, status=500)

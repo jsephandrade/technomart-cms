@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   API_CONFIG,
@@ -6,6 +7,7 @@ import {
   BASE_URL_FEEDBACK as CONFIG_BASE_URL_FEEDBACK,
   BASE_URL_MENU as CONFIG_BASE_URL_MENU,
 } from './config';
+import { notifyMenuRefresh } from '../utils/menuRefresh';
 
 // --------------------
 // Constants
@@ -328,12 +330,23 @@ export const loginWithGoogle = async ({ credential }) => {
 // --------------------
 // Feedback API
 // --------------------
-export const sendFeedback = async ({ category, message }) => {
+export const sendFeedback = async ({ category, message, rating }) => {
   try {
-    const response = await axios.post(`${BASE_URL_FEEDBACK}/api/feedback/`, {
-      category,
-      message,
-    });
+    const token = await getValidToken();
+    if (!token) {
+      throw new Error('Login required to send feedback.');
+    }
+    const response = await axios.post(
+      `${BASE_URL_FEEDBACK}/api/feedback/`,
+      {
+        category,
+        message,
+        rating,
+      },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
     return response.data;
   } catch (error) {
     console.error('Error sending feedback:', error.response || error.message);
@@ -400,6 +413,28 @@ export const fetchMenuItemsByCategory = async (category) => {
     return normalizeMenuItems(data);
   } catch (err) {
     console.error('fetchMenuItemsByCategory error:', err);
+    return [];
+  }
+};
+
+// --------------------
+// Catering Packages
+// --------------------
+export const fetchCateringPackages = async () => {
+  try {
+    const token = await getValidToken();
+    if (!token) throw new Error('No valid token. Please log in again.');
+    const res = await api.get('/catering/packages', {
+      params: { includeItems: true, active: true },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = res?.data?.data ?? res?.data;
+    return Array.isArray(payload) ? payload : [];
+  } catch (err) {
+    console.error(
+      'fetchCateringPackages error:',
+      err.response?.data || err.message
+    );
     return [];
   }
 };
@@ -529,29 +564,6 @@ export const createOrder = async (payload) => {
   }
 };
 
-// --------------------
-// Fetch GCash QR
-// --------------------
-export const fetchGcashQR = async (checkoutId) => {
-  try {
-    const token = await getValidToken(); // get valid token if needed
-    if (!token) throw new Error('No valid token found. Please log in again.');
-
-    const res = await api.get(`/orders/${checkoutId}/gcash_qr/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    // expected response: { success: true, qr_url: '...', total_amount: ... }
-    return res.data;
-  } catch (err) {
-    console.error('fetchGcashQR error:', err.response?.data || err.message);
-    return {
-      success: false,
-      message: err.response?.data?.message || err.message,
-    };
-  }
-};
-
 const changePassword = async () => {
   try {
     const token = await getValidToken();
@@ -571,51 +583,65 @@ const changePassword = async () => {
 // Cancel (Delete) Order
 
 export const cancelOrder = async (order) => {
-  // 1️⃣ Validate the order object
-  if (!order || !order.order_number) {
+  const orderNumber =
+    typeof order === 'string'
+      ? order
+      : order?.order_number ||
+        order?.orderNumber ||
+        order?.order_id ||
+        order?.orderId ||
+        order?.id ||
+        '';
+  if (!orderNumber) {
     console.warn('Cancel failed: order number is missing', order);
     Alert.alert('Error', 'Cannot cancel order: invalid order.');
-    return;
+    return { success: false, message: 'Missing order number' };
   }
 
-  const orderNumber = order.order_number;
-
-  // 2️⃣ Ask user for confirmation
-  Alert.alert('Cancel Order', 'Are you sure you want to cancel this order?', [
-    { text: 'No' },
-    {
-      text: 'Yes',
-      style: 'destructive',
-      onPress: async () => {
-        try {
-          // 3️⃣ Get a valid token
-          const token = await getValidToken();
-          if (!token) throw new Error('No valid token. Please log in again.');
-
-          // 4️⃣ Call backend DELETE API
-          await api.delete(`/orders/${orderNumber}/cancel/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          Alert.alert('Success', 'Order canceled successfully!');
-
-          // 5️⃣ Refresh orders list (optional)
-          if (typeof fetchUserOrders === 'function') {
-            await fetchUserOrders();
-          }
-        } catch (err) {
-          console.error(
-            'Cancel order failed:',
-            err.response?.data || err.message
-          );
-          Alert.alert(
-            'Error',
-            err.response?.data?.message || 'Failed to cancel order.'
-          );
-        }
+  return new Promise((resolve) => {
+    Alert.alert('Cancel Order', 'Are you sure you want to cancel this order?', [
+      {
+        text: 'No',
+        style: 'cancel',
+        onPress: () => resolve({ success: false, cancelled: true }),
       },
-    },
-  ]);
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const token = await getValidToken();
+            if (!token) throw new Error('No valid token. Please log in again.');
+
+            await api.delete(`/orders/${orderNumber}/cancel/`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+
+            Alert.alert('Success', 'Order canceled successfully!');
+            notifyMenuRefresh({
+              source: 'order.cancelled',
+              orderNumber,
+              timestamp: new Date().toISOString(),
+            });
+            resolve({ success: true });
+          } catch (err) {
+            console.error(
+              'Cancel order failed:',
+              err.response?.data || err.message
+            );
+            Alert.alert(
+              'Error',
+              err.response?.data?.message || 'Failed to cancel order.'
+            );
+            resolve({
+              success: false,
+              message: err.response?.data?.message || err.message,
+            });
+          }
+        },
+      },
+    ]);
+  });
 };
 
 const pickImage = async () => {
@@ -758,10 +784,73 @@ export const confirmPayment = async (checkoutId, method) => {
     const response = await api.post(`/orders/${checkoutId}/confirm_payment/`, {
       method,
     });
-    return response.data;
+    const payload = response.data;
+    if (payload?.success) {
+      notifyMenuRefresh({
+        source: 'order.confirmed',
+        orderNumber: payload.order_number || payload.orderNumber || checkoutId,
+        timestamp: Date.now(),
+      });
+    }
+    return payload;
   } catch (err) {
     console.log('confirmPayment error:', err.response?.data || err.message);
     throw err;
+  }
+};
+
+const resolveMimeType = (uri, fallback = 'image/jpeg') => {
+  const lowered = String(uri || '').toLowerCase();
+  if (lowered.endsWith('.png')) return 'image/png';
+  if (lowered.endsWith('.webp')) return 'image/webp';
+  if (lowered.endsWith('.heic')) return 'image/heic';
+  return fallback;
+};
+
+export const submitPaymentProof = async (
+  orderId,
+  { image, referenceNumber }
+) => {
+  if (!image?.uri) {
+    return { success: false, message: 'Payment proof image is required.' };
+  }
+  const formData = new FormData();
+  const fileName =
+    image.fileName || image.name || `payment-proof-${Date.now()}.jpg`;
+  const mimeType = image.mimeType || resolveMimeType(image.uri);
+  formData.append('proof_image', {
+    uri: image.uri,
+    name: fileName,
+    type: mimeType,
+  });
+  if (referenceNumber) {
+    formData.append('reference_number', String(referenceNumber));
+  }
+
+  try {
+    const res = await api.post(`/orders/${orderId}/payment-proof/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  } catch (err) {
+    console.log('submitPaymentProof error:', err.response?.data || err.message);
+    return {
+      success: false,
+      message: err.response?.data?.message || err.message,
+    };
+  }
+};
+
+export const fetchPaymentProofs = async () => {
+  try {
+    const res = await api.get('/payments/proofs/');
+    return res.data;
+  } catch (err) {
+    console.log('fetchPaymentProofs error:', err.response?.data || err.message);
+    return {
+      success: false,
+      message: err.response?.data?.message || err.message,
+    };
   }
 };
 
@@ -815,15 +904,6 @@ export const fetchFeedback = async () => {
       err.response?.data || err.message
     );
     return [];
-  }
-};
-export const getGcashLink = async (checkoutId) => {
-  try {
-    const res = await api.get(`/orders/${checkoutId}/gcash_link/`);
-    return res.data; // expected: { success: true, payment_url: 'gcash://...' }
-  } catch (err) {
-    console.log('getGcashLink error:', err.response?.data || err.message);
-    throw err;
   }
 };
 // api.js
@@ -1009,16 +1089,26 @@ export const fetchCateringEvents = async (clientName) => {
     else return [];
 
     // 🔥 Compute total price per event
-    const updatedEvents = events.map((event) => ({
-      ...event,
-      total_price: Array.isArray(event.items)
+    const updatedEvents = events.map((event) => {
+      const estimatedTotal = Number(
+        event.estimated_total ??
+          event.estimatedTotal ??
+          event.total ??
+          event.total_price ??
+          0
+      );
+      const fallbackTotal = Array.isArray(event.items)
         ? event.items.reduce(
             (sum, item) =>
               sum + (item.unit_price || item.price || 0) * (item.quantity || 0),
             0
           )
-        : 0,
-    }));
+        : 0;
+      return {
+        ...event,
+        total_price: estimatedTotal || fallbackTotal,
+      };
+    });
 
     return updatedEvents;
   } catch (err) {

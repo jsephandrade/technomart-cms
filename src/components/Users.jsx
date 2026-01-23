@@ -24,6 +24,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 // Footer rendered inline for UserManagementCard
 import { useUserManagement, useRoles } from '@/hooks/useUserManagement';
 import { PendingVerifications } from './users/PendingVerifications';
@@ -95,6 +96,11 @@ const Users = () => {
         return 'default';
       case 'staff':
         return 'secondary';
+      case 'faculty':
+        return 'outline';
+      case 'student':
+      case 'customer':
+        return 'outline';
       default:
         return 'secondary';
     }
@@ -145,89 +151,107 @@ const Users = () => {
     await updateRoleConfig.mutateAsync(updatedRole);
   };
 
+  const userManagementCard = (
+    <UserManagementCard
+      title="User Management"
+      titleStyle="accent"
+      titleIcon={UsersIcon}
+      titleAccentClassName="px-3 py-1 text-xs md:text-sm"
+      titleClassName="text-xs md:text-sm"
+      description="Manage system users and access"
+      decor={<UserManagementCardDecor />}
+      headerActions={
+        hasAnyRole(['admin']) ? (
+          <Button
+            size="sm"
+            className="flex gap-1"
+            onClick={() => setShowAddModal(true)}
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            Add User
+          </Button>
+        ) : null
+      }
+      contentClassName="space-y-4"
+    >
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex-1 min-w-[220px]">
+          <UsersSearch
+            searchTerm={searchTerm}
+            onChange={(value) => setSearchTerm(value)}
+          />
+        </div>
+
+        {/* Role filter using a sentinel value "_all" for the "All" item */}
+        <div className="w-full sm:w-[220px]">
+          <Select
+            // Show "_all" when roleFilter is '' so the All item is selected
+            value={roleFilter === '' ? '_all' : roleFilter}
+            // Map "_all" back to '' so the hook gets a clean empty filter
+            onValueChange={(v) => setRoleFilter(v === '_all' ? '' : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Filter by role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Roles</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="manager">Manager</SelectItem>
+              <SelectItem value="staff">Staff</SelectItem>
+              <SelectItem value="faculty">Faculty</SelectItem>
+              <SelectItem value="customer">Customer</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {loading || fetching ? (
+        <TableSkeleton
+          headers={['User', 'Role', 'Status', 'Actions']}
+          rows={5}
+        />
+      ) : error ? (
+        <ErrorState message={error} onRetry={refetch} />
+      ) : (
+        <UserTable
+          users={nonPendingUsers}
+          onEditUser={(user) => {
+            setSelectedUser(user);
+            setShowEditModal(true);
+          }}
+          onDeactivateUser={handleDeactivateUser}
+          onDeleteUser={handleDeleteUser}
+          getRoleBadgeVariant={getRoleBadgeVariant}
+          getInitials={getInitials}
+          isAdmin={isAdmin}
+        />
+      )}
+      <div className="border-t pt-3 text-xs text-muted-foreground">
+        Showing {nonPendingUsers.length} of{' '}
+        {pagination?.total ?? nonPendingUsers.length} users
+      </div>
+    </UserManagementCard>
+  );
+
   return (
     <div className="grid gap-4 md:grid-cols-3">
-      <div className="md:col-span-2 space-y-4">
-        <UserManagementCard
-          title="User Management"
-          titleStyle="accent"
-          titleIcon={UsersIcon}
-          titleAccentClassName="px-3 py-1 text-xs md:text-sm"
-          titleClassName="text-xs md:text-sm"
-          description="Manage system users and access"
-          decor={<UserManagementCardDecor />}
-          headerActions={
-            hasAnyRole(['admin']) ? (
-              <Button
-                size="sm"
-                className="flex gap-1"
-                onClick={() => setShowAddModal(true)}
-              >
-                <UserPlus className="h-4 w-4 mr-1" />
-                Add User
-              </Button>
-            ) : null
-          }
-          contentClassName="space-y-4"
-        >
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-            <div className="flex-1 min-w-[220px]">
-              <UsersSearch
-                searchTerm={searchTerm}
-                onChange={(value) => setSearchTerm(value)}
-              />
-            </div>
-
-            {/* Role filter using a sentinel value "_all" for the "All" item */}
-            <div className="w-full sm:w-[220px]">
-              <Select
-                // Show "_all" when roleFilter is '' so the All item is selected
-                value={roleFilter === '' ? '_all' : roleFilter}
-                // Map "_all" back to '' so the hook gets a clean empty filter
-                onValueChange={(v) => setRoleFilter(v === '_all' ? '' : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_all">All Roles</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {loading || fetching ? (
-            <TableSkeleton
-              headers={['User', 'Role', 'Status', 'Actions']}
-              rows={5}
-            />
-          ) : error ? (
-            <ErrorState message={error} onRetry={refetch} />
-          ) : (
-            <UserTable
-              users={nonPendingUsers}
-              onEditUser={(user) => {
-                setSelectedUser(user);
-                setShowEditModal(true);
-              }}
-              onDeactivateUser={handleDeactivateUser}
-              onDeleteUser={handleDeleteUser}
-              getRoleBadgeVariant={getRoleBadgeVariant}
-              getInitials={getInitials}
-              isAdmin={isAdmin}
-            />
-          )}
-          <div className="border-t pt-3 text-xs text-muted-foreground">
-            Showing {nonPendingUsers.length} of{' '}
-            {pagination?.total ?? nonPendingUsers.length} users
-          </div>
-        </UserManagementCard>
-
-        {/* Admin/Manager-only: show verification queue below the Users card */}
-        {showVerifyQueue && <PendingVerifications />}
+      <div className="md:col-span-2">
+        {showVerifyQueue ? (
+          <Tabs defaultValue="users" className="space-y-4">
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="users">User Management</TabsTrigger>
+              <TabsTrigger value="pending">Pending Verifications</TabsTrigger>
+            </TabsList>
+            <TabsContent value="users" className="mt-0">
+              {userManagementCard}
+            </TabsContent>
+            <TabsContent value="pending" className="mt-0">
+              <PendingVerifications />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="space-y-4">{userManagementCard}</div>
+        )}
       </div>
 
       <div className="space-y-4">

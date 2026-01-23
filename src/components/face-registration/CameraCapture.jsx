@@ -76,7 +76,8 @@ const CameraCapture = forwardRef(
                   {currentPosition?.instruction || 'Hold still...'}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {capturedImages.length + 1} of {capturePositions.length}
+                  {Math.min(capturedImages.length + 1, capturePositions.length)}{' '}
+                  of {capturePositions.length}
                 </div>
               </div>
             </div>

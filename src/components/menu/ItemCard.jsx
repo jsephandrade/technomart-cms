@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
+import { usePaxForItem } from '@/hooks/usePaxTracker';
 
 const resolveImageSrc = (item) => {
   if (!item) return null;
@@ -73,6 +74,30 @@ const resolveIngredientImages = (item, imageById) =>
     })
     .filter(Boolean);
 
+const isComboMeal = (item) => {
+  if (!item) return false;
+  const category = String(
+    item.category || item.categoryName || item.category_label || ''
+  ).toLowerCase();
+  if (category.includes('combo')) return true;
+  const type = String(
+    item.type || item.itemType || item.kind || ''
+  ).toLowerCase();
+  if (type.includes('combo')) return true;
+  if (
+    item.isCombo ||
+    item.is_combo ||
+    item.is_combo_meal ||
+    item.isComboMeal ||
+    item.combo
+  ) {
+    return true;
+  }
+  const ingredients =
+    item.ingredients || item.ingredientIds || item.ingredient_ids;
+  return Array.isArray(ingredients) && ingredients.length > 0;
+};
+
 const ItemCard = ({
   item,
   allItems = [],
@@ -134,13 +159,43 @@ const ItemCard = ({
   const heroImage = collageSources[0] || baseImage;
   const showHero = Boolean(heroImage);
 
+  const paxInfo = usePaxForItem(item.id);
+  const hasEstimatedPax =
+    paxInfo && typeof paxInfo.estimated === 'number' && paxInfo.estimated > 0;
+  const estimatedPax = hasEstimatedPax
+    ? Math.max(0, Math.floor(paxInfo.estimated))
+    : null;
+  const remainingPax =
+    hasEstimatedPax && typeof paxInfo.remaining === 'number'
+      ? Math.max(0, Math.floor(paxInfo.remaining))
+      : null;
+  const paxRemainingValue = remainingPax !== null ? remainingPax : estimatedPax;
+  const rawStaticPax =
+    item?.estimatedPax ?? item?.paxPerPreparation ?? item?.pax_per_preparation;
+  const hasStaticPax =
+    rawStaticPax !== undefined && rawStaticPax !== null && rawStaticPax !== '';
+  const staticPaxValue = Number.isFinite(Number(rawStaticPax))
+    ? Math.max(0, Math.floor(Number(rawStaticPax)))
+    : 0;
+  const paxAvailabilityValue =
+    paxRemainingValue !== null
+      ? paxRemainingValue
+      : hasStaticPax
+        ? staticPaxValue
+        : null;
+  const isAvailable =
+    !isArchived &&
+    Boolean(item.available) &&
+    (paxAvailabilityValue === null || paxAvailabilityValue > 0);
+  const comboMeal = isComboMeal(item);
+
   const badge = isArchived
     ? {
         label: 'Archived',
         variant: 'outline',
         className: 'bg-slate-100 text-slate-600 border-transparent',
       }
-    : item.available
+    : isAvailable
       ? {
           label: 'Available',
           variant: 'outline',
@@ -218,9 +273,26 @@ const ItemCard = ({
             </div>
           </div>
           <div className="space-y-1">
-            <CardTitle className="text-l font-semibold leading-tight text-foreground line-clamp-2">
+            <CardTitle
+              className={`font-semibold leading-tight text-foreground ${
+                comboMeal ? 'text-sm line-clamp-1' : 'text-l line-clamp-2'
+              }`}
+              title={item.name}
+            >
               {item.name}
             </CardTitle>
+            {hasEstimatedPax && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Badge
+                  variant={paxRemainingValue === 0 ? 'destructive' : 'outline'}
+                  className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide"
+                >
+                  {paxRemainingValue === 0
+                    ? 'Sold out'
+                    : `${paxRemainingValue} / ${estimatedPax} pax left`}
+                </Badge>
+              </div>
+            )}
           </div>
         </CardHeader>
 
@@ -234,14 +306,24 @@ const ItemCard = ({
                 ₱{Number(item.price).toFixed(2)}
               </p>
             </div>
-            {item.category && (
-              <Badge
-                variant="outline"
-                className="rounded-full px-3 py-1 text-[11px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent"
-              >
-                {item.category}
-              </Badge>
-            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {item.category && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full px-3 py-1 text-[11px] font-medium bg-[#FFF3BF] text-[#5C4300] border-transparent"
+                >
+                  {item.category}
+                </Badge>
+              )}
+              {hasStaticPax && (
+                <Badge
+                  variant="outline"
+                  className="rounded-full px-3 py-1 text-[11px] font-medium bg-[#E0F2FF] text-[#1F5E99] border-transparent"
+                >
+                  {`${staticPaxValue} pax`}
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button

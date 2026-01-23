@@ -43,9 +43,12 @@ export default function Categories() {
 
 const styles = StyleSheet.create({
   list: {
-    padding: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   row: {
     justifyContent: 'space-between',
+    marginBottom: 16,
   },
 });

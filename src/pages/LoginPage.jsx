@@ -18,6 +18,7 @@ import {
 import { getMutedUser } from '@/lib/mutedUsers';
 
 const PASSWORD_MISMATCH_MESSAGE = 'Invalid email or password.';
+const PENDING_APPROVAL_MESSAGE = 'Your account is still pending for approval.';
 
 const isPasswordMismatchError = (result) => {
   const status = result?.status ?? null;
@@ -95,6 +96,7 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [pending, setPending] = useState(false);
+  const [info, setInfo] = useState('');
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -156,6 +158,7 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (pending) return;
+    setInfo('');
     setError('');
     if (!validate()) return;
 
@@ -173,6 +176,14 @@ const LoginPage = () => {
     setPending(true);
     try {
       const res = await login(email, password, { remember });
+      if (res?.rejected) {
+        sessionStorage.removeItem('login_pending_note');
+        sessionStorage.removeItem('verify_token');
+        sessionStorage.removeItem('pending_user');
+        navigate('/verify/rejected');
+        return;
+      }
+
       if (!res?.success) {
         applyAuthFailure(res);
         return;
@@ -198,9 +209,12 @@ const LoginPage = () => {
         res?.pending ||
         (res?.user?.status || '').toLowerCase() !== 'active'
       ) {
-        sessionStorage.setItem('verify_token', res.verifyToken || '');
+        const verifyToken = res?.verifyToken || '';
+        setInfo(PENDING_APPROVAL_MESSAGE);
+        sessionStorage.setItem('login_pending_note', PENDING_APPROVAL_MESSAGE);
         sessionStorage.setItem('pending_user', JSON.stringify(res.user || {}));
-        navigate('/verify');
+        sessionStorage.setItem('verify_token', verifyToken);
+        navigate('/still-pending');
         return;
       }
 
@@ -227,14 +241,28 @@ const LoginPage = () => {
         const credential =
           provider === 'google-credential' ? payload : await signInWithGoogle();
         const res = await loginWithGoogle(credential, { remember });
+        if (res?.rejected) {
+          sessionStorage.removeItem('login_pending_note');
+          sessionStorage.removeItem('verify_token');
+          sessionStorage.removeItem('pending_user');
+          navigate('/verify/rejected');
+          return;
+        }
         if (!res?.success) throw new Error('Google login failed');
-        if (res?.verifyToken) {
-          sessionStorage.setItem('verify_token', res.verifyToken || '');
+        if (
+          res?.pending ||
+          (res?.user?.status || '').toLowerCase() !== 'active'
+        ) {
+          sessionStorage.setItem(
+            'login_pending_note',
+            PENDING_APPROVAL_MESSAGE
+          );
           sessionStorage.setItem(
             'pending_user',
             JSON.stringify(res.user || {})
           );
-          navigate('/verify');
+          sessionStorage.setItem('verify_token', res?.verifyToken || '');
+          navigate('/still-pending');
           return;
         }
       } else {
@@ -263,6 +291,7 @@ const LoginPage = () => {
         email={email}
         password={password}
         pending={pending}
+        info={info}
         error={error}
         emailError={emailError}
         passwordError={passwordError}

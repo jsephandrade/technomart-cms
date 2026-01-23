@@ -6,8 +6,9 @@ import orderService from '@/api/services/orderService';
  * Global background service for auto-advancing orders
  * Runs independently of the current page/component
  */
-const POLL_INTERVAL_MS = 2000; // Check every 2 seconds
+const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
 const ADVANCE_LOCK_TIMEOUT_MS = 10000; // Clear stuck locks after 10 seconds
+const RATE_LIMIT_BACKOFF_MS = 15000;
 
 const normalizeStatus = (value) => {
   if (!value) return '';
@@ -32,6 +33,8 @@ const STATUS_CANONICAL_MAP = {
   refunded: 'refunded',
 };
 
+const READY_STATUS_SET = new Set(['ready', 'staged', 'handoff']);
+
 const toCanonicalStatus = (status) => {
   const normalized = normalizeStatus(status);
   return STATUS_CANONICAL_MAP[normalized] || normalized;
@@ -51,6 +54,46 @@ const getOrderStatus = (order) => {
   }
   return '';
 };
+
+const WALK_IN_ALIASES = new Set([
+  'walk-in',
+  'walkin',
+  'walk_in',
+  'walk in',
+  'counter',
+]);
+const ONLINE_ALIASES = new Set([
+  'online',
+  'web',
+  'delivery',
+  'pickup',
+  'app',
+  'mobile',
+]);
+
+const getOrderChannel = (order) => {
+  const candidates = [
+    order?.type,
+    order?.orderType,
+    order?.order_type,
+    order?.channel,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (WALK_IN_ALIASES.has(normalized)) {
+        return 'walk-in';
+      }
+      if (ONLINE_ALIASES.has(normalized)) {
+        return 'online';
+      }
+      return normalized;
+    }
+  }
+  return 'walk-in';
+};
+
+const isWalkInOrder = (order) => getOrderChannel(order) === 'walk-in';
 
 const resolveAutoAdvanceTarget = (order) => {
   if (!order) return null;
@@ -72,6 +115,7 @@ export const useOrderAutoAdvance = () => {
   const intervalRef = useRef(null);
   const isProcessingRef = useRef(false);
   const haltedRef = useRef(false);
+  const backoffUntilRef = useRef(0);
 
   const processOrders = useCallback(async () => {
     // Skip if not authenticated or no permission
@@ -86,6 +130,9 @@ export const useOrderAutoAdvance = () => {
 
     try {
       isProcessingRef.current = true;
+      if (Date.now() < backoffUntilRef.current) {
+        return;
+      }
 
       // Fetch current order queue
       const result = await orderService.getOrderQueue();
@@ -98,6 +145,16 @@ export const useOrderAutoAdvance = () => {
       const activeKeys = new Set();
 
       for (const order of orders) {
+        if (isWalkInOrder(order)) {
+          if (order?.id) {
+            for (const key of Array.from(autoAdvanceLocksRef.current.keys())) {
+              if (key.startsWith(`${order.id}:`)) {
+                autoAdvanceLocksRef.current.delete(key);
+              }
+            }
+          }
+          continue;
+        }
         const targetResolved = resolveAutoAdvanceTarget(order);
         if (!targetResolved) {
           continue;
@@ -108,6 +165,14 @@ export const useOrderAutoAdvance = () => {
         const canonicalStatus = toCanonicalStatus(getOrderStatus(order));
         const key = `${order.id}:${target}`;
         activeKeys.add(key);
+
+        if (
+          canonicalTarget === 'completed' &&
+          READY_STATUS_SET.has(canonicalStatus)
+        ) {
+          autoAdvanceLocksRef.current.delete(key);
+          continue;
+        }
 
         // Skip if paused
         if (order.autoAdvancePaused) {
@@ -175,6 +240,10 @@ export const useOrderAutoAdvance = () => {
         error?.response?.status ??
         error?.details?.status ??
         null;
+      if (status === 429) {
+        backoffUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        return;
+      }
       if (status === 401) {
         haltedRef.current = true;
         if (intervalRef.current) {

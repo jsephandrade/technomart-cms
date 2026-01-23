@@ -1,25 +1,24 @@
 import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function NotFoundScreen() {
   const router = useRouter();
 
   const handleGoHome = useCallback(() => {
-    router.replace('/(tabs)');
+    router.replace('/home-dashboard');
   }, [router]);
 
   const handleGoBack = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/');
+      router.replace('/account-login');
     }
   }, [router]);
 
   return (
-    <SafeAreaView className="flex-1 bg-white px-6 py-10">
+    <View className="flex-1 bg-white px-6 py-10">
       <View className="flex-1 items-center justify-center">
         <View className="mb-10 items-center">
           <Text className="text-4xl font-semibold text-gray-900">Oops!</Text>
@@ -51,6 +50,6 @@ export default function NotFoundScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

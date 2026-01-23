@@ -47,17 +47,26 @@ const AddItemDialog = ({
 }) => {
   const [submitted, setSubmitted] = useState(false);
   const nameInputRef = useRef(null);
+  const paxDefaultedRef = useRef(false);
 
   useEffect(() => {
     if (!open) {
       setSubmitted(false);
+      paxDefaultedRef.current = false;
       return;
     }
     setSubmitted(false);
+    if (
+      !paxDefaultedRef.current &&
+      !String(newItem?.estimatedPax || '').trim()
+    ) {
+      paxDefaultedRef.current = true;
+      setNewItem({ ...newItem, estimatedPax: '60' });
+    }
     setTimeout(() => {
       nameInputRef.current?.focus?.();
     }, 100);
-  }, [open]);
+  }, [newItem, open, setNewItem]);
 
   const nameValue = useMemo(
     () => String(newItem?.name || '').trim(),
@@ -72,11 +81,20 @@ const AddItemDialog = ({
     [newItem]
   );
   const parsedPrice = priceValue === '' ? Number.NaN : Number(priceValue);
+  const paxValue = useMemo(
+    () => String(newItem?.estimatedPax ?? '').trim(),
+    [newItem]
+  );
+  const parsedPax = paxValue === '' ? Number.NaN : Number(paxValue);
   const nameError = submitted && !nameValue;
   const categoryError = submitted && !categoryValue;
   const priceError =
     submitted &&
     (priceValue === '' || !Number.isFinite(parsedPrice) || parsedPrice < 0);
+  const paxError =
+    submitted &&
+    paxValue !== '' &&
+    (!Number.isFinite(parsedPax) || parsedPax < 0);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -101,6 +119,12 @@ const AddItemDialog = ({
     setNewItem({ ...newItem, price: value });
   };
 
+  const handlePaxChange = (event) => {
+    const value = event.target.value;
+    if (!/^\d*$/.test(value)) return;
+    setNewItem({ ...newItem, estimatedPax: value });
+  };
+
   const blockExponentInput = (event) => {
     if (
       event.key === 'e' ||
@@ -121,7 +145,8 @@ const AddItemDialog = ({
       !categoryValue ||
       priceValue === '' ||
       !Number.isFinite(parsedPrice) ||
-      parsedPrice < 0
+      parsedPrice < 0 ||
+      (paxValue !== '' && (!Number.isFinite(parsedPax) || parsedPax < 0))
     ) {
       return;
     }
@@ -279,6 +304,32 @@ const AddItemDialog = ({
                   <p className="text-xs text-muted-foreground">
                     Enter the price in PHP.
                   </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pax" className="flex items-center h-5">
+                  Pax per Preparation
+                </Label>
+                <Input
+                  id="pax"
+                  type="text"
+                  inputMode="numeric"
+                  value={paxValue}
+                  placeholder="e.g., 50"
+                  onChange={handlePaxChange}
+                  onKeyDown={blockExponentInput}
+                  className={cn(paxError && 'border-destructive')}
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used as the basis for availability badges and sold-out logic.
+                </p>
+                {paxError && (
+                  <div className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Pax must be 0 or greater.</span>
+                  </div>
                 )}
               </div>
 

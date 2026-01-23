@@ -1,37 +1,31 @@
 // app/(tabs)/_layout.js
 import React, { useEffect, useState } from 'react';
+import { StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, ActivityIndicator } from 'react-native';
+import { USER_CACHE_KEY } from '../../api/api';
 
 export default function TabsLayout() {
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState('customer');
 
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const json = await AsyncStorage.getItem('@sanaol/auth/user');
+        const entries = await AsyncStorage.multiGet([USER_CACHE_KEY, 'user']);
+        const json = entries[0][1] || entries[1][1];
         if (json) {
           const user = JSON.parse(json);
-          setRole(user.role); // student / faculty
+          setRole(user.role || 'customer');
         } else {
-          setRole('student'); // fallback
+          setRole('customer');
         }
       } catch {
-        setRole('student');
+        setRole('customer');
       }
     };
     loadUser();
   }, []);
-
-  if (role === null) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="orange" />
-      </View>
-    );
-  }
 
   return (
     <Tabs
@@ -50,19 +44,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-
-      {/* 👇 Only show Catering tab if FACULTY */}
-      {role === 'faculty' && (
-        <Tabs.Screen
-          name="catering"
-          options={{
-            title: 'Catering',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="restaurant-outline" size={size} color={color} />
-            ),
-          }}
-        />
-      )}
 
       <Tabs.Screen
         name="customer-cart"
@@ -85,6 +66,24 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="catering"
+        options={{
+          title: 'Catering',
+          href: role === 'faculty' ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="restaurant-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
         name="account-profile"
         options={{
           title: 'Profile',
@@ -96,3 +95,5 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({});

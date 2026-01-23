@@ -266,9 +266,16 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:8080")
 WEBPUSH_VAPID_PUBLIC_KEY = os.getenv("WEBPUSH_VAPID_PUBLIC_KEY", "").strip()
 WEBPUSH_VAPID_PRIVATE_KEY = os.getenv("WEBPUSH_VAPID_PRIVATE_KEY", "").strip()
 WEBPUSH_VAPID_SUBJECT = os.getenv("WEBPUSH_VAPID_SUBJECT", "mailto:josephformentera2@gmail.com")
+WEBPUSH_REQUIRE_KEYS = os.getenv("WEBPUSH_REQUIRE_KEYS", "0") in {
+    "1",
+    "true",
+    "True",
+    "yes",
+    "on",
+}
 
-# Optional: simple guard to fail early if you forget the keys in prod
-if not DEBUG:
+# Optional: fail early only when explicitly required (e.g., prod hardening)
+if WEBPUSH_REQUIRE_KEYS:
     assert WEBPUSH_VAPID_PUBLIC_KEY and WEBPUSH_VAPID_PRIVATE_KEY, "Missing VAPID keys"
 
 # API version
